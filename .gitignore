@@ -46,3 +46,4 @@ firebase-*-debug.log*
 *test-results*
 .cursor/*
 backend/*
+**/.DS_Store
