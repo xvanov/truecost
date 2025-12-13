@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AuthenticatedLayout } from '../../components/layouts/AuthenticatedLayout';
 import { Button, GlassPanel, Input, Select, Textarea } from '../../components/ui';
@@ -8,6 +8,7 @@ import { EstimateStepper } from '../../components/estimate/EstimateStepper';
 import { useProjectStore } from '../../store/projectStore';
 import { useAuth } from '../../hooks/useAuth';
 import { useStepCompletion } from '../../hooks/useStepCompletion';
+import { saveScopeConfig, loadScopeConfig } from '../../services/scopeConfigService';
 import { uploadPlanImage } from '../../services/estimationService';
 import type { BackgroundImage } from '../../types';
 import type { EstimateConfig } from '../../types/project';
@@ -73,6 +74,7 @@ export function ScopePage() {
   // Load existing project data if in edit mode
   useEffect(() => {
     if (isEditMode && projectId && !isDataLoaded) {
+      // First try to load from project document
       loadProject(projectId).then((project) => {
         if (project) {
           setFormData({
@@ -87,11 +89,11 @@ export function ScopePage() {
 
           // Load estimate config if exists
           if (project.estimateConfig) {
-            setOverheadPercent(project.estimateConfig.overheadPercent);
-            setProfitPercent(project.estimateConfig.profitPercent);
-            setContingencyPercent(project.estimateConfig.contingencyPercent);
-            setWasteFactorPercent(project.estimateConfig.wasteFactorPercent);
-            setStartDate(project.estimateConfig.startDate);
+            setOverheadPercent(project.estimateConfig.overheadPercent ?? 10);
+            setProfitPercent(project.estimateConfig.profitPercent ?? 10);
+            setContingencyPercent(project.estimateConfig.contingencyPercent ?? 5);
+            setWasteFactorPercent(project.estimateConfig.wasteFactorPercent ?? 10);
+            setStartDate(project.estimateConfig.startDate || defaultStartDate);
           }
 
           // Load existing plan image if available
@@ -104,10 +106,27 @@ export function ScopePage() {
         }
       }).catch((err) => {
         console.error('Failed to load project:', err);
-        setError('Failed to load project data');
+      });
+
+      // Also try to load from scope config (for additional fields)
+      loadScopeConfig(projectId).then((config) => {
+        if (config) {
+          // Merge with existing form data, preferring project data
+          setFormData((prev) => ({
+            name: prev.name || config.projectName || '',
+            location: prev.location || config.location || '',
+            type: prev.type || config.projectType || '',
+            size: prev.size || config.approximateSize || '',
+            scopeDefinition: prev.scopeDefinition || config.scopeText || '',
+            zipCode: prev.zipCode || config.zipCodeOverride || '',
+            useUnionLabor: prev.useUnionLabor || config.useUnionLabor || false,
+          }));
+        }
+      }).catch((err) => {
+        console.error('Failed to load scope config:', err);
       });
     }
-  }, [isEditMode, projectId, isDataLoaded, loadProject]);
+  }, [isEditMode, projectId, isDataLoaded, loadProject, defaultStartDate]);
 
   const prepareBackgroundImage = (file: File): Promise<BackgroundImage> => {
     return new Promise((resolve, reject) => {
@@ -161,6 +180,8 @@ export function ScopePage() {
   const handleRemoveFile = () => {
     setUploadedFile(null);
     setPreparedBackground(null);
+    setExistingPlanUrl(null);
+    setExistingPlanFileName(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -182,8 +203,17 @@ export function ScopePage() {
     setError(null);
 
     try {
-      // Build estimate config
+      // Build estimate config with all project details
       const estimateConfig: EstimateConfig = {
+        // Project details from scope page
+        projectName: formData.name,
+        location: formData.location,
+        projectType: formData.type,
+        approximateSize: formData.size,
+        useUnionLabor: formData.useUnionLabor,
+        zipCodeOverride: formData.zipCode,
+        scopeText: formData.scopeDefinition,
+        // Estimate configuration
         overheadPercent,
         profitPercent,
         contingencyPercent,
@@ -216,6 +246,9 @@ export function ScopePage() {
           planImageUrl: planImageUrl || undefined,
           planImageFileName: planImageFileName || undefined,
         }, user.uid);
+
+        // Also save to scope config for persistence
+        await saveScopeConfig(projectId, user.uid, estimateConfig);
       } else {
         // Create new project with all scope data
         const project = await createNewProject(
@@ -241,68 +274,34 @@ export function ScopePage() {
 
           // Update project with plan image URL
           await updateProjectScopeAction(finalProjectId, {
-            planImageUrl: planImage.url,
-            planImageFileName: planImage.fileName,
+            planImageUrl,
+            planImageFileName,
           }, user.uid);
         }
-      }
 
-      // Build config with scope text for navigation state
-      const estimateConfigWithScope: EstimateConfig = {
-        ...estimateConfig,
-        scopeText: formData.scopeDefinition,
-      };
+        // Save to scope config for persistence
+        await saveScopeConfig(finalProjectId, user.uid, estimateConfig);
+      }
 
       // Navigate to Annotate page with the background image and estimate config
       navigate(`/project/${finalProjectId}/annotate`, {
         state: {
-          backgroundImage: preparedBackground || (planImageUrl ? {
-            id: `bg-${Date.now()}`,
-            url: planImageUrl,
-            fileName: planImageFileName || 'plan',
-            fileSize: 0,
-            width: 0,
-            height: 0,
-            aspectRatio: 1,
-            uploadedAt: Date.now(),
-            uploadedBy: user.uid,
-          } : null),
-          estimateConfig: estimateConfigWithScope,
+          backgroundImage: preparedBackground,
+          estimateConfig,
         }
       });
     } catch (err) {
-      console.error('Failed to save project:', err);
+      console.error('Failed to create/update project:', err);
       setError(err instanceof Error ? err.message : 'Failed to save project');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleRemoveExistingPlan = useCallback(() => {
-    setExistingPlanUrl(null);
-    setExistingPlanFileName(null);
-  }, []);
-
   const isFormValid = formData.name.trim() && formData.location.trim() && (uploadedFile || existingPlanUrl);
 
   // Get actual completion state from hook
   const { completedSteps } = useStepCompletion(projectId);
-
-  // Show loading state when fetching project data
-  if (isEditMode && loading && !isDataLoaded) {
-    return (
-      <AuthenticatedLayout>
-        <div className="container-spacious max-w-full pt-20 pb-14 md:pt-24">
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-truecost-cyan border-t-transparent mx-auto"></div>
-              <p className="text-truecost-text-secondary">Loading project data...</p>
-            </div>
-          </div>
-        </div>
-      </AuthenticatedLayout>
-    );
-  }
 
   return (
     <AuthenticatedLayout>
@@ -400,50 +399,15 @@ export function ScopePage() {
                   <label className="block font-body text-body font-medium text-truecost-text-primary">
                     Upload Plans *
                   </label>
-                  {uploadedFile ? (
-                    <FilePreview file={uploadedFile} onRemove={handleRemoveFile} />
-                  ) : existingPlanUrl ? (
-                    <div className="glass-panel p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-16 h-16 rounded-lg overflow-hidden bg-truecost-glass-bg">
-                            <img
-                              src={existingPlanUrl}
-                              alt="Uploaded plan"
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div>
-                            <p className="font-body text-body font-medium text-truecost-text-primary">
-                              {existingPlanFileName || 'Uploaded plan'}
-                            </p>
-                            <p className="text-body-meta text-truecost-text-secondary">
-                              Plan already uploaded
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={handleRemoveExistingPlan}
-                            className="text-truecost-text-secondary hover:text-truecost-danger transition-colors p-2"
-                            title="Remove plan"
-                          >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                      <div className="mt-3 pt-3 border-t border-truecost-glass-border">
-                        <p className="text-body-meta text-truecost-text-secondary mb-2">
-                          Upload a new plan to replace:
-                        </p>
-                        <FileUploadZone onFileSelect={handleFileSelect} />
-                      </div>
-                    </div>
-                  ) : (
+                  {!uploadedFile && !existingPlanUrl ? (
                     <FileUploadZone onFileSelect={handleFileSelect} />
+                  ) : (
+                    <FilePreview
+                      file={uploadedFile}
+                      existingUrl={existingPlanUrl}
+                      existingFileName={existingPlanFileName}
+                      onRemove={handleRemoveFile}
+                    />
                   )}
                 </div>
 
@@ -576,9 +540,7 @@ export function ScopePage() {
                     fullWidth
                     disabled={!isFormValid || isSubmitting || loading}
                   >
-                    {isSubmitting
-                      ? (isEditMode ? 'Saving Changes...' : 'Creating Project...')
-                      : (isEditMode ? 'Save & Continue to Annotate' : 'Continue to Annotate')}
+                    {isSubmitting ? 'Saving...' : isEditMode ? 'Save & Continue to Annotate' : 'Continue to Annotate'}
                   </Button>
                 </div>
               </form>

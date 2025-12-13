@@ -20,12 +20,23 @@ export interface Collaborator {
 
 // Estimate configuration stored with project
 export interface EstimateConfig {
+  // Project details from Define Your Project Scope page
+  projectName?: string;
+  location?: string; // Note: location and address are the same thing
+  projectType?: string;
+  approximateSize?: string;
+  useUnionLabor?: boolean;
+  zipCodeOverride?: string;
+  
+  // Scope definition (user-provided description)
+  scopeText?: string;
+  
+  // Estimate configuration
   overheadPercent: number;
   profitPercent: number;
   contingencyPercent: number;
   wasteFactorPercent: number;
   startDate: string;
-  scopeText?: string; // Optional scope text for backward compatibility
 }
 
 export interface Project {

@@ -25,17 +25,24 @@ if (!apiKey) {
 const CLARIFICATION_SYSTEM_PROMPT = `You are a construction estimation assistant helping to clarify project scope.
 Your role is to:
 1. Understand the user's project description
-2. Ask targeted clarifying questions to fill in missing details
+2. Ask targeted clarifying questions to fill in MISSING details ONLY
 3. Extract structured data from the conversation
 
-Key information to gather:
-- Project type (kitchen remodel, bathroom remodel, addition, etc.)
-- Location (full address with city, state, zip)
-- Square footage and room dimensions
+CRITICAL RULES:
+- DO NOT ask for information that has already been provided in the "ALREADY PROVIDED PROJECT DETAILS" section
+- Location and address are THE SAME THING - if you have location, you have the address
+- If project type is already provided, DO NOT ask about it again
+- If approximate size is already provided, DO NOT ask about square footage again
+- Focus ONLY on details that are genuinely missing
+
+Key information to gather (ONLY IF NOT ALREADY PROVIDED):
 - Finish level (budget, mid-range, high-end, luxury)
 - Special requirements or constraints
+- Specific work items (what rooms, what work in each room)
+- Material preferences (flooring type, paint colors, fixture styles, etc.)
 - Timeline and flexibility
 - What's included vs excluded from scope
+- Any structural changes needed
 
 Be conversational but efficient. Ask 2-3 questions at a time maximum.
 When you have enough information, indicate that clarification is complete.
@@ -58,14 +65,34 @@ exports.clarificationAgent = (0, https_1.onCall)({
     var _a, _b;
     try {
         const data = request.data;
-        const { scopeText, conversationHistory, userMessage } = data;
-        if (!scopeText) {
-            throw new https_1.HttpsError('invalid-argument', 'Scope text is required');
+        const { scopeText, conversationHistory, userMessage, projectContext } = data;
+        if (!scopeText && !projectContext) {
+            throw new https_1.HttpsError('invalid-argument', 'Scope text or project context is required');
+        }
+        // Build a reminder about already-known information
+        let knownInfoReminder = '';
+        if (projectContext) {
+            const known = [];
+            if (projectContext.projectName)
+                known.push(`Project Name: ${projectContext.projectName}`);
+            if (projectContext.location)
+                known.push(`Location/Address: ${projectContext.location} (REMEMBER: location = address, do NOT ask for address)`);
+            if (projectContext.projectType)
+                known.push(`Project Type: ${projectContext.projectType}`);
+            if (projectContext.approximateSize)
+                known.push(`Size: ${projectContext.approximateSize}`);
+            if (projectContext.useUnionLabor)
+                known.push(`Labor: Union rates`);
+            if (projectContext.zipCodeOverride)
+                known.push(`ZIP: ${projectContext.zipCodeOverride}`);
+            if (known.length > 0) {
+                knownInfoReminder = `\n\nIMPORTANT - The following information is ALREADY KNOWN and should NOT be asked about:\n${known.join('\n')}\n\nFocus your questions on details NOT listed above.`;
+            }
         }
         // Build conversation messages for OpenAI
         const messages = [
-            { role: 'system', content: CLARIFICATION_SYSTEM_PROMPT },
-            { role: 'user', content: `Initial scope description:\n${scopeText}` },
+            { role: 'system', content: CLARIFICATION_SYSTEM_PROMPT + knownInfoReminder },
+            { role: 'user', content: `Initial scope description:\n${scopeText || 'No additional scope details provided.'}` },
         ];
         // Add conversation history
         for (const msg of conversationHistory) {

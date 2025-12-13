@@ -27,6 +27,7 @@ import { useCanvasStore } from '../../store/canvasStore';
 import { useAuth } from '../../hooks/useAuth';
 import { useStepCompletion } from '../../hooks/useStepCompletion';
 import { getBOM } from '../../services/bomService';
+import { loadScopeConfig } from '../../services/scopeConfigService';
 import { functions } from '../../services/firebase';
 import { getProjectCanvasStoreApi } from '../../store/projectCanvasStore';
 import {
@@ -67,6 +68,7 @@ export function EstimatePage() {
 
   // Get estimate config from location state
   const locationState = location.state as { estimateConfig?: EstimateConfig } | null;
+  const locationEstimateConfig = locationState?.estimateConfig;
   
   // Default start date: 2 weeks from today
   const defaultStartDate = useMemo(() => {
@@ -75,14 +77,42 @@ export function EstimatePage() {
     return date.toISOString().split('T')[0];
   }, []);
   
-  const estimateConfig: EstimateConfig = locationState?.estimateConfig || {
+  // Default estimate config
+  const defaultEstimateConfig: EstimateConfig = useMemo(() => ({
+    // Project details (defaults for when navigating directly to this page)
+    projectName: '',
+    location: '',
+    projectType: '',
+    approximateSize: '',
+    useUnionLabor: false,
+    zipCodeOverride: '',
+    // Scope
     scopeText: '',
+    // Estimate configuration
     overheadPercent: 10,
     profitPercent: 10,
     contingencyPercent: 5,
     wasteFactorPercent: 10,
     startDate: defaultStartDate,
-  };
+  }), [defaultStartDate]);
+  
+  // State for estimate config - prefer location state, then Firestore, then defaults
+  const [estimateConfig, setEstimateConfig] = useState<EstimateConfig>(
+    locationEstimateConfig || defaultEstimateConfig
+  );
+  
+  // Load estimate config from Firestore if not in location state
+  useEffect(() => {
+    if (!locationEstimateConfig && projectId) {
+      loadScopeConfig(projectId).then((config) => {
+        if (config) {
+          setEstimateConfig(config);
+        }
+      }).catch((err) => {
+        console.error('EstimatePage: Failed to load scope config:', err);
+      });
+    }
+  }, [projectId, locationEstimateConfig]);
 
   // Phase state
   const [phase, setPhase] = useState<EstimatePhase>('generate');

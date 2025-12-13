@@ -31,6 +31,12 @@ import { useShapes } from '../../hooks/useShapes';
 import { useLayers } from '../../hooks/useLayers';
 import { createBoundingBoxShape } from '../../services/shapeService';
 import { functions } from '../../services/firebase';
+import {
+  saveChatMessage,
+  subscribeToChatMessages,
+  deleteChatMessage,
+} from '../../services/chatService';
+import { loadScopeConfig } from '../../services/scopeConfigService';
 
 interface ChatPanelProps {
   onClarificationComplete?: (complete: boolean) => void;
@@ -70,9 +76,25 @@ export function ChatPanel({
   const projectId = propProjectId || routeProjectId || routeId;
   const { user } = useAuth();
 
-  // Get estimate config from props first, then fall back to location state
+  // Get estimate config from props first, then fall back to location state, then Firestore
   const locationState = location.state as { estimateConfig?: EstimateConfig } | null;
-  const estimateConfig = propEstimateConfig || locationState?.estimateConfig;
+  const initialEstimateConfig = propEstimateConfig || locationState?.estimateConfig;
+  
+  // State for estimate config - load from Firestore if not provided via props/location
+  const [estimateConfig, setEstimateConfig] = useState<EstimateConfig | undefined>(initialEstimateConfig);
+  
+  // Load estimate config from Firestore if not available
+  useEffect(() => {
+    if (!initialEstimateConfig && projectId) {
+      loadScopeConfig(projectId).then((config) => {
+        if (config) {
+          setEstimateConfig(config);
+        }
+      }).catch((err) => {
+        console.error('ChatPanel: Failed to load scope config:', err);
+      });
+    }
+  }, [projectId, initialEstimateConfig]);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -103,6 +125,35 @@ export function ChatPanel({
       loadEstimationSession(projectId);
     }
   }, [projectId, loadEstimationSession]);
+
+  // Track if we've loaded initial messages to prevent overwriting
+  const initialLoadRef = useRef(false);
+
+  // Subscribe to chat messages from Firestore
+  useEffect(() => {
+    if (!projectId || !user?.uid) return;
+
+    initialLoadRef.current = false;
+
+    const unsubscribe = subscribeToChatMessages(projectId, user.uid, (loadedMessages) => {
+      // Only update if we have messages and haven't loaded yet, or if remote has more messages
+      if (loadedMessages.length > 0) {
+        setMessages((currentMessages) => {
+          // Merge: keep local messages that aren't in remote, add remote messages
+          const remoteIds = new Set(loadedMessages.map((m) => m.id));
+          const localOnlyMessages = currentMessages.filter((m) => !remoteIds.has(m.id));
+          return [...loadedMessages, ...localOnlyMessages].sort(
+            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          );
+        });
+      }
+      initialLoadRef.current = true;
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [projectId, user?.uid]);
 
   // Load project data to get description as scope text fallback
   useEffect(() => {
@@ -137,21 +188,6 @@ export function ChatPanel({
 
   const materialAI = materialAIRef.current;
   const aiService = aiServiceRef.current;
-
-  // Track current view context
-  const getCurrentView = useCallback((): 'scope' | 'time' | 'space' | 'money' | null => {
-    const pathname = location.pathname;
-    if (pathname.includes('/scope')) return 'scope';
-    if (pathname.includes('/time')) return 'time';
-    if (pathname.includes('/space') || pathname.includes('/canvas') || pathname.includes('/annotate')) return 'space';
-    if (pathname.includes('/money')) return 'money';
-    return null;
-  }, [location.pathname]);
-
-  const currentView = getCurrentView();
-
-  // Canvas AI state
-  const processAICommand = useCanvasStore((state) => state.processAICommand);
 
   // Normalize projectId
   const normalizedProjectId: string | undefined = projectId || undefined;
@@ -210,8 +246,8 @@ export function ChatPanel({
     ? scaleLine.realWorldLength / Math.sqrt(Math.pow(scaleLine.endX - scaleLine.startX, 2) + Math.pow(scaleLine.endY - scaleLine.startY, 2))
     : 1;
 
-  // Helper to add message
-  const addMessage = (role: 'agent' | 'user', content: string, metadata?: Message['metadata']) => {
+  // Helper to add message (also persists to Firestore)
+  const addMessage = useCallback((role: 'agent' | 'user', content: string, metadata?: Message['metadata']) => {
     const msg: Message = {
       id: `${role}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       role,
@@ -220,13 +256,28 @@ export function ChatPanel({
       metadata,
     };
     setMessages((prev) => [...prev, msg]);
+    
+    // Persist to Firestore
+    if (projectId && user?.uid) {
+      saveChatMessage(projectId, user.uid, msg).catch((err) => {
+        console.error('Failed to save chat message:', err);
+      });
+    }
+    
     return msg.id;
-  };
+  }, [projectId, user?.uid]);
 
-  // Helper to remove message by id
-  const removeMessage = (id: string) => {
+  // Helper to remove message by id (also deletes from Firestore)
+  const removeMessage = useCallback((id: string) => {
     setMessages((prev) => prev.filter((m) => m.id !== id));
-  };
+    
+    // Delete from Firestore
+    if (projectId && user?.uid) {
+      deleteChatMessage(projectId, user.uid, id).catch((err) => {
+        console.error('Failed to delete chat message:', err);
+      });
+    }
+  }, [projectId, user?.uid]);
 
   // Command detection
   const detectProceedToEstimateCommand = (query: string): boolean => {
@@ -429,8 +480,43 @@ export function ChatPanel({
       return;
     }
 
+    // Build comprehensive project context from scope page
+    // Note: location and address are the same thing - don't ask for address if we have location
+    const projectContext = {
+      projectName: estimateConfig?.projectName || '',
+      location: estimateConfig?.location || '', // location = address
+      projectType: estimateConfig?.projectType || '',
+      approximateSize: estimateConfig?.approximateSize || '',
+      useUnionLabor: estimateConfig?.useUnionLabor || false,
+      zipCodeOverride: estimateConfig?.zipCodeOverride || '',
+    };
+
+    // Build scope text that includes project context
+    let comprehensiveScopeText = '';
+    
+    // Add known project details that should NOT be asked again
+    const knownDetails: string[] = [];
+    if (projectContext.projectName) knownDetails.push(`Project Name: ${projectContext.projectName}`);
+    if (projectContext.location) knownDetails.push(`Location/Address: ${projectContext.location}`);
+    if (projectContext.projectType) knownDetails.push(`Project Type: ${projectContext.projectType}`);
+    if (projectContext.approximateSize) knownDetails.push(`Approximate Size: ${projectContext.approximateSize}`);
+    if (projectContext.useUnionLabor) knownDetails.push(`Labor Type: Union Labor`);
+    if (projectContext.zipCodeOverride) knownDetails.push(`ZIP Code: ${projectContext.zipCodeOverride}`);
+    
+    if (knownDetails.length > 0) {
+      comprehensiveScopeText += '--- ALREADY PROVIDED PROJECT DETAILS (DO NOT ASK AGAIN) ---\n';
+      comprehensiveScopeText += knownDetails.join('\n');
+      comprehensiveScopeText += '\n\n';
+    }
+    
+    // Add scope definition text (with projectDescription as fallback)
     const scopeText = estimateConfig?.scopeText || estimationSession?.scopeText || projectDescription || '';
-    if (!scopeText && !clarificationStarted) {
+    if (scopeText) {
+      comprehensiveScopeText += '--- SCOPE DEFINITION ---\n';
+      comprehensiveScopeText += scopeText;
+    }
+
+    if (!comprehensiveScopeText.trim() && !clarificationStarted) {
       addMessage('agent', 'ℹ️ No project scope text found. Please provide a project description first, then I can ask clarifying questions to help refine your estimate.');
       return;
     }
@@ -445,7 +531,12 @@ export function ChatPanel({
       const clarificationAgentFn = httpsCallable<unknown, { success: boolean; message: string; questions: string[]; extractedData: Record<string, unknown>; clarificationComplete: boolean; completionReason: string | null; error?: string }>(functions, 'clarificationAgent');
 
       const result = await clarificationAgentFn({
-        projectId, sessionId: projectId, scopeText, conversationHistory: clarificationConversation, userMessage: isInitial ? '' : userMessage,
+        projectId, 
+        sessionId: projectId, 
+        scopeText: comprehensiveScopeText, 
+        conversationHistory: clarificationConversation, 
+        userMessage: isInitial ? '' : userMessage,
+        projectContext, // Pass the project context separately too
       });
 
       const response = result.data;
@@ -723,12 +814,6 @@ export function ChatPanel({
     if (response.calculation) addCalculation(response.calculation);
   };
 
-  // Handle canvas command
-  const handleCanvasCommand = async (messageText: string) => {
-    const result = await processAICommand(messageText, currentView || undefined);
-    addMessage('agent', result.message, { createdShapes: result.createdShapeIds?.length, modifiedShapes: result.modifiedShapeIds?.length, deletedShapes: result.deletedShapeIds?.length });
-  };
-
   // Main send handler
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -757,7 +842,8 @@ export function ChatPanel({
       if (shouldUseMaterialEstimation) {
         await handleMaterialEstimation(messageText);
       } else {
-        await handleCanvasCommand(messageText);
+        // No matching command found
+        addMessage('agent', `I didn't recognize that command. Try one of these:\n\n• **"clarify scope"** - Define project details\n• **"annotation check"** - Verify your annotations\n• **"proceed to estimate"** - Continue to estimation\n• **"generate bom"** - Generate Bill of Materials\n• **"annotate plan"** - Auto-detect elements\n• Or ask about materials (e.g., "how much drywall do I need?")`);
       }
     } catch (error) {
       console.error('Error processing message:', error);

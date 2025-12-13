@@ -13,6 +13,7 @@ import { useLayers } from '../../hooks/useLayers';
 import { useLocks } from '../../hooks/useLocks';
 import { useOffline } from '../../hooks/useOffline';
 import { DiagnosticsHud } from '../../components/DiagnosticsHud';
+import { loadScopeConfig } from '../../services/scopeConfigService';
 import type { BackgroundImage, Shape, ShapeType } from '../../types';
 import type { EstimateConfig } from './ScopePage';
 import { perfMetrics } from '../../utils/harness';
@@ -36,7 +37,23 @@ export function AnnotatePage() {
     estimateConfig?: EstimateConfig;
   } | null;
   const pendingBackgroundImage = locationState?.backgroundImage;
-  const estimateConfig = locationState?.estimateConfig;
+  const locationEstimateConfig = locationState?.estimateConfig;
+  
+  // State for estimate config - prefer location state, fall back to Firestore
+  const [estimateConfig, setEstimateConfig] = useState<EstimateConfig | undefined>(locationEstimateConfig);
+  
+  // Load estimate config from Firestore if not in location state
+  useEffect(() => {
+    if (!locationEstimateConfig && projectId) {
+      loadScopeConfig(projectId).then((config) => {
+        if (config) {
+          setEstimateConfig(config);
+        }
+      }).catch((err) => {
+        console.error('Failed to load scope config:', err);
+      });
+    }
+  }, [projectId, locationEstimateConfig]);
 
   // Project store for loading project data when no navigation state
   const loadProject = useProjectStore((state) => state.loadProject);
