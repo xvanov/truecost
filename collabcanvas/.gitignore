@@ -25,3 +25,6 @@ dist-ssr
 .env
 *.env*
 playwright-report/
+
+# Python virtualenv (recreate locally with: python -m venv \#)
+\#/
