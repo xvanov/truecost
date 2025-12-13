@@ -3,7 +3,7 @@
  * FR7-FR36: CRUD, search, LLM validation, and auto-population
  */
 
-import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import OpenAI from 'openai';
 import {
   GlobalMaterial,
@@ -54,22 +54,64 @@ export async function findInGlobalMaterials(
 ): Promise<GlobalMaterial[]> {
   const effectiveZipCode = zipCode || DEFAULT_ZIPCODE;
   const normalizedQuery = searchQuery.toLowerCase().trim();
+  const queryWords = normalizedQuery.split(/\s+/).filter(w => w.length > 1);
 
-  console.log(`[GLOBAL_MATERIALS] Searching for "${searchQuery}" (normalized: "${normalizedQuery}") in zipCode: ${effectiveZipCode}`);
+  console.log(`[GLOBAL_MATERIALS] ========== SEARCH START ==========`);
+  console.log(`[GLOBAL_MATERIALS] Search query: "${searchQuery}"`);
+  console.log(`[GLOBAL_MATERIALS] Query words: ${JSON.stringify(queryWords)}`);
+  console.log(`[GLOBAL_MATERIALS] ZipCode: ${effectiveZipCode}`);
 
   try {
-    // FR7: Query by zipCode and aliases array-contains
-    // FR10: Limit cache queries to 5 results for efficiency
-    const snapshot = await db.collection('globalMaterials')
+    // Step 1: Try exact alias match first (fast path)
+    const exactSnapshot = await db.collection('globalMaterials')
       .where('zipCode', '==', effectiveZipCode)
       .where('aliases', 'array-contains', normalizedQuery)
       .limit(5)
       .get();
 
-    const candidates = snapshot.docs.map(doc => doc.data() as GlobalMaterial);
-    console.log(`[GLOBAL_MATERIALS] Found ${candidates.length} candidate(s) for "${searchQuery}"`);
+    if (!exactSnapshot.empty) {
+      const candidates = exactSnapshot.docs.map(doc => doc.data() as GlobalMaterial);
+      console.log(`[GLOBAL_MATERIALS] EXACT MATCH found: ${candidates.length} candidate(s)`);
+      return candidates;
+    }
 
-    return candidates;
+    console.log(`[GLOBAL_MATERIALS] No exact alias match, trying fuzzy search...`);
+
+    // Step 2: Fuzzy search - check if any query word matches an alias
+    // Try each significant word from the query
+    for (const word of queryWords) {
+      if (word.length < 2) continue;
+
+      const wordSnapshot = await db.collection('globalMaterials')
+        .where('zipCode', '==', effectiveZipCode)
+        .where('aliases', 'array-contains', word)
+        .limit(10)
+        .get();
+
+      if (!wordSnapshot.empty) {
+        const candidates = wordSnapshot.docs.map(doc => doc.data() as GlobalMaterial);
+        console.log(`[GLOBAL_MATERIALS] FUZZY MATCH on word "${word}": ${candidates.length} candidate(s)`);
+        // Return candidates that have the most word overlap
+        return candidates;
+      }
+    }
+
+    // Step 3: If still no match, get all materials for zipCode and let LLM pick
+    console.log(`[GLOBAL_MATERIALS] No word match, fetching all for zipCode...`);
+    const allSnapshot = await db.collection('globalMaterials')
+      .where('zipCode', '==', effectiveZipCode)
+      .limit(50)
+      .get();
+
+    if (!allSnapshot.empty) {
+      const allMaterials = allSnapshot.docs.map(doc => doc.data() as GlobalMaterial);
+      console.log(`[GLOBAL_MATERIALS] Returning ${allMaterials.length} materials for LLM selection`);
+      return allMaterials;
+    }
+
+    console.log(`[GLOBAL_MATERIALS] NO MATERIALS found for zipCode ${effectiveZipCode}`);
+    console.log(`[GLOBAL_MATERIALS] ========== SEARCH END ==========`);
+    return [];
   } catch (error) {
     console.error(`[GLOBAL_MATERIALS] Search error:`, error);
     return [];
@@ -79,17 +121,125 @@ export async function findInGlobalMaterials(
 // ============ LLM VALIDATION (FR11-FR15) ============
 
 /**
+ * Use LLM to select the best matching material from multiple candidates
+ * Returns the best candidate with confidence score
+ */
+export async function selectBestGlobalMatch(
+  searchQuery: string,
+  candidates: GlobalMaterial[]
+): Promise<{ candidate: GlobalMaterial | null; confidence: number; reasoning: string }> {
+  if (candidates.length === 0) {
+    return { candidate: null, confidence: 0, reasoning: 'No candidates' };
+  }
+
+  if (candidates.length === 1) {
+    const validation = await validateGlobalMatch(searchQuery, candidates[0]);
+    return { candidate: candidates[0], confidence: validation.confidence, reasoning: validation.reasoning };
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.warn('[GLOBAL_MATERIALS] OPENAI_API_KEY not configured - returning first candidate');
+    return { candidate: candidates[0], confidence: 0.5, reasoning: 'OpenAI not configured' };
+  }
+
+  const openai = new OpenAI({ apiKey });
+
+  // Create a summary of candidates for LLM
+  const candidateSummary = candidates.slice(0, 20).map((c, i) =>
+    `${i}: "${c.name}" (aliases: ${c.aliases.slice(0, 3).join(', ')})`
+  ).join('\n');
+
+  console.log(`[GLOBAL_MATERIALS] LLM selecting from ${candidates.length} candidates for "${searchQuery}"`);
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content: `Which product BEST matches the search query "${searchQuery}"?
+
+Available Products:
+${candidateSummary}
+
+Select the BEST match. Consider:
+1. Same product type/category
+2. Compatible specifications
+3. What someone searching for "${searchQuery}" would want
+
+Return ONLY JSON: { "index": number (0-${Math.min(candidates.length - 1, 19)}), "confidence": number (0-1), "reasoning": "brief" }
+If NO good match, return: { "index": -1, "confidence": 0, "reasoning": "no match" }`
+      }],
+      temperature: 0.1,
+    });
+
+    const content = response.choices[0]?.message?.content || '{}';
+    console.log(`[GLOBAL_MATERIALS] LLM selection response: ${content.substring(0, 200)}`);
+
+    const cleaned = content.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+
+    const index = typeof parsed.index === 'number' ? parsed.index : -1;
+    const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0;
+    const reasoning = parsed.reasoning || 'No reasoning';
+
+    if (index >= 0 && index < candidates.length) {
+      console.log(`[GLOBAL_MATERIALS] Selected candidate ${index}: "${candidates[index].name}" (confidence: ${confidence})`);
+      return { candidate: candidates[index], confidence, reasoning };
+    }
+
+    return { candidate: null, confidence: 0, reasoning };
+  } catch (err) {
+    console.error('[GLOBAL_MATERIALS] LLM selection error:', err);
+    // Fallback: use word overlap to pick best candidate
+    let bestCandidate = candidates[0];
+    let bestOverlap = 0;
+    for (const c of candidates) {
+      const overlap = calculateWordOverlap(searchQuery, c);
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestCandidate = c;
+      }
+    }
+    const confidence = Math.min(bestOverlap + 0.3, 0.95);
+    console.log(`[GLOBAL_MATERIALS] LLM failed - word overlap selected "${bestCandidate.name}" (${bestOverlap.toFixed(2)} -> ${confidence.toFixed(2)})`);
+    return { candidate: bestCandidate, confidence, reasoning: `Word overlap fallback (${(bestOverlap * 100).toFixed(0)}% match)` };
+  }
+}
+
+/**
  * Use LLM to validate if a global material matches the search query
  * FR11-FR13: Validates cache matches using LLM confidence scoring
  */
+/**
+ * Simple word overlap scoring for fallback matching
+ */
+function calculateWordOverlap(query: string, candidate: GlobalMaterial): number {
+  const queryWords = new Set(query.toLowerCase().split(/\s+/).filter(w => w.length > 1));
+  const candidateWords = new Set([
+    ...candidate.name.toLowerCase().split(/\s+/),
+    ...candidate.aliases.flatMap(a => a.toLowerCase().split(/\s+/))
+  ].filter(w => w.length > 1));
+
+  let matches = 0;
+  for (const word of queryWords) {
+    if (candidateWords.has(word)) matches++;
+  }
+
+  return queryWords.size > 0 ? matches / queryWords.size : 0;
+}
+
 export async function validateGlobalMatch(
   searchQuery: string,
   candidate: GlobalMaterial
 ): Promise<GlobalMatchValidation> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    console.warn('[GLOBAL_MATERIALS] OPENAI_API_KEY not configured - using moderate confidence');
-    return { confidence: 0.5, reasoning: 'OpenAI not configured' };
+    // Fallback: use word overlap scoring
+    const overlap = calculateWordOverlap(searchQuery, candidate);
+    const confidence = Math.min(overlap + 0.3, 0.95); // Boost overlap score
+    console.log(`[GLOBAL_MATERIALS] No API key - word overlap: ${overlap.toFixed(2)} -> confidence: ${confidence.toFixed(2)}`);
+    return { confidence, reasoning: `Word overlap fallback (${(overlap * 100).toFixed(0)}% match)` };
   }
 
   const openai = new OpenAI({ apiKey });
@@ -139,7 +289,11 @@ Return ONLY JSON: { "confidence": number (0-1), "reasoning": "brief explanation"
     }
   } catch (err) {
     console.error('[GLOBAL_MATERIALS] OpenAI error:', err);
-    return { confidence: 0.5, reasoning: 'OpenAI error - using moderate confidence' };
+    // Fallback to word overlap when OpenAI fails
+    const overlap = calculateWordOverlap(searchQuery, candidate);
+    const confidence = Math.min(overlap + 0.3, 0.95);
+    console.log(`[GLOBAL_MATERIALS] OpenAI failed - using word overlap: ${overlap.toFixed(2)} -> confidence: ${confidence.toFixed(2)}`);
+    return { confidence, reasoning: `Word overlap fallback (${(overlap * 100).toFixed(0)}% match)` };
   }
 }
 
@@ -230,7 +384,7 @@ export function incrementMatchCount(
   materialId: string
 ): void {
   db.collection('globalMaterials').doc(materialId).update({
-    matchCount: admin.firestore.FieldValue.increment(1),
+    matchCount: FieldValue.increment(1),
     updatedAt: Date.now(),
   }).catch((err) => {
     console.warn(`[GLOBAL_MATERIALS] Failed to increment matchCount for ${materialId}:`, err);

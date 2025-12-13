@@ -7,7 +7,7 @@ import OpenAI from 'openai';
 // Global Materials Database imports
 import {
   findInGlobalMaterials,
-  validateGlobalMatch,
+  selectBestGlobalMatch,
   saveToGlobalMaterials,
   incrementMatchCount,
   normalizeProductName,
@@ -19,6 +19,9 @@ import { GlobalMaterial } from './types/globalMaterials';
 // This supports Firebase preview channel URLs which have dynamic hostnames
 
 // Load environment variables - try multiple locations
+// Load .env.local first (higher priority), then .env as fallback
+dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -138,11 +141,23 @@ async function fetchFromSerpApi(
     const data = await res.json();
     const allResults = data.shopping_results || [];
 
+    // Log raw response for debugging
+    console.log(`[PRICE_COMPARISON] SerpApi raw response keys:`, Object.keys(data));
+    if (allResults.length > 0) {
+      console.log(`[PRICE_COMPARISON] SerpApi first result sample:`, JSON.stringify(allResults[0]).substring(0, 500));
+    } else {
+      console.log(`[PRICE_COMPARISON] SerpApi NO shopping_results found. Full response:`, JSON.stringify(data).substring(0, 1000));
+    }
+
     // Filter results by merchant pattern
     const merchantPattern = SERPAPI_MERCHANTS[retailer];
     const filteredResults = allResults.filter((result: Record<string, unknown>) => {
       const source = String(result.source || '');
-      return merchantPattern.test(source);
+      const matches = merchantPattern.test(source);
+      if (!matches && allResults.length > 0) {
+        console.log(`[PRICE_COMPARISON] Filtering out "${source}" (not matching ${retailer})`);
+      }
+      return matches;
     });
 
     console.log(`[PRICE_COMPARISON] SerpApi: ${allResults.length} total -> ${filteredResults.length} from ${retailer}`);
@@ -239,6 +254,7 @@ Return ONLY JSON: { "index": number, "confidence": number (0-1), "reasoning": "b
  */
 function normalizeSerpApiProduct(rawProduct: unknown, retailer: Retailer): RetailerProduct | null {
   if (!rawProduct || typeof rawProduct !== 'object') {
+    console.log(`[PRICE_COMPARISON] normalizeSerpApiProduct: invalid rawProduct`);
     return null;
   }
 
@@ -262,7 +278,10 @@ function normalizeSerpApiProduct(rawProduct: unknown, retailer: Retailer): Retai
   // SerpApi uses title for name
   const name = String(product.title || '');
 
+  console.log(`[PRICE_COMPARISON] normalizeSerpApiProduct: id=${id}, name=${name.substring(0, 50)}, price=${price}, url=${url ? 'yes' : 'no'}`);
+
   if (!id || !name || price <= 0) {
+    console.log(`[PRICE_COMPARISON] normalizeSerpApiProduct: REJECTED - missing id=${!id}, name=${!name}, price=${price <= 0}`);
     return null;
   }
 
@@ -451,26 +470,38 @@ async function compareOneProduct(
   // ========== STEP 1: Check Global Materials Database (FR16) ==========
   try {
     const globalCandidates = await findInGlobalMaterials(firestoreDb, productName, effectiveZipCode);
+    console.log(`[PRICE_COMPARISON] Global materials search returned ${globalCandidates.length} candidates`);
 
     if (globalCandidates.length > 0) {
-      // ========== STEP 2: LLM Validation (FR11-FR15) ==========
-      const bestCandidate = globalCandidates[0];
-      const { confidence, reasoning } = await validateGlobalMatch(productName, bestCandidate);
+      // ========== STEP 2: LLM Selection from candidates (FR11-FR15) ==========
+      const { candidate: bestCandidate, confidence, reasoning } = await selectBestGlobalMatch(productName, globalCandidates);
 
-      console.log(`[PRICE_COMPARISON] Global DB validation: "${productName}" vs "${bestCandidate.name}" -> confidence: ${confidence.toFixed(2)}`);
+      if (bestCandidate) {
+        console.log(`[PRICE_COMPARISON] Global DB validation: "${productName}" vs "${bestCandidate.name}" -> confidence: ${confidence.toFixed(2)}`);
 
-      if (confidence >= GLOBAL_MATCH_CONFIDENCE_THRESHOLD) {
-        // ========== STEP 3a: Use Global Cache (FR17-FR19) ==========
-        console.log(`[PRICE_COMPARISON] GLOBAL_DB HIT for "${productName}" (confidence: ${confidence.toFixed(2)})`);
+        if (confidence >= GLOBAL_MATCH_CONFIDENCE_THRESHOLD) {
+          // Check if the cached material actually has retailer pricing data
+          const hasRetailerData = bestCandidate.retailers &&
+            (bestCandidate.retailers.homeDepot?.price || bestCandidate.retailers.lowes?.price);
 
-        // FR18: Increment match count (fire-and-forget)
-        incrementMatchCount(firestoreDb, bestCandidate.id);
+          if (hasRetailerData) {
+            // ========== STEP 3a: Use Global Cache (FR17-FR19) ==========
+            console.log(`[PRICE_COMPARISON] GLOBAL_DB HIT for "${productName}" (confidence: ${confidence.toFixed(2)})`);
 
-        // FR17, FR34-FR35: Return cached pricing immediately
-        return buildResultFromGlobalMaterial(bestCandidate, productName, confidence, reasoning);
+            // FR18: Increment match count (fire-and-forget)
+            incrementMatchCount(firestoreDb, bestCandidate.id);
+
+            // FR17, FR34-FR35: Return cached pricing immediately
+            return buildResultFromGlobalMaterial(bestCandidate, productName, confidence, reasoning);
+          } else {
+            console.log(`[PRICE_COMPARISON] Global DB match found but no retailer pricing data cached, falling back to API`);
+          }
+        }
+
+        console.log(`[PRICE_COMPARISON] Global DB confidence too low (${confidence.toFixed(2)} < ${GLOBAL_MATCH_CONFIDENCE_THRESHOLD}), falling back to API`);
+      } else {
+        console.log(`[PRICE_COMPARISON] LLM found no good match among ${globalCandidates.length} candidates`);
       }
-
-      console.log(`[PRICE_COMPARISON] Global DB confidence too low (${confidence.toFixed(2)} < ${GLOBAL_MATCH_CONFIDENCE_THRESHOLD}), falling back to API`);
     } else {
       console.log(`[PRICE_COMPARISON] No global materials found for "${productName}" in zipCode ${effectiveZipCode}`);
     }
@@ -548,7 +579,7 @@ export const comparePricesConfig = {
   maxInstances: 10,
   memory: '1GiB' as const,
   timeoutSeconds: 540, // Max for 2nd gen - handles large product lists
-  secrets: ['OPENAI_API_KEY'], // Grant access to OpenAI API key secret for product matching
+  secrets: ['OPENAI_API_KEY', 'SERP_API_KEY'], // Grant access to secrets for LLM matching and SerpApi
 };
 
 export const comparePrices = onCall<{ request: CompareRequest }>(comparePricesConfig, async (req) => {
