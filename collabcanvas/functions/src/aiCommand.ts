@@ -4,46 +4,56 @@ import { z } from 'zod';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// Load environment variables from .env file in functions directory
-// CRITICAL: Firebase Functions v2 with secrets: ['OPENAI_API_KEY'] injects the secret
-// into process.env BEFORE this code runs. We need to load .env and OVERRIDE process.env
-// when running locally (emulator) so .env file takes precedence.
-const envPath = path.resolve(process.cwd(), '.env');
-const envResult = dotenv.config({ path: envPath, override: true }); // override: true forces .env to win
+// Lazy initialization to avoid timeout during module load
+let _openai: OpenAI | null = null;
+let _apiKey: string | null = null;
+let _initialized = false;
 
-// Determine which key we're actually using
-const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
-const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-// Prioritize .env file when running in emulator, otherwise use process.env (Firebase Secrets in production)
-const apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-
-// Log what we loaded (always log in development/emulator)
-if (isEmulator) {
-  console.log('[AI_COMMAND] Environment loading:');
-  console.log('[AI_COMMAND] - Running in emulator:', isEmulator);
-  console.log('[AI_COMMAND] - .env file path:', envPath);
-  console.log('[AI_COMMAND] - .env loaded:', envResult.parsed ? 'YES' : 'NO');
-  if (envResult.error) {
-    console.warn('[AI_COMMAND] - .env error:', envResult.error.message);
+function initializeEnv(): string {
+  if (_apiKey !== null) {
+    return _apiKey;
   }
-  console.log('[AI_COMMAND] - OPENAI_API_KEY from .env file:', apiKeyFromEnv ? `SET (${apiKeyFromEnv.substring(0, 15)}...${apiKeyFromEnv.substring(apiKeyFromEnv.length - 4)})` : 'NOT SET');
-  console.log('[AI_COMMAND] - OPENAI_API_KEY from process.env (Firebase Secrets):', apiKeyFromProcess ? `SET (${apiKeyFromProcess.substring(0, 15)}...${apiKeyFromProcess.substring(apiKeyFromProcess.length - 4)})` : 'NOT SET');
-  console.log('[AI_COMMAND] - OPENAI_API_KEY FINAL (being used):', apiKey ? `SET (${apiKey.substring(0, 15)}...${apiKey.substring(apiKey.length - 4)})` : 'NOT SET');
-  console.log('[AI_COMMAND] - NODE_ENV:', process.env.NODE_ENV);
-  console.log('[AI_COMMAND] - FUNCTIONS_EMULATOR:', process.env.FUNCTIONS_EMULATOR);
-  console.log('[AI_COMMAND] - CWD:', process.cwd());
+
+  // Load environment variables from .env file in functions directory
+  const envPath = path.resolve(process.cwd(), '.env');
+  const envResult = dotenv.config({ path: envPath, override: true });
+
+  const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
+  const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
+  const apiKeyFromProcess = process.env.OPENAI_API_KEY;
+  _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
+
+  // Log what we loaded (only once, in development/emulator)
+  if (isEmulator && !_initialized) {
+    _initialized = true;
+    console.log('[AI_COMMAND] Environment loading:');
+    console.log('[AI_COMMAND] - Running in emulator:', isEmulator);
+    console.log('[AI_COMMAND] - .env file path:', envPath);
+    console.log('[AI_COMMAND] - .env loaded:', envResult.parsed ? 'YES' : 'NO');
+    if (envResult.error) {
+      console.warn('[AI_COMMAND] - .env error:', envResult.error.message);
+    }
+    console.log('[AI_COMMAND] - OPENAI_API_KEY from .env file:', apiKeyFromEnv ? `SET (${apiKeyFromEnv.substring(0, 15)}...${apiKeyFromEnv.substring(apiKeyFromEnv.length - 4)})` : 'NOT SET');
+    console.log('[AI_COMMAND] - OPENAI_API_KEY from process.env (Firebase Secrets):', apiKeyFromProcess ? `SET (${apiKeyFromProcess.substring(0, 15)}...${apiKeyFromProcess.substring(apiKeyFromProcess.length - 4)})` : 'NOT SET');
+    console.log('[AI_COMMAND] - OPENAI_API_KEY FINAL (being used):', _apiKey ? `SET (${_apiKey.substring(0, 15)}...${_apiKey.substring(_apiKey.length - 4)})` : 'NOT SET');
+    console.log('[AI_COMMAND] - NODE_ENV:', process.env.NODE_ENV);
+    console.log('[AI_COMMAND] - FUNCTIONS_EMULATOR:', process.env.FUNCTIONS_EMULATOR);
+    console.log('[AI_COMMAND] - CWD:', process.cwd());
+  }
+
+  if (!_apiKey) {
+    console.warn('⚠️ OPENAI_API_KEY not found. AI assistant will not work.');
+    console.warn('⚠️ Please set OPENAI_API_KEY in functions/.env file (for local) or Firebase Secrets (for production)');
+  }
+
+  return _apiKey;
 }
 
-// Initialize OpenAI client with the selected key
-const openai = new OpenAI({
-  apiKey,
-});
-
-// Fallback: Check if API key is missing
-if (!apiKey) {
-  console.warn('⚠️ OPENAI_API_KEY not found. AI assistant will not work.');
-  console.warn('⚠️ Please set OPENAI_API_KEY in functions/.env file (for local) or Firebase Secrets (for production)');
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: initializeEnv() });
+  }
+  return _openai;
 }
 
 // Define command schema using Zod
@@ -187,7 +197,7 @@ Available colors: #3B82F6, #EF4444, #10B981, #F59E0B, #8B5CF6
 Return ONLY the JSON, no other text.`;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,

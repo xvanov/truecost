@@ -20,7 +20,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { firestore } from './firebase';
-import type { Project, ProjectStatus, CollaboratorRole, EstimateConfig } from '../types/project';
+import type { Project, ProjectStatus, CollaboratorRole, EstimateConfig, ProjectAddress } from '../types/project';
 import { canEditProject, canDeleteProject, canShareProject } from '../utils/projectAccess';
 
 const projectsCollection = collection(firestore, 'projects');
@@ -44,10 +44,9 @@ function firestoreDocToProject(docId: string, data: DocumentData): Project {
     actualCosts: data.actualCosts,
     estimateTotal: data.estimateTotal,
     // Scope fields
-    location: data.location,
+    address: data.address,
     projectType: data.projectType,
     size: data.size,
-    zipCode: data.zipCode,
     useUnionLabor: data.useUnionLabor,
     estimateConfig: data.estimateConfig,
     planImageUrl: data.planImageUrl,
@@ -90,10 +89,9 @@ export async function getUserProjects(userId: string): Promise<Project[]> {
 export interface ProjectScopeData {
   name: string;
   description: string;
-  location?: string;
+  address?: ProjectAddress;
   projectType?: string;
   size?: string;
-  zipCode?: string;
   useUnionLabor?: boolean;
   estimateConfig?: EstimateConfig;
   planImageUrl?: string;
@@ -146,10 +144,9 @@ export async function createProject(
 
     // Add optional scope fields if provided
     if (scopeData) {
-      if (scopeData.location) projectData.location = scopeData.location;
+      if (scopeData.address) projectData.address = scopeData.address;
       if (scopeData.projectType) projectData.projectType = scopeData.projectType;
       if (scopeData.size) projectData.size = scopeData.size;
-      if (scopeData.zipCode) projectData.zipCode = scopeData.zipCode;
       if (scopeData.useUnionLabor !== undefined) projectData.useUnionLabor = scopeData.useUnionLabor;
       if (scopeData.estimateConfig) projectData.estimateConfig = scopeData.estimateConfig;
       if (scopeData.planImageUrl) projectData.planImageUrl = scopeData.planImageUrl;
@@ -169,10 +166,9 @@ export async function createProject(
       updatedAt: now,
       createdBy: userId,
       updatedBy: userId,
-      location: scopeData?.location,
+      address: scopeData?.address,
       projectType: scopeData?.projectType,
       size: scopeData?.size,
-      zipCode: scopeData?.zipCode,
       useUnionLabor: scopeData?.useUnionLabor,
       estimateConfig: scopeData?.estimateConfig,
       planImageUrl: scopeData?.planImageUrl,
@@ -216,10 +212,9 @@ export async function updateProjectScope(
     // Add scope fields to update
     if (scopeData.name !== undefined) updateData.name = scopeData.name;
     if (scopeData.description !== undefined) updateData.description = scopeData.description;
-    if (scopeData.location !== undefined) updateData.location = scopeData.location;
+    if (scopeData.address !== undefined) updateData.address = scopeData.address;
     if (scopeData.projectType !== undefined) updateData.projectType = scopeData.projectType;
     if (scopeData.size !== undefined) updateData.size = scopeData.size;
-    if (scopeData.zipCode !== undefined) updateData.zipCode = scopeData.zipCode;
     if (scopeData.useUnionLabor !== undefined) updateData.useUnionLabor = scopeData.useUnionLabor;
     if (scopeData.estimateConfig !== undefined) updateData.estimateConfig = scopeData.estimateConfig;
     if (scopeData.planImageUrl !== undefined) updateData.planImageUrl = scopeData.planImageUrl;

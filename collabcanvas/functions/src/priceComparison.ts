@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import OpenAI from 'openai';
@@ -33,19 +33,21 @@ if (process.env.NODE_ENV !== 'production') {
   console.log('[PRICE_COMPARISON] - OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET');
 }
 
-// Initialize admin if not already
-try {
-  admin.app();
-} catch {
-  admin.initializeApp();
+function initFirebaseAdmin(): void {
+  try {
+    admin.app();
+  } catch {
+    admin.initializeApp();
+  }
 }
 
-// Configure Firestore to use emulator if running locally
-if (process.env.FIRESTORE_EMULATOR_HOST) {
-  console.log('[PRICE_COMPARISON] Using Firestore emulator:', process.env.FIRESTORE_EMULATOR_HOST);
-} else if (process.env.NODE_ENV === 'development' && !process.env.FUNCTIONS_EMULATOR) {
-  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-  console.log('[PRICE_COMPARISON] Local development detected - setting FIRESTORE_EMULATOR_HOST to 127.0.0.1:8081');
+function getDb(): Firestore {
+  if (!_db) {
+    initializeEnv();
+    initFirebaseAdmin();
+    _db = getFirestore();
+  }
+  return _db;
 }
 
 // ============ TYPES (duplicated - can't import from src/) ============
@@ -107,6 +109,7 @@ async function fetchFromSerpApi(
   productName: string,
   retailer: Retailer
 ): Promise<unknown[]> {
+  initializeEnv();
   const apiKey = process.env.SERP_API_KEY;
   if (!apiKey) {
     console.error('[PRICE_COMPARISON] SERP_API_KEY not configured');
@@ -210,6 +213,7 @@ async function selectBestMatch(
     return { index: -1, confidence: 0, reasoning: 'No search results' };
   }
 
+  initializeEnv();
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     console.error('[PRICE_COMPARISON] OPENAI_API_KEY not configured');
@@ -543,7 +547,7 @@ async function compareOneProduct(
   console.log(`[PRICE_COMPARISON] Comparing product: "${productName}" (zipCode: ${effectiveZipCode})`);
 
   // Get Firestore instance if not provided (for cache operations)
-  const firestoreDb = db || getFirestore();
+  const firestoreDb = db || getDb();
 
   // ========== STEP 1: Check Global Materials Database (FR16) ==========
   try {
@@ -677,7 +681,7 @@ export const comparePrices = onCall<{ request: CompareRequest }>(comparePricesCo
     throw new HttpsError('invalid-argument', 'productNames array is required');
   }
 
-  const db = getFirestore();
+  const db = getDb();
   const docRef = db.collection('projects').doc(projectId)
     .collection('priceComparison').doc('latest');
 

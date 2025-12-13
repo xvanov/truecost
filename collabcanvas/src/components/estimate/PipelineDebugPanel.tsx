@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { firestore } from '../../services/firebase';
-import { PIPELINE_STAGES, triggerEstimatePipeline } from '../../services/pipelineService';
+import { PIPELINE_STAGES, triggerEstimatePipeline, buildFallbackClarificationOutput } from '../../services/pipelineService';
 import { useAuth } from '../../hooks/useAuth';
 
 interface PipelineDebugPanelProps {
@@ -250,8 +250,8 @@ export function PipelineDebugPanel({ projectId, isVisible, onClose }: PipelineDe
 
     try {
       console.log('[DEBUG] Calling triggerEstimatePipeline for project:', projectId);
-
-      const result = await triggerEstimatePipeline(projectId, user.uid);
+      const fallbackPayload = buildFallbackClarificationOutput({ projectId });
+      const result = await triggerEstimatePipeline(projectId, user.uid, fallbackPayload);
 
       if (!result.success) {
         throw new Error(result.error || 'Pipeline failed to start');
@@ -261,7 +261,7 @@ export function PipelineDebugPanel({ projectId, isVisible, onClose }: PipelineDe
 
       // Pipeline is now running - status will be updated via Firestore subscription
       setError(null);
-      alert(`Pipeline started!\n\nPipeline ID: ${result.pipelineId}\nProject ID: ${projectId}\n\nThe TypeScript orchestrator gathers project context and calls the Python agent pipeline.\nYou should see real-time updates in the status panel above.`);
+      alert(`Pipeline started!\n\nEstimate ID: ${result.estimateId}\nProject ID: ${projectId}\n\nThe TypeScript orchestrator gathers project context and calls the Python agent pipeline.\nYou should see real-time updates in the status panel above.`);
 
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

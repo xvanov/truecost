@@ -17,24 +17,39 @@ import {
   ComputedQuantities,
 } from './annotationQuantifier';
 
-// Initialize Firebase Admin if not already
-if (!admin.apps.length) {
-  admin.initializeApp();
+// Lazy initialization to avoid timeout during module load
+let _openai: OpenAI | null = null;
+let _apiKey: string | null = null;
+
+function getApiKey(): string {
+  if (_apiKey === null) {
+    // Load environment variables
+    const envPath = path.resolve(process.cwd(), '.env');
+    const envResult = dotenv.config({ path: envPath, override: true });
+
+    const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
+    const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
+    const apiKeyFromProcess = process.env.OPENAI_API_KEY;
+    _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
+
+    if (!_apiKey) {
+      console.warn('⚠️ OPENAI_API_KEY not found. LLM inference will not work.');
+    }
+  }
+  return _apiKey;
 }
 
-// Load environment variables
-const envPath = path.resolve(process.cwd(), '.env');
-const envResult = dotenv.config({ path: envPath, override: true });
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: getApiKey() });
+  }
+  return _openai;
+}
 
-const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
-const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-const apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-
-const openai = new OpenAI({ apiKey });
-
-if (!apiKey) {
-  console.warn('⚠️ OPENAI_API_KEY not found. LLM inference will not work.');
+function initFirebaseAdmin(): void {
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
 }
 
 // ===================
@@ -214,6 +229,7 @@ async function inferMissingData(
   clarificationData: Record<string, unknown>,
   planImageUrl?: string
 ): Promise<Record<string, unknown>> {
+  const apiKey = getApiKey();
   if (!apiKey) {
     console.log('[ESTIMATION] No API key - skipping LLM inference');
     return {
@@ -239,9 +255,10 @@ async function inferMissingData(
 
   try {
     // Build messages for OpenAI
+    const openai = getOpenAI();
     let response;
 
-    if (planImageUrl && apiKey) {
+    if (planImageUrl) {
       let imageContent = planImageUrl;
       if (isLocalUrl(planImageUrl)) {
         imageContent = await imageUrlToBase64(planImageUrl);
@@ -473,12 +490,23 @@ export const estimationPipeline = onCall({
       projectBrief.timeline.deadline = clarificationData.deadline as string;
     }
 
-    // Build CAD data
+    // Build CAD data - using schema-valid enum values
+    // Schema requires: fileType: "dwg" | "dxf" | "pdf" | "png" | "jpg"
+    // Schema requires: extractionMethod: "ezdxf" | "vision"
+    const getFileType = (url: string | null): "dwg" | "dxf" | "pdf" | "png" | "jpg" => {
+      if (!url) return 'png'; // Default to png
+      const lowerUrl = url.toLowerCase();
+      if (lowerUrl.includes('.dwg')) return 'dwg';
+      if (lowerUrl.includes('.dxf')) return 'dxf';
+      if (lowerUrl.includes('.pdf')) return 'pdf';
+      if (lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg')) return 'jpg';
+      return 'png'; // Default to png
+    };
+
     const cadData = {
-      fileUrl: planImageUrl || '',
-      fileType: planImageUrl?.toLowerCase().includes('.png') ? 'png' :
-                planImageUrl?.toLowerCase().includes('.jpg') ? 'jpg' : 'jpeg',
-      extractionMethod: 'annotation', // PRIMARY method is now annotation
+      fileUrl: planImageUrl || 'placeholder://no-image-uploaded',
+      fileType: getFileType(planImageUrl),
+      extractionMethod: 'vision' as const, // Schema valid: "ezdxf" | "vision"
       extractionConfidence: quantities.hasScale ? 0.95 : 0.6, // High confidence with scale
       spaceModel,
       spatialRelationships: {
@@ -514,7 +542,7 @@ export const estimationPipeline = onCall({
       csiScope,
       cadData,
       conversation: {
-        inputMethod: 'annotation',
+        inputMethod: 'mixed' as const, // Schema valid: "text" | "voice" | "mixed"
         messageCount: 0,
         clarificationQuestions: [],
         confidenceScore: quantities.hasScale ? 0.95 : 0.5,
@@ -535,6 +563,7 @@ export const estimationPipeline = onCall({
     };
 
     // Save to Firestore (use set with merge to create if doesn't exist)
+    initFirebaseAdmin();
     const db = admin.firestore();
     await db.collection('projects').doc(projectId)
       .collection('estimations').doc(sessionId)

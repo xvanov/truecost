@@ -2,13 +2,18 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { OpenAI } from 'openai';
 import * as dotenv from 'dotenv';
 
-// Load environment variables
-dotenv.config();
+// Lazy initialization to avoid timeout during module load
+let _openai: OpenAI | null = null;
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    dotenv.config();
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY || '',
+    });
+  }
+  return _openai;
+}
 
 /**
  * Material Estimation AI Command
@@ -60,7 +65,7 @@ Return ONLY the JSON object with fields they specified, nothing else.`;
       `User message: "${userMessage}"`;
 
     // Call OpenAI
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
@@ -159,23 +164,23 @@ IMPORTANT: Count ALL doors including:
 - Double doors (count as 2)
 - Closet doors`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: 'gpt-4o',
       messages: [
-        { 
-          role: 'system', 
-          content: systemPrompt 
+        {
+          role: 'system',
+          content: systemPrompt
         },
         {
           role: 'user',
           content: [
             { type: 'text', text: userMessage },
-            { 
-              type: 'image_url', 
-              image_url: { 
+            {
+              type: 'image_url',
+              image_url: {
                 url: imageUrlOrBase64,
                 detail: 'high' // High detail for better door/window counting
-              } 
+              }
             }
           ]
         }

@@ -56,7 +56,7 @@ interface WallMeasurement {
   unit: string;
   layerName: string;
   confidence: number;
-  source: 'annotation';
+  source: 'cad_extraction' | 'user_input' | 'inferred' | 'standard_allowance';
 }
 
 interface RoomMeasurement {
@@ -69,7 +69,7 @@ interface RoomMeasurement {
   unit: string;
   layerName: string;
   confidence: number;
-  source: 'annotation';
+  source: 'cad_extraction' | 'user_input' | 'inferred' | 'standard_allowance';
 }
 
 interface OpeningMeasurement {
@@ -82,7 +82,7 @@ interface OpeningMeasurement {
   unit: string;
   layerName: string;
   confidence: number;
-  source: 'annotation';
+  source: 'cad_extraction' | 'user_input' | 'inferred' | 'standard_allowance';
 }
 
 interface FixtureMeasurement {
@@ -96,7 +96,7 @@ interface FixtureMeasurement {
   unit: string;
   layerName: string;
   confidence: number;
-  source: 'annotation';
+  source: 'cad_extraction' | 'user_input' | 'inferred' | 'standard_allowance';
 }
 
 export interface ComputedQuantities {
@@ -363,7 +363,7 @@ export function computeQuantitiesFromAnnotations(annotations: AnnotationSnapshot
         unit: result.hasScale ? unit : 'pixels',
         layerName: layer.name,
         confidence: 1.0, // User-drawn = high confidence
-        source: 'annotation',
+        source: 'cad_extraction',
       };
 
       result.walls.push(wall);
@@ -390,7 +390,7 @@ export function computeQuantitiesFromAnnotations(annotations: AnnotationSnapshot
         unit: result.hasScale ? unit : 'pixels',
         layerName: layer.name,
         confidence: 1.0,
-        source: 'annotation',
+        source: 'cad_extraction',
       };
 
       result.rooms.push(room);
@@ -420,7 +420,7 @@ export function computeQuantitiesFromAnnotations(annotations: AnnotationSnapshot
           unit: result.hasScale ? unit : 'pixels',
           layerName: layer.name,
           confidence: 1.0,
-          source: 'annotation',
+          source: 'cad_extraction',
         };
         result.doors.push(door);
         result.totalDoorCount++;
@@ -436,7 +436,7 @@ export function computeQuantitiesFromAnnotations(annotations: AnnotationSnapshot
           unit: result.hasScale ? unit : 'pixels',
           layerName: layer.name,
           confidence: 1.0,
-          source: 'annotation',
+          source: 'cad_extraction',
         };
         result.windows.push(window);
         result.totalWindowCount++;
@@ -454,7 +454,7 @@ export function computeQuantitiesFromAnnotations(annotations: AnnotationSnapshot
           unit: result.hasScale ? unit : 'pixels',
           layerName: layer.name,
           confidence: 1.0,
-          source: 'annotation',
+          source: 'cad_extraction',
         };
         result.fixtures.push(fixture);
       }
@@ -574,7 +574,7 @@ export function buildCSIItemsFromQuantities(quantities: ComputedQuantities): Rec
       unitDescription: 'linear feet of wall',
       specifications: '2x4 studs @ 16" OC',
       confidence: 1.0,
-      source: 'annotation',
+      source: 'cad_extraction',
       notes: `Calculated from ${quantities.walls.length} annotated wall segments`,
     });
   }
@@ -588,7 +588,7 @@ export function buildCSIItemsFromQuantities(quantities: ComputedQuantities): Rec
       unit: 'each',
       specifications: 'Standard interior door with frame and hardware',
       confidence: 1.0,
-      source: 'annotation',
+      source: 'cad_extraction',
       notes: 'Count from annotated door locations',
     });
   }
@@ -602,7 +602,7 @@ export function buildCSIItemsFromQuantities(quantities: ComputedQuantities): Rec
       unit: 'each',
       specifications: 'Standard window with frame',
       confidence: 1.0,
-      source: 'annotation',
+      source: 'cad_extraction',
       notes: 'Count from annotated window locations',
     });
   }
@@ -619,7 +619,7 @@ export function buildCSIItemsFromQuantities(quantities: ComputedQuantities): Rec
       unitDescription: 'square feet of drywall',
       specifications: '1/2" gypsum board',
       confidence: 1.0,
-      source: 'annotation',
+      source: 'cad_extraction',
       notes: 'Calculated from wall lengths x 8ft height x 2 sides',
     });
   }
@@ -634,7 +634,7 @@ export function buildCSIItemsFromQuantities(quantities: ComputedQuantities): Rec
       unitDescription: 'square feet of flooring',
       specifications: 'To be specified',
       confidence: 1.0,
-      source: 'annotation',
+      source: 'cad_extraction',
       notes: `Calculated from ${quantities.rooms.length} annotated room areas`,
     });
 
@@ -646,7 +646,7 @@ export function buildCSIItemsFromQuantities(quantities: ComputedQuantities): Rec
       unit: 'square_feet',
       specifications: 'Ceiling paint, 2 coats',
       confidence: 1.0,
-      source: 'annotation',
+      source: 'cad_extraction',
       notes: 'Ceiling area equals floor area',
     });
   }

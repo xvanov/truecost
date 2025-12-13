@@ -18,7 +18,7 @@ const db = (0, firestore_1.getFirestore)();
  * Pipeline stages for the estimate generation pipeline
  * Note: Clarification runs separately during Annotate phase (Epic 3)
  */
-const PIPELINE_STAGES = [
+const _PIPELINE_STAGES = [
     'cad_analysis',
     'location',
     'scope',

@@ -8,16 +8,24 @@ import * as admin from 'firebase-admin';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// Load environment variables
-dotenv.config();
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Lazy initialization to avoid timeout during module load
+let _initialized = false;
 
-// Initialize admin if not already
-try {
-  admin.app();
-} catch {
-  admin.initializeApp();
+function initializeEnv(): void {
+  if (_initialized) return;
+  _initialized = true;
+
+  // Load environment variables
+  dotenv.config();
+  dotenv.config({ path: path.resolve(__dirname, '../.env') });
+  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
+  // Initialize admin if not already
+  try {
+    admin.app();
+  } catch {
+    admin.initializeApp();
+  }
 }
 
 interface InvokeAnnotationEndpointRequest {
@@ -58,6 +66,7 @@ async function invokeSageMakerEndpoint(
   attempt = 1,
   maxAttempts = 3
 ): Promise<Detection[]> {
+  initializeEnv();
   // Check if AWS credentials are configured
   const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;

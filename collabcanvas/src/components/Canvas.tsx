@@ -114,10 +114,58 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ projectId, onFpsUpdate, 
   const storedViewportState = useScopedCanvasStore(projectId, (state) => state.viewportState);
   const setViewportState = useScopedCanvasStore(projectId, (state) => state.setViewportState);
 
+  // Helper to get localStorage key for viewport state
+  const getViewportStorageKey = useCallback(() => {
+    return projectId ? `canvas-viewport-${projectId}` : 'canvas-viewport-global';
+  }, [projectId]);
+
+  // Helper to load viewport state from localStorage
+  const loadViewportFromStorage = useCallback(() => {
+    try {
+      const stored = localStorage.getItem(getViewportStorageKey());
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed.x === 'number' && typeof parsed.y === 'number' && typeof parsed.scale === 'number') {
+          return parsed as { x: number; y: number; scale: number };
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load viewport state from localStorage:', e);
+    }
+    return null;
+  }, [getViewportStorageKey]);
+
+  // Helper to save viewport state to localStorage (debounced)
+  const saveViewportToStorage = useCallback((state: { x: number; y: number; scale: number }) => {
+    try {
+      localStorage.setItem(getViewportStorageKey(), JSON.stringify(state));
+    } catch (e) {
+      console.warn('Failed to save viewport state to localStorage:', e);
+    }
+  }, [getViewportStorageKey]);
+
+  // Initialize viewport state - prefer localStorage over store (localStorage persists across refreshes)
+  const getInitialViewportState = useCallback(() => {
+    // First try localStorage (persists across page refreshes)
+    const fromStorage = loadViewportFromStorage();
+    if (fromStorage && (fromStorage.x !== 0 || fromStorage.y !== 0 || fromStorage.scale !== 1)) {
+      return fromStorage;
+    }
+    // Fall back to store (persists across navigation within session)
+    if (storedViewportState && (storedViewportState.x !== 0 || storedViewportState.y !== 0 || storedViewportState.scale !== 1)) {
+      return storedViewportState;
+    }
+    return { x: 0, y: 0, scale: 1 };
+  }, [loadViewportFromStorage, storedViewportState]);
+
   // Imperative stage position and scale to avoid React re-renders during pan/zoom
-  // Initialize from stored state for persistence
-  const stagePosRef = useRef({ x: storedViewportState?.x ?? 0, y: storedViewportState?.y ?? 0 });
-  const stageScaleRef = useRef(storedViewportState?.scale ?? 1);
+  // Initialize from localStorage/stored state for persistence
+  const initialViewport = getInitialViewportState();
+  const stagePosRef = useRef({ x: initialViewport.x, y: initialViewport.y });
+  const stageScaleRef = useRef(initialViewport.scale);
+
+  // Ref for debounced localStorage save
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Mouse position for snap indicators
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
   // Measurement input modal state
@@ -278,7 +326,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ projectId, onFpsUpdate, 
     };
   }, [onFpsUpdate]);
 
-  // Cleanup pending RAFs on unmount
+  // Cleanup pending RAFs and timeouts on unmount
   useEffect(() => {
     return () => {
       if (rafPendingRef.current !== null) {
@@ -289,44 +337,71 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ projectId, onFpsUpdate, 
         cancelAnimationFrame(zoomChangeRafRef.current);
         zoomChangeRafRef.current = null;
       }
+      if (saveTimeoutRef.current !== null) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
     };
   }, []);
 
-  // Restore viewport state from store on mount (when stored state differs from initial)
+  // Helper to schedule debounced viewport save to localStorage
+  const scheduleViewportSave = useCallback(() => {
+    if (saveTimeoutRef.current !== null) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      saveViewportToStorage({
+        x: stagePosRef.current.x,
+        y: stagePosRef.current.y,
+        scale: stageScaleRef.current,
+      });
+      saveTimeoutRef.current = null;
+    }, 500); // Debounce by 500ms
+  }, [saveViewportToStorage]);
+
+  // Restore viewport state from localStorage/store on mount
   useEffect(() => {
     const stage = stageRef.current;
-    if (stage && storedViewportState) {
-      // Only apply if the stored state differs from defaults
-      const hasStoredPosition = storedViewportState.x !== 0 || storedViewportState.y !== 0;
-      const hasStoredScale = storedViewportState.scale !== 1;
+    if (stage) {
+      // Load from localStorage first (persists across refreshes), then fall back to store
+      const savedState = loadViewportFromStorage() || storedViewportState;
 
-      if (hasStoredPosition || hasStoredScale) {
-        stagePosRef.current = { x: storedViewportState.x, y: storedViewportState.y };
-        stageScaleRef.current = storedViewportState.scale;
-        stage.position({ x: storedViewportState.x, y: storedViewportState.y });
-        stage.scale({ x: storedViewportState.scale, y: storedViewportState.scale });
+      if (savedState) {
+        // Only apply if the saved state differs from defaults
+        const hasStoredPosition = savedState.x !== 0 || savedState.y !== 0;
+        const hasStoredScale = savedState.scale !== 1;
 
-        // Notify parent of restored zoom level
-        if (onZoomChange) {
-          onZoomChange(storedViewportState.scale);
+        if (hasStoredPosition || hasStoredScale) {
+          stagePosRef.current = { x: savedState.x, y: savedState.y };
+          stageScaleRef.current = savedState.scale;
+          stage.position({ x: savedState.x, y: savedState.y });
+          stage.scale({ x: savedState.scale, y: savedState.scale });
+
+          // Notify parent of restored zoom level
+          if (onZoomChange) {
+            onZoomChange(savedState.scale);
+          }
         }
       }
     }
-  // Only run on mount - storedViewportState is read once
+  // Only run on mount - viewport state is read once
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Save viewport state to store on unmount for persistence across navigation
+  // Save viewport state to store and localStorage on unmount for persistence
   useEffect(() => {
     return () => {
-      // Save current viewport state to store
+      const viewportState = {
+        x: stagePosRef.current.x,
+        y: stagePosRef.current.y,
+        scale: stageScaleRef.current,
+      };
+      // Save to store (for navigation within session)
       if (setViewportState) {
-        setViewportState({
-          x: stagePosRef.current.x,
-          y: stagePosRef.current.y,
-          scale: stageScaleRef.current,
-        });
+        setViewportState(viewportState);
       }
+      // Save to localStorage (for persistence across page refreshes)
+      saveViewportToStorage(viewportState);
     };
   // Only run cleanup on unmount
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -367,11 +442,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ projectId, onFpsUpdate, 
     // Update refs imperatively
     stagePosRef.current = newPos;
     stageScaleRef.current = clampedScale;
-    
+
     // Update stage directly without React re-render
     stage.position(newPos);
     stage.scale({ x: clampedScale, y: clampedScale });
-    
+
+    // Schedule debounced save to localStorage for persistence across refreshes
+    scheduleViewportSave();
+
     // REMOVED: scheduleStateUpdate - Don't trigger React re-renders during zoom!
     // Throttle zoom change notifications using requestAnimationFrame to avoid excessive re-renders
     if (onZoomChange) {
@@ -587,13 +665,16 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ projectId, onFpsUpdate, 
         x: stagePosRef.current.x + e.evt.movementX,
         y: stagePosRef.current.y + e.evt.movementY,
       };
-      
+
       // Update refs imperatively
       stagePosRef.current = newPos;
-      
+
       // Update stage directly without React re-render
       stage.position(newPos);
-      
+
+      // Schedule debounced save to localStorage for persistence across refreshes
+      scheduleViewportSave();
+
       // REMOVED: scheduleStateUpdate - Don't trigger React re-renders during pan!
       return; // Skip batched updates during pan for better responsiveness
     }

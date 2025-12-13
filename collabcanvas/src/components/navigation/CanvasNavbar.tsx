@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { UserMenu } from './UserMenu';
 import { useCanvasStore } from '../../store/canvasStore';
+import { useScopedCanvasStore } from '../../store/projectCanvasStore';
 import { useShapes } from '../../hooks/useShapes';
 import { useOffline } from '../../hooks/useOffline';
 import { FileUpload } from '../FileUpload';
@@ -53,14 +54,15 @@ export function CanvasNavbar({
 }: CanvasNavbarProps) {
   const [scrolled, setScrolled] = useState(false);
 
-  // Store state
+  // Store state - use scoped store for project-specific state
   const currentUser = useCanvasStore((state) => state.currentUser);
   const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
   const shapes = useCanvasStore((state) => state.shapes);
-  const undo = useCanvasStore((state) => state.undo);
-  const redo = useCanvasStore((state) => state.redo);
-  const canUndo = useCanvasStore((state) => state.canUndo);
-  const canRedo = useCanvasStore((state) => state.canRedo);
+  // Use project-scoped undo/redo when projectId is available
+  const undo = useScopedCanvasStore(projectId, (state) => state.undo);
+  const redo = useScopedCanvasStore(projectId, (state) => state.redo);
+  const canUndo = useScopedCanvasStore(projectId, (state) => state.canUndo);
+  const canRedo = useScopedCanvasStore(projectId, (state) => state.canRedo);
   const gridState = useCanvasStore((state) => state.gridState);
   const toggleGrid = useCanvasStore((state) => state.toggleGrid);
   const clearSelection = useCanvasStore((state) => state.clearSelection);

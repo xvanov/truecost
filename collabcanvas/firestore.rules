@@ -500,6 +500,59 @@ service cloud.firestore {
           && (!projectExists() || getProject().data.ownerId == request.auth.uid);
       }
 
+      // Config subcollection - project configuration (scope, estimate settings)
+      match /config/{configId} {
+        // Helper function to check if project exists
+        function projectExists() {
+          return exists(/databases/$(database)/documents/projects/$(projectId));
+        }
+        
+        // Helper function to get project document safely
+        function getProject() {
+          return get(/databases/$(database)/documents/projects/$(projectId));
+        }
+        
+        // Helper function to check if user is owner or collaborator
+        function isOwnerOrCollaborator() {
+          return request.auth != null
+            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null));
+        }
+        
+        // Read: Owner or collaborator
+        allow read: if isOwnerOrCollaborator();
+        
+        // Create/Update: Owner or collaborator
+        allow create, update: if isOwnerOrCollaborator()
+          && request.resource.data.updatedBy == request.auth.uid;
+        
+        // Delete: Only owner
+        allow delete: if request.auth != null 
+          && (!projectExists() || getProject().data.ownerId == request.auth.uid);
+      }
+
+      // Chats subcollection - per-user chat history for AI assistant
+      // Structure: projects/{projectId}/chats/{userId}/messages/{messageId}
+      match /chats/{chatUserId} {
+        // Allow user to read their own chat container
+        allow read: if request.auth != null && request.auth.uid == chatUserId;
+        
+        // Messages subcollection
+        match /messages/{messageId} {
+          // Read: Only the chat owner can read their messages
+          allow read: if request.auth != null && request.auth.uid == chatUserId;
+          
+          // Create: Only the chat owner can create messages
+          allow create: if request.auth != null && request.auth.uid == chatUserId;
+          
+          // Update: Only the chat owner can update messages
+          allow update: if request.auth != null && request.auth.uid == chatUserId;
+          
+          // Delete: Only the chat owner can delete messages
+          allow delete: if request.auth != null && request.auth.uid == chatUserId;
+        }
+      }
+
       // Pipeline subcollection - estimate pipeline status and progress tracking
       // Story: 6-2 - Two-phase UI with progress tracking
       match /pipeline/{pipelineDocId} {

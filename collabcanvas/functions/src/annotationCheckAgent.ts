@@ -9,19 +9,32 @@ import { OpenAI } from 'openai';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// Load environment variables
-const envPath = path.resolve(process.cwd(), '.env');
-const envResult = dotenv.config({ path: envPath, override: true });
+// Lazy initialization to avoid timeout during module load
+let _openai: OpenAI | null = null;
+let _apiKey: string | null = null;
 
-const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
-const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-const apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
+function getApiKey(): string {
+  if (_apiKey === null) {
+    const envPath = path.resolve(process.cwd(), '.env');
+    const envResult = dotenv.config({ path: envPath, override: true });
 
-const openai = new OpenAI({ apiKey });
+    const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
+    const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
+    const apiKeyFromProcess = process.env.OPENAI_API_KEY;
+    _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
 
-if (!apiKey) {
-  console.warn('⚠️ OPENAI_API_KEY not found. Annotation check agent will not work.');
+    if (!_apiKey) {
+      console.warn('⚠️ OPENAI_API_KEY not found. Annotation check agent will not work.');
+    }
+  }
+  return _apiKey;
+}
+
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: getApiKey() });
+  }
+  return _openai;
 }
 
 // ===================
@@ -476,7 +489,7 @@ export const annotationCheckAgent = onCall({
       messages.push({ role: 'user', content: 'Please check if my annotations are complete for this project scope.' });
     }
 
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: 'gpt-4o',
       messages,
       temperature: 0.7,

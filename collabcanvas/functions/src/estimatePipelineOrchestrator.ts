@@ -5,15 +5,22 @@
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Firestore } from 'firebase-admin/firestore';
 import { initializeApp, getApps } from 'firebase-admin/app';
 
-// Initialize Firebase Admin if not already initialized
-if (getApps().length === 0) {
-  initializeApp();
-}
+// Lazy initialization to avoid timeout during module load
+let _db: Firestore | null = null;
 
-const db = getFirestore();
+function getDb(): Firestore {
+  if (!_db) {
+    // Initialize Firebase Admin if not already initialized
+    if (getApps().length === 0) {
+      initializeApp();
+    }
+    _db = getFirestore();
+  }
+  return _db;
+}
 
 /**
  * Project context data gathered for the pipeline
@@ -145,6 +152,8 @@ function buildClarificationOutput(
  * Gather project context data for the pipeline
  */
 async function gatherProjectContext(projectId: string): Promise<ProjectContext> {
+  const db = getDb();
+
   // Get project document
   const projectRef = db.collection('projects').doc(projectId);
   const projectDoc = await projectRef.get();
@@ -225,6 +234,8 @@ export const triggerEstimatePipeline = onCall({
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'User must be authenticated');
     }
+
+    const db = getDb();
 
     // Verify the user has access to this project
     const projectRef = db.collection('projects').doc(projectId);
@@ -373,6 +384,7 @@ export const updatePipelineStage = onCall({
       throw new HttpsError('invalid-argument', 'Project ID is required');
     }
 
+    const db = getDb();
     const statusRef = db.collection('projects').doc(projectId).collection('pipeline').doc('status');
     const statusDoc = await statusRef.get();
 
