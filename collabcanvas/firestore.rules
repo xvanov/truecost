@@ -631,6 +631,21 @@ service cloud.firestore {
       }
     }
 
+    // Global Materials Database - unified cache across all users (NFR1-NFR4)
+    // Structure: globalMaterials/{normalizedName_zipCode}
+    // Document ID format: {normalizedName}_{zipCode}
+    match /globalMaterials/{materialId} {
+      // NFR1: Authenticated users can read from globalMaterials
+      allow read: if request.auth != null;
+
+      // NFR2: Authenticated users can write to globalMaterials (for auto-population)
+      // Note: In production, consider restricting writes to Cloud Functions only
+      allow create, update: if request.auth != null;
+
+      // Allow deletion for cache maintenance
+      allow delete: if request.auth != null;
+    }
+
     // Deny all other paths
     match /{document=**} {
       allow read, write: if false;

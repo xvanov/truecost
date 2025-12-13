@@ -4,6 +4,17 @@ import { getFirestore } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import OpenAI from 'openai';
+// Global Materials Database imports
+import {
+  findInGlobalMaterials,
+  validateGlobalMatch,
+  saveToGlobalMaterials,
+  incrementMatchCount,
+  normalizeProductName,
+  DEFAULT_ZIPCODE,
+  GLOBAL_MATCH_CONFIDENCE_THRESHOLD,
+} from './globalMaterials';
+import { GlobalMaterial } from './types/globalMaterials';
 // Using cors: true to match other functions (aiCommand, materialEstimateCommand, sagemakerInvoke)
 // This supports Firebase preview channel URLs which have dynamic hostnames
 
@@ -633,18 +644,169 @@ async function fetchForRetailer(
   return { results: [], normalizer: normalizeUnwrangleProduct };
 }
 
+/**
+ * Build ComparisonResult from GlobalMaterial cache hit
+ * FR34-FR36: Convert GlobalMaterial to ComparisonResult format
+ */
+function buildResultFromGlobalMaterial(
+  material: GlobalMaterial,
+  originalQuery: string,
+  confidence: number,
+  reasoning: string
+): ComparisonResult {
+  const matches: Record<Retailer, MatchResult> = {
+    homeDepot: {
+      selectedProduct: material.retailers.homeDepot ? {
+        id: material.retailers.homeDepot.productId,
+        name: material.name,
+        brand: material.retailers.homeDepot.brand || null,
+        price: material.retailers.homeDepot.price,
+        currency: 'USD',
+        url: material.retailers.homeDepot.productUrl,
+        imageUrl: material.retailers.homeDepot.imageUrl || null,
+        retailer: 'homeDepot' as Retailer,
+      } : null,
+      confidence,
+      reasoning: `[GLOBAL_DB] ${reasoning}`,
+      searchResultsCount: 0, // FR36: No API call made
+    },
+    lowes: {
+      selectedProduct: material.retailers.lowes ? {
+        id: material.retailers.lowes.productId,
+        name: material.name,
+        brand: material.retailers.lowes.brand || null,
+        price: material.retailers.lowes.price,
+        currency: 'USD',
+        url: material.retailers.lowes.productUrl,
+        imageUrl: material.retailers.lowes.imageUrl || null,
+        retailer: 'lowes' as Retailer,
+      } : null,
+      confidence,
+      reasoning: `[GLOBAL_DB] ${reasoning}`,
+      searchResultsCount: 0, // FR36: No API call made
+    },
+    aceHardware: {
+      selectedProduct: null,
+      confidence: 0,
+      reasoning: 'Ace Hardware not available in global materials cache',
+      searchResultsCount: 0,
+    },
+  };
+
+  return {
+    originalProductName: originalQuery,
+    matches,
+    bestPrice: determineBestPrice(matches),
+    comparedAt: Date.now(),
+  };
+}
+
+/**
+ * Auto-populate global materials after successful API scrape
+ * FR23-FR26: Save successful API matches to global materials collection
+ */
+async function autoPopulateGlobalMaterials(
+  db: FirebaseFirestore.Firestore,
+  productName: string,
+  zipCode: string,
+  matches: Record<Retailer, MatchResult>
+): Promise<void> {
+  // Find the best match to use as the canonical name
+  const hdMatch = matches.homeDepot?.selectedProduct;
+  const lowesMatch = matches.lowes?.selectedProduct;
+
+  // Skip if no successful matches
+  if (!hdMatch && !lowesMatch) {
+    console.log(`[PRICE_COMPARISON] No successful matches to auto-populate for "${productName}"`);
+    return;
+  }
+
+  // Use the first available product name as canonical
+  const canonicalName = hdMatch?.name || lowesMatch?.name || productName;
+
+  try {
+    await saveToGlobalMaterials(
+      db,
+      {
+        name: canonicalName,
+        normalizedName: normalizeProductName(canonicalName),
+        description: '', // No description from API results
+        aliases: [productName.toLowerCase().trim()],
+        zipCode,
+        retailers: {
+          homeDepot: hdMatch ? {
+            productUrl: hdMatch.url,
+            productId: hdMatch.id,
+            price: hdMatch.price,
+            priceUpdatedAt: Date.now(),
+            imageUrl: hdMatch.imageUrl || undefined,
+            brand: hdMatch.brand || undefined,
+          } : undefined,
+          lowes: lowesMatch ? {
+            productUrl: lowesMatch.url,
+            productId: lowesMatch.id,
+            price: lowesMatch.price,
+            priceUpdatedAt: Date.now(),
+            imageUrl: lowesMatch.imageUrl || undefined,
+            brand: lowesMatch.brand || undefined,
+          } : undefined,
+        },
+        source: 'scraped',
+      },
+      productName
+    );
+    console.log(`[PRICE_COMPARISON] Auto-populated global materials for "${productName}"`);
+  } catch (err) {
+    console.warn(`[PRICE_COMPARISON] Auto-population failed for "${productName}":`, err);
+    // Non-blocking - don't throw
+  }
+}
+
 async function compareOneProduct(
   productName: string,
   zipCode?: string,
   db?: FirebaseFirestore.Firestore
 ): Promise<ComparisonResult> {
   const matches: Record<Retailer, MatchResult> = {} as Record<Retailer, MatchResult>;
+  const effectiveZipCode = zipCode || DEFAULT_ZIPCODE;
 
-  console.log(`[PRICE_COMPARISON] Comparing product: "${productName}"`);
+  console.log(`[PRICE_COMPARISON] Comparing product: "${productName}" (zipCode: ${effectiveZipCode})`);
 
   // Get Firestore instance if not provided (for cache operations)
   const firestoreDb = db || getFirestore();
 
+  // ========== STEP 1: Check Global Materials Database (FR16) ==========
+  try {
+    const globalCandidates = await findInGlobalMaterials(firestoreDb, productName, effectiveZipCode);
+
+    if (globalCandidates.length > 0) {
+      // ========== STEP 2: LLM Validation (FR11-FR15) ==========
+      const bestCandidate = globalCandidates[0];
+      const { confidence, reasoning } = await validateGlobalMatch(productName, bestCandidate);
+
+      console.log(`[PRICE_COMPARISON] Global DB validation: "${productName}" vs "${bestCandidate.name}" -> confidence: ${confidence.toFixed(2)}`);
+
+      if (confidence >= GLOBAL_MATCH_CONFIDENCE_THRESHOLD) {
+        // ========== STEP 3a: Use Global Cache (FR17-FR19) ==========
+        console.log(`[PRICE_COMPARISON] GLOBAL_DB HIT for "${productName}" (confidence: ${confidence.toFixed(2)})`);
+
+        // FR18: Increment match count (fire-and-forget)
+        incrementMatchCount(firestoreDb, bestCandidate.id);
+
+        // FR17, FR34-FR35: Return cached pricing immediately
+        return buildResultFromGlobalMaterial(bestCandidate, productName, confidence, reasoning);
+      }
+
+      console.log(`[PRICE_COMPARISON] Global DB confidence too low (${confidence.toFixed(2)} < ${GLOBAL_MATCH_CONFIDENCE_THRESHOLD}), falling back to API/per-retailer cache`);
+    } else {
+      console.log(`[PRICE_COMPARISON] No global materials found for "${productName}" in zipCode ${effectiveZipCode}`);
+    }
+  } catch (err) {
+    console.warn(`[PRICE_COMPARISON] Global materials lookup error:`, err);
+    // Continue to per-retailer cache and API fallback
+  }
+
+  // ========== STEP 3b: Per-Retailer Cache + API Fallback (FR20-FR22) ==========
   // Process each retailer with cache-first strategy
   const retailerResults = await Promise.all(
     RETAILERS.map(async (retailer) => {
@@ -724,7 +886,16 @@ async function compareOneProduct(
 
   // Log cache usage summary
   const cacheHits = retailerResults.filter(r => r.fromCache).length;
-  console.log(`[PRICE_COMPARISON] Completed comparison for "${productName}". Cache hits: ${cacheHits}/${RETAILERS.length}. Best price: ${bestPrice ? `$${bestPrice.product.price} at ${bestPrice.retailer}` : 'none'}`);
+  const apiCalls = retailerResults.filter(r => !r.fromCache).length;
+  console.log(`[PRICE_COMPARISON] Completed comparison for "${productName}". Per-retailer cache hits: ${cacheHits}/${RETAILERS.length}. Best price: ${bestPrice ? `$${bestPrice.product.price} at ${bestPrice.retailer}` : 'none'}`);
+
+  // ========== STEP 4: Auto-populate Global Materials (FR23-FR26) ==========
+  // Save successful API results to global materials for future cache hits
+  if (apiCalls > 0) {
+    // Fire-and-forget: don't block on auto-population
+    autoPopulateGlobalMaterials(firestoreDb, productName, effectiveZipCode, matches)
+      .catch(err => console.warn(`[PRICE_COMPARISON] Auto-populate error:`, err));
+  }
 
   return {
     originalProductName: productName,
