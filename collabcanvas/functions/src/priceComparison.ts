@@ -394,6 +394,76 @@ function buildResultFromGlobalMaterial(
 }
 
 /**
+ * Generate aliases and description for a product using LLM
+ * This helps improve future matching by creating multiple search terms
+ */
+async function generateProductMetadata(
+  productName: string,
+  originalQuery: string,
+  brand?: string | null
+): Promise<{ aliases: string[]; description: string }> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.log('[PRICE_COMPARISON] No OPENAI_API_KEY - using basic aliases');
+    return {
+      aliases: [originalQuery.toLowerCase().trim()],
+      description: productName,
+    };
+  }
+
+  const openai = new OpenAI({ apiKey });
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content: `For this construction/home improvement product, generate search aliases and a brief description.
+
+Product Name: "${productName}"
+${brand ? `Brand: ${brand}` : ''}
+Original Search Query: "${originalQuery}"
+
+Generate:
+1. 5-10 common search terms/aliases people might use to find this product (lowercase, no special chars)
+   - Include abbreviations, common misspellings, generic terms, size variations
+   - Include the original query words
+2. A brief 1-sentence description of what this product is and its common use
+
+Return ONLY JSON: { "aliases": ["alias1", "alias2", ...], "description": "brief description" }`
+      }],
+      temperature: 0.3,
+    });
+
+    const content = response.choices[0]?.message?.content || '{}';
+    const cleaned = content.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+
+    const aliases = Array.isArray(parsed.aliases)
+      ? parsed.aliases.map((a: string) => a.toLowerCase().trim()).filter((a: string) => a.length > 1)
+      : [originalQuery.toLowerCase().trim()];
+
+    // Always include the original query
+    if (!aliases.includes(originalQuery.toLowerCase().trim())) {
+      aliases.push(originalQuery.toLowerCase().trim());
+    }
+
+    console.log(`[PRICE_COMPARISON] Generated ${aliases.length} aliases for "${productName}"`);
+
+    return {
+      aliases,
+      description: parsed.description || productName,
+    };
+  } catch (err) {
+    console.warn('[PRICE_COMPARISON] Failed to generate product metadata:', err);
+    return {
+      aliases: [originalQuery.toLowerCase().trim()],
+      description: productName,
+    };
+  }
+}
+
+/**
  * Auto-populate global materials after successful API scrape
  * FR23-FR26: Save successful API matches to global materials collection
  */
@@ -415,15 +485,23 @@ async function autoPopulateGlobalMaterials(
 
   // Use the first available product name as canonical
   const canonicalName = hdMatch?.name || lowesMatch?.name || productName;
+  const brand = hdMatch?.brand || lowesMatch?.brand;
 
   try {
+    // Generate LLM-powered aliases and description for better future matching
+    const { aliases, description } = await generateProductMetadata(
+      canonicalName,
+      productName,
+      brand
+    );
+
     await saveToGlobalMaterials(
       db,
       {
         name: canonicalName,
         normalizedName: normalizeProductName(canonicalName),
-        description: '', // No description from API results
-        aliases: [productName.toLowerCase().trim()],
+        description,
+        aliases,
         zipCode,
         retailers: {
           homeDepot: hdMatch ? {
@@ -447,7 +525,7 @@ async function autoPopulateGlobalMaterials(
       },
       productName
     );
-    console.log(`[PRICE_COMPARISON] Auto-populated global materials for "${productName}"`);
+    console.log(`[PRICE_COMPARISON] Auto-populated global materials for "${productName}" with ${aliases.length} aliases`);
   } catch (err) {
     console.warn(`[PRICE_COMPARISON] Auto-population failed for "${productName}":`, err);
     // Non-blocking - don't throw

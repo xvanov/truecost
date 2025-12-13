@@ -100,9 +100,6 @@ function ProductCell({
         >
           {product.name}
         </a>
-        {product.brand && (
-          <span className="text-xs text-black">{product.brand}</span>
-        )}
       </div>
     </td>
   )
