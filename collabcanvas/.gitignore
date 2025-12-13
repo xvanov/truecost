@@ -26,5 +26,10 @@ dist-ssr
 *.env*
 playwright-report/
 
-# Python virtualenv (recreate locally with: python -m venv \#)
+# Python virtualenvs (recreate locally with: python -m venv venv)
+venv/
 \#/
+inside/
+run/
+
+/docs/yahav-docs/*
