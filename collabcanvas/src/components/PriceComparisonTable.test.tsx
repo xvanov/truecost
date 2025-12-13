@@ -114,12 +114,16 @@ describe('PriceComparisonTable', () => {
     expect(screen.getByText('Product 3')).toBeInTheDocument()
   })
 
-  it('displays brand when available', () => {
+  it('displays product name and price correctly', () => {
     const results = [createMockResult()]
     render(<PriceComparisonTable results={results} />)
 
-    const brands = screen.getAllByText('Test Brand')
-    expect(brands.length).toBeGreaterThan(0)
+    // Verify product name is displayed (appears twice - once for each retailer)
+    const productNames = screen.getAllByText('Test Product')
+    expect(productNames.length).toBe(2) // Home Depot and Lowe's
+    // Verify prices are displayed
+    expect(screen.getByText('$10.99')).toBeInTheDocument()
+    expect(screen.getByText('$9.99')).toBeInTheDocument()
   })
 
   it('applies bg-green-50 to best price cell', () => {

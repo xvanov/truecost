@@ -87,7 +87,8 @@ describe('ScopePage Component', () => {
 
     expect(screen.getByText('Define Your Project Scope')).toBeInTheDocument();
     expect(screen.getByLabelText(/Project Name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Location/i)).toBeInTheDocument();
+    expect(screen.getByText(/Project Address/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/ZIP Code/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Project Type/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Approximate Size/i)).toBeInTheDocument();
   });
@@ -157,8 +158,17 @@ describe('ScopePage Component', () => {
     fireEvent.change(screen.getByLabelText(/Project Name/i), {
       target: { value: 'Test Project', name: 'name' },
     });
-    fireEvent.change(screen.getByLabelText(/Location/i), {
-      target: { value: 'Denver, CO', name: 'location' },
+    fireEvent.change(screen.getByLabelText(/Street Address/i), {
+      target: { value: '123 Main St', name: 'streetAddress' },
+    });
+    fireEvent.change(screen.getByLabelText(/City/i), {
+      target: { value: 'Denver', name: 'city' },
+    });
+    fireEvent.change(screen.getByLabelText(/State/i), {
+      target: { value: 'CO', name: 'state' },
+    });
+    fireEvent.change(screen.getByLabelText(/ZIP Code/i), {
+      target: { value: '80202', name: 'zipCode' },
     });
 
     // Button should still be disabled because no file uploaded
@@ -177,14 +187,14 @@ describe('ScopePage Component', () => {
     expect(screen.getByText(/Drag and drop your files here/i)).toBeInTheDocument();
   });
 
-  it('should have ZIP code override field', () => {
+  it('should have ZIP code field', () => {
     render(
       <BrowserRouter>
         <ScopePage />
       </BrowserRouter>
     );
 
-    expect(screen.getByLabelText(/ZIP Code Override/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/ZIP Code/i)).toBeInTheDocument();
   });
 
   it('should have labor type toggle', () => {
@@ -224,8 +234,17 @@ describe('ScopePage Component', () => {
     fireEvent.change(screen.getByLabelText(/Project Name/i), {
       target: { value: 'Test Project', name: 'name' },
     });
-    fireEvent.change(screen.getByLabelText(/Location/i), {
-      target: { value: 'Denver, CO', name: 'location' },
+    fireEvent.change(screen.getByLabelText(/Street Address/i), {
+      target: { value: '123 Main St', name: 'streetAddress' },
+    });
+    fireEvent.change(screen.getByLabelText(/City/i), {
+      target: { value: 'Denver', name: 'city' },
+    });
+    fireEvent.change(screen.getByLabelText(/State/i), {
+      target: { value: 'CO', name: 'state' },
+    });
+    fireEvent.change(screen.getByLabelText(/ZIP Code/i), {
+      target: { value: '80202', name: 'zipCode' },
     });
 
     // Simulate file upload by clicking the upload zone and triggering a file selection
