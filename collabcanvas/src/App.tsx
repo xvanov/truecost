@@ -8,6 +8,9 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
+import { HowItWorks } from './pages/HowItWorks';
+import { AboutUs } from './pages/AboutUs';
+import { ContactUs } from './pages/ContactUs';
 
 // Authenticated pages
 import { Dashboard } from './pages/Dashboard';
@@ -72,6 +75,9 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/how-it-works" element={<HowItWorks />} />
+        <Route path="/about" element={<AboutUs />} />
+        <Route path="/contact" element={<ContactUs />} />
 
         {/* Authenticated app routes */}
         <Route
