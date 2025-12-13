@@ -43,11 +43,13 @@ export function ScopePage() {
 
   const [formData, setFormData] = useState({
     name: '',
-    location: '',
+    streetAddress: '',
+    city: '',
+    state: '',
+    zipCode: '',
     type: '',
     size: '',
     scopeDefinition: '',
-    zipCode: '',
     useUnionLabor: false,
   });
 
@@ -79,11 +81,13 @@ export function ScopePage() {
         if (project) {
           setFormData({
             name: project.name || '',
-            location: project.location || '',
+            streetAddress: project.address?.streetAddress || '',
+            city: project.address?.city || '',
+            state: project.address?.state || '',
+            zipCode: project.address?.zipCode || '',
             type: project.projectType || '',
             size: project.size || '',
             scopeDefinition: project.description || '',
-            zipCode: project.zipCode || '',
             useUnionLabor: project.useUnionLabor || false,
           });
 
@@ -114,11 +118,13 @@ export function ScopePage() {
           // Merge with existing form data, preferring project data
           setFormData((prev) => ({
             name: prev.name || config.projectName || '',
-            location: prev.location || config.location || '',
+            streetAddress: prev.streetAddress || config.address?.streetAddress || '',
+            city: prev.city || config.address?.city || '',
+            state: prev.state || config.address?.state || '',
+            zipCode: prev.zipCode || config.address?.zipCode || '',
             type: prev.type || config.projectType || '',
             size: prev.size || config.approximateSize || '',
             scopeDefinition: prev.scopeDefinition || config.scopeText || '',
-            zipCode: prev.zipCode || config.zipCodeOverride || '',
             useUnionLabor: prev.useUnionLabor || config.useUnionLabor || false,
           }));
         }
@@ -207,11 +213,15 @@ export function ScopePage() {
       const estimateConfig: EstimateConfig = {
         // Project details from scope page
         projectName: formData.name,
-        location: formData.location,
+        address: {
+          streetAddress: formData.streetAddress,
+          city: formData.city,
+          state: formData.state,
+          zipCode: formData.zipCode,
+        },
         projectType: formData.type,
         approximateSize: formData.size,
         useUnionLabor: formData.useUnionLabor,
-        zipCodeOverride: formData.zipCode,
         scopeText: formData.scopeDefinition,
         // Estimate configuration
         overheadPercent,
@@ -237,10 +247,14 @@ export function ScopePage() {
         await updateProjectScopeAction(projectId, {
           name: formData.name,
           description: formData.scopeDefinition,
-          location: formData.location,
+          address: {
+            streetAddress: formData.streetAddress,
+            city: formData.city,
+            state: formData.state,
+            zipCode: formData.zipCode,
+          },
           projectType: formData.type,
           size: formData.size,
-          zipCode: formData.zipCode,
           useUnionLabor: formData.useUnionLabor,
           estimateConfig,
           planImageUrl: planImageUrl || undefined,
@@ -256,10 +270,14 @@ export function ScopePage() {
           formData.scopeDefinition,
           user.uid,
           {
-            location: formData.location,
+            address: {
+              streetAddress: formData.streetAddress,
+              city: formData.city,
+              state: formData.state,
+              zipCode: formData.zipCode,
+            },
             projectType: formData.type,
             size: formData.size,
-            zipCode: formData.zipCode,
             useUnionLabor: formData.useUnionLabor,
             estimateConfig,
           }
@@ -298,7 +316,12 @@ export function ScopePage() {
     }
   };
 
-  const isFormValid = formData.name.trim() && formData.location.trim() && (uploadedFile || existingPlanUrl);
+  const isFormValid = formData.name.trim() && 
+    formData.streetAddress.trim() && 
+    formData.city.trim() && 
+    formData.state.trim() && 
+    formData.zipCode.trim().length >= 5 &&
+    (uploadedFile || existingPlanUrl);
 
   // Get actual completion state from hook
   const { completedSteps } = useStepCompletion(projectId);
@@ -352,18 +375,63 @@ export function ScopePage() {
                   required
                 />
 
-                {/* Location */}
-                <Input
-                  label="Location *"
-                  id="location"
-                  name="location"
-                  type="text"
-                  placeholder="e.g., San Francisco, CA or ZIP code 94102"
-                  value={formData.location}
-                  onChange={handleInputChange}
-                  required
-                  helperText="City, state, or ZIP code for location-specific pricing"
-                />
+                {/* Project Address */}
+                <div className="space-y-4">
+                  <label className="block font-body text-body font-medium text-truecost-text-primary">
+                    Project Address *
+                  </label>
+                  <Input
+                    label="Street Address"
+                    id="streetAddress"
+                    name="streetAddress"
+                    type="text"
+                    placeholder="e.g., 123 Main Street"
+                    value={formData.streetAddress}
+                    onChange={handleInputChange}
+                    required
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                    <div className="md:col-span-3">
+                      <Input
+                        label="City"
+                        id="city"
+                        name="city"
+                        type="text"
+                        placeholder="e.g., San Francisco"
+                        value={formData.city}
+                        onChange={handleInputChange}
+                        required
+                      />
+                    </div>
+                    <div className="md:col-span-1">
+                      <Input
+                        label="State"
+                        id="state"
+                        name="state"
+                        type="text"
+                        placeholder="CA"
+                        value={formData.state}
+                        onChange={handleInputChange}
+                        required
+                        maxLength={2}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Input
+                        label="ZIP Code"
+                        id="zipCode"
+                        name="zipCode"
+                        type="text"
+                        placeholder="94102"
+                        value={formData.zipCode}
+                        onChange={handleInputChange}
+                        required
+                        maxLength={10}
+                        helperText="Required for location-specific pricing"
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Project Type */}
                 <Select
@@ -423,36 +491,23 @@ export function ScopePage() {
                   helperText="Provide any additional details that will help generate an accurate estimate"
                 />
 
-                {/* ZIP Code Override + Labor Type */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="ZIP Code Override"
-                    id="zipCode"
-                    name="zipCode"
-                    type="text"
-                    placeholder="e.g., 94102"
-                    value={formData.zipCode}
-                    onChange={handleInputChange}
-                    helperText="Override the location-based ZIP code"
-                  />
-
-                  <div className="space-y-2">
-                    <label className="block font-body text-body font-medium text-truecost-text-primary">
-                      Labor Type
-                    </label>
-                    <label className="flex items-center gap-3 glass-panel p-3 cursor-pointer hover:bg-truecost-glass-bg/50 transition-colors">
-                      <input
-                        type="checkbox"
-                        name="useUnionLabor"
-                        checked={formData.useUnionLabor}
-                        onChange={handleInputChange}
-                        className="w-5 h-5 accent-truecost-cyan"
-                      />
-                      <span className="font-body text-body text-truecost-text-primary">
-                        Use Union Labor Rates
-                      </span>
-                    </label>
-                  </div>
+                {/* Labor Type */}
+                <div className="space-y-2">
+                  <label className="block font-body text-body font-medium text-truecost-text-primary">
+                    Labor Type
+                  </label>
+                  <label className="flex items-center gap-3 glass-panel p-3 cursor-pointer hover:bg-truecost-glass-bg/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      name="useUnionLabor"
+                      checked={formData.useUnionLabor}
+                      onChange={handleInputChange}
+                      className="w-5 h-5 accent-truecost-cyan"
+                    />
+                    <span className="font-body text-body text-truecost-text-primary">
+                      Use Union Labor Rates
+                    </span>
+                  </label>
                 </div>
 
                 {/* Estimate Configuration */}

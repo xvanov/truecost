@@ -373,12 +373,27 @@ exports.estimationPipeline = (0, https_1.onCall)({
         if (clarificationData.deadline) {
             projectBrief.timeline.deadline = clarificationData.deadline;
         }
-        // Build CAD data
+        // Build CAD data - using schema-valid enum values
+        // Schema requires: fileType: "dwg" | "dxf" | "pdf" | "png" | "jpg"
+        // Schema requires: extractionMethod: "ezdxf" | "vision"
+        const getFileType = (url) => {
+            if (!url)
+                return 'png'; // Default to png
+            const lowerUrl = url.toLowerCase();
+            if (lowerUrl.includes('.dwg'))
+                return 'dwg';
+            if (lowerUrl.includes('.dxf'))
+                return 'dxf';
+            if (lowerUrl.includes('.pdf'))
+                return 'pdf';
+            if (lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg'))
+                return 'jpg';
+            return 'png'; // Default to png
+        };
         const cadData = {
-            fileUrl: planImageUrl || '',
-            fileType: (planImageUrl === null || planImageUrl === void 0 ? void 0 : planImageUrl.toLowerCase().includes('.png')) ? 'png' :
-                (planImageUrl === null || planImageUrl === void 0 ? void 0 : planImageUrl.toLowerCase().includes('.jpg')) ? 'jpg' : 'jpeg',
-            extractionMethod: 'annotation',
+            fileUrl: planImageUrl || 'placeholder://no-image-uploaded',
+            fileType: getFileType(planImageUrl),
+            extractionMethod: 'vision',
             extractionConfidence: quantities.hasScale ? 0.95 : 0.6,
             spaceModel,
             spatialRelationships: {
@@ -411,7 +426,7 @@ exports.estimationPipeline = (0, https_1.onCall)({
             csiScope,
             cadData,
             conversation: {
-                inputMethod: 'annotation',
+                inputMethod: 'mixed',
                 messageCount: 0,
                 clarificationQuestions: [],
                 confidenceScore: quantities.hasScale ? 0.95 : 0.5,

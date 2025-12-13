@@ -53,11 +53,8 @@ vi.mock('../../services/bomService', () => ({
   }),
 }));
 
-vi.mock('../../services/pipelineService', () => ({
-  subscribeToPipelineProgress: vi.fn(() => () => {}),
-  triggerEstimatePipeline: vi.fn().mockResolvedValue({ success: true }),
-  checkPipelineComplete: vi.fn().mockResolvedValue(true),
-  INITIAL_PROGRESS: {
+vi.mock('../../services/pipelineService', () => {
+  const INITIAL_PROGRESS = {
     status: 'idle',
     currentStage: null,
     stageName: '',
@@ -65,12 +62,19 @@ vi.mock('../../services/pipelineService', () => ({
     progressPercent: 0,
     startedAt: null,
     completedAt: null,
-  },
-  PIPELINE_STAGES: [
-    { id: 'clarification', name: 'Understanding requirements', weight: 10 },
-    { id: 'final', name: 'Finalizing estimate', weight: 15 },
-  ],
-}));
+  };
+  return {
+    subscribeToPipelineProgress: vi.fn(() => () => {}),
+    triggerEstimatePipeline: vi.fn().mockResolvedValue({ success: true, estimateId: 'est-test-123' }),
+    getPipelineStatus: vi.fn().mockResolvedValue(INITIAL_PROGRESS),
+    checkPipelineComplete: vi.fn().mockResolvedValue(true),
+    INITIAL_PROGRESS,
+    PIPELINE_STAGES: [
+      { id: 'cad_analysis', name: 'Analyzing blueprints', weight: 10 },
+      { id: 'final', name: 'Finalizing estimate', weight: 15 },
+    ],
+  };
+});
 
 vi.mock('../../services/pdfService', () => ({
   generateContractorPDF: vi.fn().mockResolvedValue({ success: true, pdfUrl: 'http://example.com/contractor.pdf' }),

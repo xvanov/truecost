@@ -44,9 +44,19 @@ export function MoneyView({ mode = 'full' }: MoneyViewProps) {
   const [fetchingPrices, setFetchingPrices] = useState(false);
   const [priceStats, setPriceStats] = useState<PriceFetchStats | null>(null);
 
-  // Load BOM on mount
+  // Load BOM on mount - BUT skip if already loaded in store (e.g., from deep pipeline)
   useEffect(() => {
-    if (!projectId) return;
+    // If BOM is already in store (e.g., from EstimatePage deep pipeline), use it
+    if (billOfMaterials) {
+      console.log('[MoneyView] BOM already in store, skipping fetch');
+      setLoading(false);
+      return;
+    }
+
+    if (!projectId) {
+      setLoading(false);
+      return;
+    }
 
     const loadBOM = async () => {
       try {
@@ -64,7 +74,7 @@ export function MoneyView({ mode = 'full' }: MoneyViewProps) {
     };
 
     loadBOM();
-  }, [projectId, setBillOfMaterials]);
+  }, [projectId, setBillOfMaterials, billOfMaterials]);
 
   // Load view preference from localStorage
   useEffect(() => {

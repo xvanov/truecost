@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { firestore } from '../../services/firebase';
-import { PIPELINE_STAGES, triggerEstimatePipeline } from '../../services/pipelineService';
+import { PIPELINE_STAGES, triggerEstimatePipeline, buildFallbackClarificationOutput } from '../../services/pipelineService';
 import { useAuth } from '../../hooks/useAuth';
 
 interface PipelineDebugPanelProps {
@@ -250,8 +250,8 @@ export function PipelineDebugPanel({ projectId, isVisible, onClose }: PipelineDe
 
     try {
       console.log('[DEBUG] Calling triggerEstimatePipeline for project:', projectId);
-
-      const result = await triggerEstimatePipeline(projectId, user.uid);
+      const fallbackPayload = buildFallbackClarificationOutput({ projectId });
+      const result = await triggerEstimatePipeline(projectId, user.uid, fallbackPayload);
 
       if (!result.success) {
         throw new Error(result.error || 'Pipeline failed to start');

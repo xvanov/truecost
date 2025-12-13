@@ -490,12 +490,23 @@ export const estimationPipeline = onCall({
       projectBrief.timeline.deadline = clarificationData.deadline as string;
     }
 
-    // Build CAD data
+    // Build CAD data - using schema-valid enum values
+    // Schema requires: fileType: "dwg" | "dxf" | "pdf" | "png" | "jpg"
+    // Schema requires: extractionMethod: "ezdxf" | "vision"
+    const getFileType = (url: string | null): "dwg" | "dxf" | "pdf" | "png" | "jpg" => {
+      if (!url) return 'png'; // Default to png
+      const lowerUrl = url.toLowerCase();
+      if (lowerUrl.includes('.dwg')) return 'dwg';
+      if (lowerUrl.includes('.dxf')) return 'dxf';
+      if (lowerUrl.includes('.pdf')) return 'pdf';
+      if (lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg')) return 'jpg';
+      return 'png'; // Default to png
+    };
+
     const cadData = {
-      fileUrl: planImageUrl || '',
-      fileType: planImageUrl?.toLowerCase().includes('.png') ? 'png' :
-                planImageUrl?.toLowerCase().includes('.jpg') ? 'jpg' : 'jpeg',
-      extractionMethod: 'annotation', // PRIMARY method is now annotation
+      fileUrl: planImageUrl || 'placeholder://no-image-uploaded',
+      fileType: getFileType(planImageUrl),
+      extractionMethod: 'vision' as const, // Schema valid: "ezdxf" | "vision"
       extractionConfidence: quantities.hasScale ? 0.95 : 0.6, // High confidence with scale
       spaceModel,
       spatialRelationships: {
@@ -531,7 +542,7 @@ export const estimationPipeline = onCall({
       csiScope,
       cadData,
       conversation: {
-        inputMethod: 'annotation',
+        inputMethod: 'mixed' as const, // Schema valid: "text" | "voice" | "mixed"
         messageCount: 0,
         clarificationQuestions: [],
         confidenceScore: quantities.hasScale ? 0.95 : 0.5,

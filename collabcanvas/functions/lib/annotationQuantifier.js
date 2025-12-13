@@ -211,7 +211,7 @@ function computeQuantitiesFromAnnotations(annotations) {
                 unit: result.hasScale ? unit : 'pixels',
                 layerName: layer.name,
                 confidence: 1.0,
-                source: 'annotation',
+                source: 'cad_extraction',
             };
             result.walls.push(wall);
             result.totalWallLength += lengthReal;
@@ -235,7 +235,7 @@ function computeQuantitiesFromAnnotations(annotations) {
                 unit: result.hasScale ? unit : 'pixels',
                 layerName: layer.name,
                 confidence: 1.0,
-                source: 'annotation',
+                source: 'cad_extraction',
             };
             result.rooms.push(room);
             result.totalFloorArea += areaReal;
@@ -261,7 +261,7 @@ function computeQuantitiesFromAnnotations(annotations) {
                     unit: result.hasScale ? unit : 'pixels',
                     layerName: layer.name,
                     confidence: 1.0,
-                    source: 'annotation',
+                    source: 'cad_extraction',
                 };
                 result.doors.push(door);
                 result.totalDoorCount++;
@@ -277,7 +277,7 @@ function computeQuantitiesFromAnnotations(annotations) {
                     unit: result.hasScale ? unit : 'pixels',
                     layerName: layer.name,
                     confidence: 1.0,
-                    source: 'annotation',
+                    source: 'cad_extraction',
                 };
                 result.windows.push(window);
                 result.totalWindowCount++;
@@ -295,7 +295,7 @@ function computeQuantitiesFromAnnotations(annotations) {
                     unit: result.hasScale ? unit : 'pixels',
                     layerName: layer.name,
                     confidence: 1.0,
-                    source: 'annotation',
+                    source: 'cad_extraction',
                 };
                 result.fixtures.push(fixture);
             }
@@ -345,7 +345,7 @@ function buildSpaceModelFromQuantities(quantities) {
         needsVerification: false,
     }));
     // Build walls array
-    const walls = quantities.walls.map((wall, index) => ({
+    const walls = quantities.walls.map((wall, _index) => ({
         id: wall.id,
         length: quantities.scaleUnit === 'feet' ? wall.lengthReal :
             quantities.scaleUnit === 'meters' ? wall.lengthReal * 3.281 : // convert m to ft
@@ -408,7 +408,7 @@ function buildCSIItemsFromQuantities(quantities) {
             unitDescription: 'linear feet of wall',
             specifications: '2x4 studs @ 16" OC',
             confidence: 1.0,
-            source: 'annotation',
+            source: 'cad_extraction',
             notes: `Calculated from ${quantities.walls.length} annotated wall segments`,
         });
     }
@@ -421,7 +421,7 @@ function buildCSIItemsFromQuantities(quantities) {
             unit: 'each',
             specifications: 'Standard interior door with frame and hardware',
             confidence: 1.0,
-            source: 'annotation',
+            source: 'cad_extraction',
             notes: 'Count from annotated door locations',
         });
     }
@@ -434,7 +434,7 @@ function buildCSIItemsFromQuantities(quantities) {
             unit: 'each',
             specifications: 'Standard window with frame',
             confidence: 1.0,
-            source: 'annotation',
+            source: 'cad_extraction',
             notes: 'Count from annotated window locations',
         });
     }
@@ -450,7 +450,7 @@ function buildCSIItemsFromQuantities(quantities) {
             unitDescription: 'square feet of drywall',
             specifications: '1/2" gypsum board',
             confidence: 1.0,
-            source: 'annotation',
+            source: 'cad_extraction',
             notes: 'Calculated from wall lengths x 8ft height x 2 sides',
         });
     }
@@ -464,7 +464,7 @@ function buildCSIItemsFromQuantities(quantities) {
             unitDescription: 'square feet of flooring',
             specifications: 'To be specified',
             confidence: 1.0,
-            source: 'annotation',
+            source: 'cad_extraction',
             notes: `Calculated from ${quantities.rooms.length} annotated room areas`,
         });
         // Paint for ceiling
@@ -475,7 +475,7 @@ function buildCSIItemsFromQuantities(quantities) {
             unit: 'square_feet',
             specifications: 'Ceiling paint, 2 coats',
             confidence: 1.0,
-            source: 'annotation',
+            source: 'cad_extraction',
             notes: 'Ceiling area equals floor area',
         });
     }

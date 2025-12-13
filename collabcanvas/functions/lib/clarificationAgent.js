@@ -59,7 +59,8 @@ Format your response as JSON:
 When clarification is complete, set clarificationComplete to true and provide a completionReason.`;
 exports.clarificationAgent = (0, https_1.onCall)({
     cors: true,
-    secrets: ['OPENAI_API_KEY'],
+    // Note: secrets only used in production - emulator uses .env
+    secrets: process.env.FUNCTIONS_EMULATOR === 'true' ? [] : ['OPENAI_API_KEY'],
     timeoutSeconds: 60,
 }, async (request) => {
     var _a, _b;

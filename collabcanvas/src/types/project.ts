@@ -18,15 +18,22 @@ export interface Collaborator {
   role: CollaboratorRole;
 }
 
+// Structured address for location-specific pricing
+export interface ProjectAddress {
+  streetAddress: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
 // Estimate configuration stored with project
 export interface EstimateConfig {
   // Project details from Define Your Project Scope page
   projectName?: string;
-  location?: string; // Note: location and address are the same thing
+  address?: ProjectAddress; // Structured address for accurate location pricing
   projectType?: string;
   approximateSize?: string;
   useUnionLabor?: boolean;
-  zipCodeOverride?: string;
   
   // Scope definition (user-provided description)
   scopeText?: string;
@@ -55,10 +62,9 @@ export interface Project {
   estimateTotal?: number; // Estimated total from BOM (for profit/loss calculation)
 
   // Scope fields
-  location?: string;
+  address?: ProjectAddress; // Structured address
   projectType?: string;
   size?: string;
-  zipCode?: string;
   useUnionLabor?: boolean;
   estimateConfig?: EstimateConfig;
 
