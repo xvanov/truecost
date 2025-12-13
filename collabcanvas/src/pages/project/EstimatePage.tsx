@@ -24,11 +24,13 @@ import { TimeView } from "../../components/time/TimeView";
 import { PriceComparisonPanel } from "../../components/estimate/PriceComparisonPanel";
 import { PipelineDebugPanel } from "../../components/estimate/PipelineDebugPanel";
 import { useCanvasStore } from "../../store/canvasStore";
+import { useProjectStore } from "../../store/projectStore";
 import { useAuth } from "../../hooks/useAuth";
 import { useStepCompletion } from "../../hooks/useStepCompletion";
 import { getBOM } from "../../services/bomService";
 import { loadScopeConfig } from "../../services/scopeConfigService";
-import { functions } from "../../services/firebase";
+import { functions, firestore } from "../../services/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { getProjectCanvasStoreApi } from "../../store/projectCanvasStore";
 import {
   subscribeToPipelineProgress,
@@ -40,10 +42,9 @@ import {
   getPipelineStatus,
 } from "../../services/pipelineService";
 import {
-  generateContractorPDF,
-  generateClientPDF,
-  openPDFInNewTab,
-} from "../../services/pdfService";
+  exportEstimateAsPDF,
+  type BOMExportView,
+} from "../../services/exportService";
 import type { EstimateConfig } from "./ScopePage";
 import type {
   CSIDivision,
@@ -51,6 +52,7 @@ import type {
   AnnotatedShape,
   AnnotatedLayer,
 } from "../../types/estimation";
+import type { BillOfMaterials } from "../../types/material";
 
 type EstimatePhase = "generate" | "results";
 type ResultTab =
@@ -75,6 +77,219 @@ const RESULT_TABS: { id: ResultTab; label: string }[] = [
 
 const getEstimateStorageKey = (projectId: string) =>
   `truecost:lastEstimateId:${projectId}`;
+
+// Map frontend project types to schema-valid values
+const mapProjectType = (
+  frontendType: string | undefined,
+  projectName?: string
+): string => {
+  // First, try to infer from projectName
+  if (projectName) {
+    const nameLower = projectName.toLowerCase();
+    console.log(
+      "[mapProjectType] Checking projectName:",
+      projectName,
+      "nameLower:",
+      nameLower
+    );
+    if (nameLower.includes("bathroom")) {
+      console.log("[mapProjectType] Matched bathroom -> bathroom_remodel");
+      return "bathroom_remodel";
+    }
+    if (nameLower.includes("kitchen")) return "kitchen_remodel";
+    if (nameLower.includes("bedroom")) return "bedroom_remodel";
+    if (nameLower.includes("living")) return "living_room_remodel";
+    if (nameLower.includes("basement")) return "basement_finish";
+    if (nameLower.includes("attic")) return "attic_conversion";
+    if (nameLower.includes("deck") || nameLower.includes("patio"))
+      return "deck_patio";
+    if (nameLower.includes("garage")) return "garage";
+    if (nameLower.includes("addition")) return "addition";
+  } else {
+    console.log("[mapProjectType] No projectName provided, using fallback");
+  }
+
+  // Fallback to generic category mapping
+  const typeMap: Record<string, string> = {
+    "residential-new": "addition",
+    "residential-addition": "addition",
+    "residential-remodel": "whole_house_remodel",
+    "commercial-new": "other",
+    "commercial-renovation": "other",
+    other: "other",
+  };
+  console.log(
+    "[mapProjectType] Fallback result:",
+    typeMap[frontendType || ""] || "other"
+  );
+  return typeMap[frontendType || ""] || "other";
+};
+
+/**
+ * Transform deep pipeline estimate data to BillOfMaterials format
+ * This allows the results view to display data from the estimates collection
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const transformEstimateToBOM = (
+  estimateData: any,
+  estimateId: string
+): BillOfMaterials | null => {
+  const finalOutput = estimateData.finalOutput;
+  const costOutput = estimateData.costOutput;
+  const scopeOutput = estimateData.scopeOutput;
+
+  console.log("[transformEstimateToBOM] Raw data:", {
+    hasFinalOutput: !!finalOutput,
+    hasCostOutput: !!costOutput,
+    hasScopeOutput: !!scopeOutput,
+    costOutputKeys: costOutput ? Object.keys(costOutput) : [],
+    hasDivisions: !!costOutput?.divisions,
+    divisionsCount: costOutput?.divisions?.length || 0,
+  });
+
+  // Need at least some output data
+  if (!finalOutput && !costOutput && !scopeOutput) {
+    console.warn("[transformEstimateToBOM] No output data found in estimate");
+    return null;
+  }
+
+  // Extract materials from costOutput.divisions (the correct backend path!)
+  const materials: MaterialSpec[] = [];
+
+  // costOutput.divisions contains the detailed line items from Cost Agent
+  const divisions = costOutput?.divisions || [];
+
+  divisions.forEach((division: Record<string, unknown>) => {
+    const divisionName = (division.divisionName as string) || "General";
+    const lineItems = (division.lineItems as Record<string, unknown>[]) || [];
+
+    lineItems.forEach((item: Record<string, unknown>, index: number) => {
+      // Backend returns cost ranges as {low, medium, high} objects
+      // We use the medium (P50) value for display
+      const materialCostRange =
+        (item.materialCost as {
+          low?: number;
+          medium?: number;
+          high?: number;
+        }) || {};
+      const totalCostRange =
+        (item.totalCost as { low?: number; medium?: number; high?: number }) ||
+        {};
+      const unitMaterialCostRange =
+        (item.unitMaterialCost as {
+          low?: number;
+          medium?: number;
+          high?: number;
+        }) || {};
+
+      const unitCost = unitMaterialCostRange.medium || 0;
+      const totalCost = totalCostRange.medium || 0;
+
+      materials.push({
+        id:
+          (item.lineItemId as string) ||
+          `mat-${division.divisionCode}-${index}`,
+        name: (item.description as string) || `Item ${index + 1}`,
+        category: divisionName,
+        quantity: (item.quantity as number) || 1,
+        unit: (item.unit as string) || "ea",
+        unitCost: unitCost,
+        totalCost: totalCost,
+        materialCost: materialCostRange.medium || 0,
+        source: "deep-pipeline",
+        trade: item.primaryTrade as string,
+        laborHours: item.laborHours as number,
+        laborCost: (item.laborCost as { medium?: number })?.medium || 0,
+      });
+    });
+  });
+
+  console.log(
+    "[transformEstimateToBOM] Extracted materials:",
+    materials.length
+  );
+
+  // Extract cost totals from costOutput.subtotals (the correct backend path!)
+  const subtotals = costOutput?.subtotals || {};
+  const materialCost =
+    subtotals.materials?.medium || finalOutput?.costBreakdown?.materials || 0;
+  const laborCost =
+    subtotals.labor?.medium || finalOutput?.costBreakdown?.labor || 0;
+  const equipmentCost =
+    subtotals.equipment?.medium || finalOutput?.costBreakdown?.equipment || 0;
+  const totalLaborHours = subtotals.totalLaborHours || 0;
+
+  // Get total from costOutput.total (P50/P80/P90 ranges)
+  const totalCostRange = costOutput?.total || {};
+  const totalLow =
+    totalCostRange.low || finalOutput?.executiveSummary?.totalCost * 0.9 || 0;
+  const totalMedium =
+    totalCostRange.medium || finalOutput?.executiveSummary?.totalCost || 0;
+  const totalHigh = totalCostRange.high || totalMedium * 1.2 || 0;
+
+  const now = Date.now();
+
+  return {
+    id: estimateId,
+    projectName:
+      estimateData.projectName ||
+      finalOutput?.executiveSummary?.projectType ||
+      "Deep Pipeline Estimate",
+    calculations: [],
+    totalMaterials: materials,
+    createdAt: estimateData.createdAt || now,
+    createdBy: estimateData.userId || "deep-pipeline",
+    updatedAt: estimateData.updatedAt || now,
+    notes: `Generated by Deep Agent Pipeline. Cost range: $${totalLow.toLocaleString()} - $${totalHigh.toLocaleString()}`,
+    margin: {
+      materialCost,
+      laborCost,
+      subtotal: materialCost + laborCost + equipmentCost,
+      marginPercentage: costOutput?.adjustments?.profitPercentage || 10,
+      marginDollars:
+        costOutput?.adjustments?.profit?.medium ||
+        (materialCost + laborCost) * 0.1,
+      marginTimeSlack: finalOutput?.timeline?.totalDays || 30,
+      total: totalMedium,
+      calculatedAt: now,
+    },
+    // Store the original deep pipeline data for reference
+    deepPipelineData: {
+      estimateId,
+      finalOutput,
+      costOutput,
+      scopeOutput,
+      riskOutput: estimateData.riskOutput,
+      timelineOutput: estimateData.timelineOutput,
+      locationOutput: estimateData.locationOutput,
+      // Store labor summary for LaborView
+      laborAnalysis: {
+        totalHours: totalLaborHours,
+        byTrade: divisions.map((d: Record<string, unknown>) => ({
+          trade: d.divisionName,
+          hours: d.laborHoursSubtotal || 0,
+          cost: (d.laborSubtotal as { medium?: number })?.medium || 0,
+        })),
+      },
+    },
+  } as BillOfMaterials & { deepPipelineData: unknown };
+};
+
+// Type for MaterialSpec used in transform (extended for deep pipeline data)
+interface MaterialSpec {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  unitCost: number;
+  totalCost: number;
+  materialCost: number;
+  source: string;
+  trade?: string;
+  laborHours?: number;
+  laborCost?: number;
+}
 
 export function EstimatePage() {
   console.log("Functions URL:", import.meta.env.VITE_FIREBASE_FUNCTIONS_URL);
@@ -171,6 +386,136 @@ export function EstimatePage() {
   const [expandedDivisions, setExpandedDivisions] = useState<Set<string>>(
     new Set()
   );
+
+  // Unified summary data - pulls from clarificationPayload (active generation) or
+  // billOfMaterials.deepPipelineData (loaded from previously generated estimate)
+  const summaryData = useMemo(() => {
+    // First priority: clarificationPayload from active generation flow
+    if (clarificationPayload) {
+      return {
+        source: "clarificationPayload" as const,
+        csiScope: clarificationPayload.csiScope,
+        projectBrief: clarificationPayload.projectBrief,
+        flags: clarificationPayload.flags,
+        // Include raw payload for JSON viewer
+        rawPayload: clarificationPayload,
+      };
+    }
+
+    // Second priority: deep pipeline data from loaded BOM
+    const deepData = (
+      billOfMaterials as BillOfMaterials & {
+        deepPipelineData?: {
+          finalOutput?: Record<string, unknown>;
+          costOutput?: Record<string, unknown>;
+          scopeOutput?: Record<string, unknown>;
+          riskOutput?: Record<string, unknown>;
+          timelineOutput?: Record<string, unknown>;
+          locationOutput?: Record<string, unknown>;
+          laborAnalysis?: {
+            totalHours: number;
+            byTrade: Array<{ trade: string; hours: number; cost: number }>;
+          };
+        };
+      }
+    )?.deepPipelineData;
+
+    if (
+      deepData?.finalOutput ||
+      deepData?.costOutput ||
+      deepData?.scopeOutput
+    ) {
+      const execSummary = deepData.finalOutput?.executiveSummary as
+        | Record<string, unknown>
+        | undefined;
+      const costBreakdown = deepData.finalOutput?.costBreakdown as
+        | Record<string, unknown>
+        | undefined;
+      const timeline = deepData.finalOutput?.timeline as
+        | Record<string, unknown>
+        | undefined;
+      const riskSummary = deepData.finalOutput?.riskSummary as
+        | Record<string, unknown>
+        | undefined;
+      const scopeDivisions = (deepData.scopeOutput as Record<string, unknown>)
+        ?.divisions as Array<Record<string, unknown>> | undefined;
+      const costDivisions = (deepData.costOutput as Record<string, unknown>)
+        ?.divisions as Array<Record<string, unknown>> | undefined;
+
+      // Transform scope divisions to CSI format for display
+      const csiScope: Record<string, CSIDivision> = {};
+      const divisionsToUse = costDivisions || scopeDivisions || [];
+      divisionsToUse.forEach((div, index) => {
+        const code =
+          (div.divisionCode as string) || String(index).padStart(2, "0");
+        const lineItems =
+          (div.lineItems as Array<Record<string, unknown>>) || [];
+        csiScope[code] = {
+          code,
+          name: (div.divisionName as string) || "Unknown Division",
+          status: "included",
+          description: (div.description as string) || "",
+          items: lineItems.map((item, itemIndex) => ({
+            id: (item.lineItemId as string) || `${code}-${itemIndex}`,
+            item:
+              (item.description as string) ||
+              (item.item as string) ||
+              `Item ${itemIndex + 1}`,
+            quantity: (item.quantity as number) || 0,
+            unit: ((item.unit as string) ||
+              "ea") as import("../../types/estimation").CSIUnit,
+            confidence: (item.confidence as number) || 0.8,
+            source:
+              "cad_extraction" as import("../../types/estimation").LineItemSource,
+          })),
+        };
+      });
+
+      return {
+        source: "deepPipelineData" as const,
+        csiScope,
+        projectBrief: {
+          projectType: execSummary?.projectType || "Unknown",
+          scopeSummary: {
+            totalCost: execSummary?.totalCost || 0,
+            costPerSqft: execSummary?.costPerSqft || 0,
+            duration: execSummary?.duration || execSummary?.durationWeeks || 0,
+            startDate: execSummary?.startDate || timeline?.startDate,
+            endDate: execSummary?.endDate || timeline?.endDate,
+          },
+          location: execSummary?.location,
+        },
+        costBreakdown: {
+          materials: costBreakdown?.materials || 0,
+          labor: costBreakdown?.labor || 0,
+          equipment: costBreakdown?.equipment || 0,
+          overhead: costBreakdown?.overhead || 0,
+          profit: costBreakdown?.profit || 0,
+          contingency: costBreakdown?.contingency || 0,
+          total:
+            costBreakdown?.totalWithContingency || execSummary?.totalCost || 0,
+        },
+        timeline: {
+          totalDays: timeline?.totalDays || 0,
+          totalWeeks: timeline?.totalWeeks || 0,
+          startDate: timeline?.startDate,
+          endDate: timeline?.endDate,
+          milestones: timeline?.milestones || [],
+        },
+        riskSummary: {
+          riskLevel: riskSummary?.riskLevel || "medium",
+          topRisks: riskSummary?.topRisks || [],
+          contingencyRationale: riskSummary?.contingencyRationale,
+        },
+        laborAnalysis: deepData.laborAnalysis,
+        flags: { lowConfidenceItems: [] },
+        // Include raw deep pipeline data for JSON viewer
+        rawPayload: deepData,
+      };
+    }
+
+    return null;
+  }, [clarificationPayload, billOfMaterials]);
 
   // Toggle CSI division expansion
   const toggleDivision = useCallback((divKey: string) => {
@@ -287,18 +632,79 @@ export function EstimatePage() {
 
         // Check if pipeline completed
         if (newProgress.status === "complete") {
-          console.log("[FLOW][Estimate] Pipeline complete. Fetching BOM.");
+          console.log(
+            "[FLOW][Estimate] Pipeline complete. Fetching results from estimates collection."
+          );
           setIsGenerating(false);
-          // Load the generated BOM
-          getBOM(projectId).then((bom) => {
-            if (bom) {
-              console.log(
-                "[FLOW][Estimate] BOM loaded after completion. Switching to results."
-              );
-              setBillOfMaterials(bom);
-              setPhase("results");
-            }
-          });
+
+          // First try to load from deep pipeline estimates collection
+          if (estimateId) {
+            const estimateRef = doc(firestore, "estimates", estimateId);
+            getDoc(estimateRef)
+              .then((estimateSnap) => {
+                if (estimateSnap.exists()) {
+                  const estimateData = estimateSnap.data();
+                  console.log(
+                    "[FLOW][Estimate] Estimate data loaded from estimates collection:",
+                    {
+                      hasFinaOutput: !!estimateData.finalOutput,
+                      hasCostOutput: !!estimateData.costOutput,
+                      hasScopeOutput: !!estimateData.scopeOutput,
+                    }
+                  );
+
+                  // Transform deep pipeline output to BOM format
+                  const bom = transformEstimateToBOM(estimateData, estimateId);
+                  if (bom) {
+                    console.log(
+                      "[FLOW][Estimate] Transformed estimate to BOM. Switching to results."
+                    );
+                    setBillOfMaterials(bom);
+                    setPhase("results");
+                    return;
+                  }
+                }
+
+                // Fallback: try legacy BOM path
+                console.log(
+                  "[FLOW][Estimate] No deep pipeline data, trying legacy BOM path."
+                );
+                getBOM(projectId).then((legacyBom) => {
+                  if (legacyBom) {
+                    console.log(
+                      "[FLOW][Estimate] Legacy BOM loaded. Switching to results."
+                    );
+                    setBillOfMaterials(legacyBom);
+                    setPhase("results");
+                  } else {
+                    console.warn(
+                      "[FLOW][Estimate] No BOM data found in either location."
+                    );
+                  }
+                });
+              })
+              .catch((err) => {
+                console.error("[FLOW][Estimate] Error fetching estimate:", err);
+                // Fallback to legacy BOM
+                getBOM(projectId).then((legacyBom) => {
+                  if (legacyBom) {
+                    setBillOfMaterials(legacyBom);
+                    setPhase("results");
+                  }
+                });
+              });
+          } else {
+            // No estimateId, try legacy path
+            getBOM(projectId).then((bom) => {
+              if (bom) {
+                console.log(
+                  "[FLOW][Estimate] BOM loaded after completion. Switching to results."
+                );
+                setBillOfMaterials(bom);
+                setPhase("results");
+              }
+            });
+          }
         } else if (newProgress.status === "error") {
           setIsGenerating(false);
           setError(newProgress.error || "Pipeline failed");
@@ -403,9 +809,27 @@ export function EstimatePage() {
         const result = await estimationPipelineFn({
           projectId,
           sessionId: `session-${Date.now()}`,
-          planImageUrl: null,
+          planImageUrl: storeState.canvasScale.backgroundImage?.url || null,
           scopeText: estimateConfig.scopeText || "No scope provided",
-          clarificationData: {},
+          clarificationData: {
+            // Pass structured location data from estimateConfig
+            location: {
+              fullAddress: estimateConfig.address
+                ? `${estimateConfig.address.streetAddress}, ${estimateConfig.address.city}, ${estimateConfig.address.state} ${estimateConfig.address.zipCode}`
+                : "",
+              streetAddress: estimateConfig.address?.streetAddress || "",
+              city: estimateConfig.address?.city || "",
+              state: estimateConfig.address?.state || "",
+              zipCode: estimateConfig.address?.zipCode || "",
+            },
+            projectType: mapProjectType(
+              estimateConfig.projectType,
+              useProjectStore.getState().currentProject?.name
+            ),
+            approximateSize: estimateConfig.approximateSize,
+            // Pass start date for timeline agent
+            desiredStart: estimateConfig.startDate,
+          },
           annotationSnapshot,
           passNumber: 1,
           estimateConfig: {
@@ -533,25 +957,25 @@ export function EstimatePage() {
     }
   }, [projectId, user, buildClarificationOutput]);
 
-  // Handle PDF generation
+  // Handle PDF generation - uses local PDF generation from exportService
   const handleGeneratePDF = useCallback(
-    async (type: "contractor" | "client") => {
-      if (!projectId) return;
+    (type: "contractor" | "client") => {
+      if (!projectId || !billOfMaterials) {
+        setError("No estimate data available to export");
+        return;
+      }
 
       setIsGeneratingPDF(true);
       setPdfType(type);
 
       try {
-        const result =
-          type === "contractor"
-            ? await generateContractorPDF(projectId)
-            : await generateClientPDF(projectId);
-
-        if (result.success && result.pdfUrl) {
-          openPDFInNewTab(result.pdfUrl);
-        } else {
-          setError(result.error || "PDF generation failed");
-        }
+        // Use local PDF generation from exportService
+        // Maps "contractor" -> "contractor" view, "client" -> "customer" view
+        const view: BOMExportView =
+          type === "contractor" ? "contractor" : "customer";
+        exportEstimateAsPDF(billOfMaterials, view, {
+          projectName: billOfMaterials.projectName || `Project-${projectId}`,
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : "PDF generation failed");
       } finally {
@@ -559,7 +983,7 @@ export function EstimatePage() {
         setPdfType(null);
       }
     },
-    [projectId]
+    [projectId, billOfMaterials]
   );
 
   // Navigation handlers
@@ -855,19 +1279,19 @@ export function EstimatePage() {
               </div>
             )}
 
-            {/* CSI Scope Breakdown */}
-            {clarificationPayload &&
+            {/* CSI Scope Breakdown - uses unified summaryData */}
+            {summaryData &&
               (() => {
-                const csiScope = clarificationPayload.csiScope as
+                const csiScope = summaryData.csiScope as
                   | Record<string, CSIDivision>
                   | undefined;
-                const projectBrief = clarificationPayload.projectBrief as
+                const projectBrief = summaryData.projectBrief as
                   | Record<string, unknown>
                   | undefined;
                 const scopeSummary = projectBrief?.scopeSummary as
                   | Record<string, unknown>
                   | undefined;
-                const flags = clarificationPayload.flags as
+                const flags = summaryData.flags as
                   | {
                       lowConfidenceItems?: Array<{
                         field: string;
@@ -877,10 +1301,21 @@ export function EstimatePage() {
                     }
                   | undefined;
 
+                // Deep pipeline specific data
+                const costBreakdown = (
+                  summaryData as { costBreakdown?: Record<string, number> }
+                ).costBreakdown;
+                const timeline = (
+                  summaryData as { timeline?: Record<string, unknown> }
+                ).timeline;
+                const riskSummary = (
+                  summaryData as { riskSummary?: Record<string, unknown> }
+                ).riskSummary;
+
                 return (
                   <>
                     {/* Project Summary */}
-                    {projectBrief && scopeSummary && (
+                    {projectBrief && (
                       <div className="glass-panel p-6">
                         <h2 className="text-lg font-semibold text-truecost-text-primary mb-4">
                           Project Summary
@@ -901,7 +1336,12 @@ export function EstimatePage() {
                               Size
                             </p>
                             <p className="text-sm font-medium text-truecost-text-primary">
-                              {String(scopeSummary.totalSqft || "0")} sq ft
+                              {String(
+                                scopeSummary?.totalSqft ||
+                                  estimateConfig.approximateSize ||
+                                  "0"
+                              )}{" "}
+                              sq ft
                             </p>
                           </div>
                           <div>
@@ -910,28 +1350,189 @@ export function EstimatePage() {
                             </p>
                             <p className="text-sm font-medium text-truecost-text-primary capitalize">
                               {String(
-                                scopeSummary.finishLevel || "standard"
+                                scopeSummary?.finishLevel || "standard"
                               ).replace(/_/g, " ")}
                             </p>
                           </div>
-                          <div className="flex gap-2">
-                            <div className="glass-panel p-2 text-center bg-green-500/10 border-green-500/30 flex-1">
-                              <p className="text-lg font-bold text-green-400">
-                                {String(scopeSummary.totalIncluded || 0)}
+                          {scopeSummary?.totalIncluded !== undefined ? (
+                            <div className="flex gap-2">
+                              <div className="glass-panel p-2 text-center bg-green-500/10 border-green-500/30 flex-1">
+                                <p className="text-lg font-bold text-green-400">
+                                  {String(scopeSummary.totalIncluded || 0)}
+                                </p>
+                                <p className="text-xs text-green-400/70">
+                                  Included
+                                </p>
+                              </div>
+                              <div className="glass-panel p-2 text-center bg-red-500/10 border-red-500/30 flex-1">
+                                <p className="text-lg font-bold text-red-400">
+                                  {String(scopeSummary.totalExcluded || 0)}
+                                </p>
+                                <p className="text-xs text-red-400/70">
+                                  Excluded
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs text-truecost-text-secondary uppercase">
+                                Duration
                               </p>
-                              <p className="text-xs text-green-400/70">
-                                Included
+                              <p className="text-sm font-medium text-truecost-text-primary">
+                                {timeline?.totalWeeks
+                                  ? `${String(timeline.totalWeeks)} weeks`
+                                  : timeline?.totalDays
+                                  ? `${String(timeline.totalDays)} days`
+                                  : "TBD"}
                               </p>
                             </div>
-                            <div className="glass-panel p-2 text-center bg-red-500/10 border-red-500/30 flex-1">
-                              <p className="text-lg font-bold text-red-400">
-                                {String(scopeSummary.totalExcluded || 0)}
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Cost Breakdown - for deep pipeline data */}
+                    {costBreakdown &&
+                      (costBreakdown.total > 0 ||
+                        costBreakdown.materials > 0) && (
+                        <div className="glass-panel p-6">
+                          <h2 className="text-lg font-semibold text-truecost-text-primary mb-4">
+                            Cost Breakdown
+                          </h2>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                            <div className="glass-panel p-4 text-center">
+                              <p className="text-2xl font-bold text-truecost-cyan">
+                                $
+                                {(
+                                  costBreakdown.materials || 0
+                                ).toLocaleString()}
                               </p>
-                              <p className="text-xs text-red-400/70">
-                                Excluded
+                              <p className="text-xs text-truecost-text-secondary uppercase">
+                                Materials
+                              </p>
+                            </div>
+                            <div className="glass-panel p-4 text-center">
+                              <p className="text-2xl font-bold text-truecost-teal">
+                                ${(costBreakdown.labor || 0).toLocaleString()}
+                              </p>
+                              <p className="text-xs text-truecost-text-secondary uppercase">
+                                Labor
+                              </p>
+                            </div>
+                            <div className="glass-panel p-4 text-center">
+                              <p className="text-2xl font-bold text-truecost-text-primary">
+                                $
+                                {(
+                                  costBreakdown.equipment || 0
+                                ).toLocaleString()}
+                              </p>
+                              <p className="text-xs text-truecost-text-secondary uppercase">
+                                Equipment
                               </p>
                             </div>
                           </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                            <div className="text-center">
+                              <p className="text-lg font-semibold text-truecost-text-primary">
+                                $
+                                {(costBreakdown.overhead || 0).toLocaleString()}
+                              </p>
+                              <p className="text-xs text-truecost-text-secondary">
+                                Overhead
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-lg font-semibold text-truecost-text-primary">
+                                ${(costBreakdown.profit || 0).toLocaleString()}
+                              </p>
+                              <p className="text-xs text-truecost-text-secondary">
+                                Profit
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-lg font-semibold text-yellow-400">
+                                $
+                                {(
+                                  costBreakdown.contingency || 0
+                                ).toLocaleString()}
+                              </p>
+                              <p className="text-xs text-truecost-text-secondary">
+                                Contingency
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-lg font-semibold text-truecost-text-primary">
+                                ${(costBreakdown.total || 0).toLocaleString()}
+                              </p>
+                              <p className="text-xs text-truecost-text-secondary">
+                                Total
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Timeline Summary - for deep pipeline data */}
+                    {timeline && (timeline.startDate || timeline.endDate) && (
+                      <div className="glass-panel p-6">
+                        <h2 className="text-lg font-semibold text-truecost-text-primary mb-4">
+                          Timeline
+                        </h2>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-xs text-truecost-text-secondary uppercase">
+                              Start Date
+                            </p>
+                            <p className="text-sm font-medium text-truecost-text-primary">
+                              {timeline.startDate
+                                ? new Date(
+                                    timeline.startDate as string
+                                  ).toLocaleDateString()
+                                : "TBD"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-truecost-text-secondary uppercase">
+                              End Date
+                            </p>
+                            <p className="text-sm font-medium text-truecost-text-primary">
+                              {timeline.endDate
+                                ? new Date(
+                                    timeline.endDate as string
+                                  ).toLocaleDateString()
+                                : "TBD"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-truecost-text-secondary uppercase">
+                              Duration
+                            </p>
+                            <p className="text-sm font-medium text-truecost-text-primary">
+                              {timeline.totalWeeks
+                                ? `${String(timeline.totalWeeks)} weeks`
+                                : timeline.totalDays
+                                ? `${String(timeline.totalDays)} days`
+                                : "TBD"}
+                            </p>
+                          </div>
+                          {typeof riskSummary?.riskLevel === "string" && (
+                            <div>
+                              <p className="text-xs text-truecost-text-secondary uppercase">
+                                Risk Level
+                              </p>
+                              <p
+                                className={`text-sm font-medium capitalize ${
+                                  riskSummary.riskLevel === "high"
+                                    ? "text-red-400"
+                                    : riskSummary.riskLevel === "medium"
+                                    ? "text-yellow-400"
+                                    : "text-green-400"
+                                }`}
+                              >
+                                {riskSummary.riskLevel}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1101,16 +1702,19 @@ export function EstimatePage() {
                 );
               })()}
 
-            {/* Raw JSON Viewer */}
-            {clarificationPayload && (
+            {/* Raw JSON Viewer - uses summaryData.rawPayload */}
+            {summaryData && (
               <details className="glass-panel">
                 <summary className="px-6 py-4 cursor-pointer text-sm font-medium text-truecost-text-primary hover:bg-truecost-glass-bg/50">
-                  View Raw JSON
+                  View Raw JSON{" "}
+                  {summaryData.source === "deepPipelineData" &&
+                    "(Deep Pipeline Output)"}
                 </summary>
                 <pre className="px-6 py-4 text-xs overflow-auto max-h-96 bg-truecost-bg-secondary text-truecost-cyan rounded-b-lg">
                   {JSON.stringify(
                     {
-                      ...clarificationPayload,
+                      source: summaryData.source,
+                      ...(summaryData.rawPayload as Record<string, unknown>),
                       projectScope: estimateConfig.scopeText,
                       estimateConfiguration: {
                         overheadPercent: estimateConfig.overheadPercent,
@@ -1129,7 +1733,7 @@ export function EstimatePage() {
             )}
 
             {/* Download JSON button */}
-            {clarificationPayload && (
+            {summaryData && (
               <div className="flex justify-center">
                 <button
                   onClick={() => {
@@ -1137,7 +1741,11 @@ export function EstimatePage() {
                       [
                         JSON.stringify(
                           {
-                            ...clarificationPayload,
+                            source: summaryData.source,
+                            ...(summaryData.rawPayload as Record<
+                              string,
+                              unknown
+                            >),
                             projectScope: estimateConfig.scopeText,
                             estimateConfiguration: {
                               overheadPercent: estimateConfig.overheadPercent,
@@ -1183,7 +1791,7 @@ export function EstimatePage() {
             )}
 
             {/* No results yet message */}
-            {!clarificationPayload && (
+            {!summaryData && (
               <div className="glass-panel p-8 text-center">
                 <p className="text-truecost-text-secondary">
                   No estimation results available yet. The summary will appear

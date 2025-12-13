@@ -481,14 +481,18 @@ export function ChatPanel({
     }
 
     // Build comprehensive project context from scope page
-    // Note: location and address are the same thing - don't ask for address if we have location
+    const fullAddress = estimateConfig?.address 
+      ? `${estimateConfig.address.streetAddress}, ${estimateConfig.address.city}, ${estimateConfig.address.state} ${estimateConfig.address.zipCode}`
+      : '';
     const projectContext = {
       projectName: estimateConfig?.projectName || '',
-      location: estimateConfig?.location || '', // location = address
+      address: fullAddress,
+      city: estimateConfig?.address?.city || '',
+      state: estimateConfig?.address?.state || '',
+      zipCode: estimateConfig?.address?.zipCode || '',
       projectType: estimateConfig?.projectType || '',
       approximateSize: estimateConfig?.approximateSize || '',
       useUnionLabor: estimateConfig?.useUnionLabor || false,
-      zipCodeOverride: estimateConfig?.zipCodeOverride || '',
     };
 
     // Build scope text that includes project context
@@ -497,11 +501,10 @@ export function ChatPanel({
     // Add known project details that should NOT be asked again
     const knownDetails: string[] = [];
     if (projectContext.projectName) knownDetails.push(`Project Name: ${projectContext.projectName}`);
-    if (projectContext.location) knownDetails.push(`Location/Address: ${projectContext.location}`);
+    if (projectContext.address) knownDetails.push(`Address: ${projectContext.address}`);
     if (projectContext.projectType) knownDetails.push(`Project Type: ${projectContext.projectType}`);
     if (projectContext.approximateSize) knownDetails.push(`Approximate Size: ${projectContext.approximateSize}`);
     if (projectContext.useUnionLabor) knownDetails.push(`Labor Type: Union Labor`);
-    if (projectContext.zipCodeOverride) knownDetails.push(`ZIP Code: ${projectContext.zipCodeOverride}`);
     
     if (knownDetails.length > 0) {
       comprehensiveScopeText += '--- ALREADY PROVIDED PROJECT DETAILS (DO NOT ASK AGAIN) ---\n';
