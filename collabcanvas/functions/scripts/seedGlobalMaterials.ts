@@ -3,7 +3,9 @@
  * FR27-FR30: Import materials from Excel file to Firestore
  *
  * Usage:
- *   npx ts-node src/seedGlobalMaterials.ts <path-to-excel-file>
+ *   cd functions
+ *   npx ts-node scripts/seedGlobalMaterials.ts <path-to-excel-file>
+ *   npx ts-node scripts/seedGlobalMaterials.ts scripts/material_normalized.xlsx
  *
  * Expected Excel columns:
  *   - item_name: Product name
@@ -22,12 +24,12 @@ import {
   GlobalMaterial,
   SeedRow,
   DEFAULT_ZIPCODE,
-} from './types/globalMaterials';
+} from '../src/types/globalMaterials';
 import {
   normalizeProductName,
   generateMaterialId,
   extractProductId,
-} from './globalMaterials';
+} from '../src/globalMaterials';
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -218,13 +220,15 @@ if (require.main === module) {
     console.log(`
 Global Materials Seed Script
 
-Usage:
-  npx ts-node src/seedGlobalMaterials.ts <path-to-excel-file>  - Seed from Excel
-  npx ts-node src/seedGlobalMaterials.ts list                  - List all materials
-  npx ts-node src/seedGlobalMaterials.ts clear                 - Clear all materials
+Usage (run from functions directory):
+  npx ts-node scripts/seedGlobalMaterials.ts <path-to-excel-file>  - Seed from Excel
+  npx ts-node scripts/seedGlobalMaterials.ts scripts/material_normalized.xlsx  - Use included Excel
+  npx ts-node scripts/seedGlobalMaterials.ts list                  - List all materials
+  npx ts-node scripts/seedGlobalMaterials.ts clear                 - Clear all materials
 
 Environment:
-  FIRESTORE_EMULATOR_HOST=localhost:8081  - Use Firestore emulator
+  FIRESTORE_EMULATOR_HOST=localhost:8081  - Use Firestore emulator (local testing)
+  (no env var)                            - Use production Firestore
 
 Expected Excel columns:
   - item_name
