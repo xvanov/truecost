@@ -17,24 +17,39 @@ import {
   ComputedQuantities,
 } from './annotationQuantifier';
 
-// Initialize Firebase Admin if not already
-if (!admin.apps.length) {
-  admin.initializeApp();
+// Lazy initialization to avoid timeout during module load
+let _openai: OpenAI | null = null;
+let _apiKey: string | null = null;
+
+function getApiKey(): string {
+  if (_apiKey === null) {
+    // Load environment variables
+    const envPath = path.resolve(process.cwd(), '.env');
+    const envResult = dotenv.config({ path: envPath, override: true });
+
+    const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
+    const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
+    const apiKeyFromProcess = process.env.OPENAI_API_KEY;
+    _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
+
+    if (!_apiKey) {
+      console.warn('⚠️ OPENAI_API_KEY not found. LLM inference will not work.');
+    }
+  }
+  return _apiKey;
 }
 
-// Load environment variables
-const envPath = path.resolve(process.cwd(), '.env');
-const envResult = dotenv.config({ path: envPath, override: true });
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: getApiKey() });
+  }
+  return _openai;
+}
 
-const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
-const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-const apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-
-const openai = new OpenAI({ apiKey });
-
-if (!apiKey) {
-  console.warn('⚠️ OPENAI_API_KEY not found. LLM inference will not work.');
+function initFirebaseAdmin(): void {
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
 }
 
 // ===================
@@ -214,6 +229,7 @@ async function inferMissingData(
   clarificationData: Record<string, unknown>,
   planImageUrl?: string
 ): Promise<Record<string, unknown>> {
+  const apiKey = getApiKey();
   if (!apiKey) {
     console.log('[ESTIMATION] No API key - skipping LLM inference');
     return {
@@ -239,9 +255,10 @@ async function inferMissingData(
 
   try {
     // Build messages for OpenAI
+    const openai = getOpenAI();
     let response;
 
-    if (planImageUrl && apiKey) {
+    if (planImageUrl) {
       let imageContent = planImageUrl;
       if (isLocalUrl(planImageUrl)) {
         imageContent = await imageUrlToBase64(planImageUrl);
@@ -535,6 +552,7 @@ export const estimationPipeline = onCall({
     };
 
     // Save to Firestore (use set with merge to create if doesn't exist)
+    initFirebaseAdmin();
     const db = admin.firestore();
     await db.collection('projects').doc(projectId)
       .collection('estimations').doc(sessionId)
