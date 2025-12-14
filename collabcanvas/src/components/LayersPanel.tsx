@@ -179,12 +179,12 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
   const sortedLayers = [...layers].sort((a, b) => a.order - b.order);
 
   return (
-    <div className="fixed right-4 top-20 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 flex flex-col max-h-[calc(100vh-6rem)]">
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
-        <h3 className="text-lg font-semibold text-gray-900">Layers</h3>
+    <div className="fixed right-4 top-16 w-80 bg-truecost-bg-surface border border-truecost-glass-border rounded-lg shadow-xl backdrop-blur-md z-40 flex flex-col max-h-[calc(100vh-5rem)] overflow-hidden">
+      <div className="flex items-center justify-between p-3 border-b border-truecost-glass-border flex-shrink-0 bg-truecost-glass-bg/50">
+        <h3 className="text-base font-semibold text-truecost-text-primary">Layers</h3>
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-600"
+          className="p-1 text-truecost-text-secondary hover:text-truecost-text-primary rounded transition-colors"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -192,10 +192,10 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
         </button>
       </div>
 
-      <div className="flex flex-col flex-1 min-h-0">
-        <div className="p-4 flex-shrink-0 border-b border-gray-200">
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="p-3 flex-shrink-0 border-b border-truecost-glass-border">
           {/* Create Layer */}
-          <div className="mb-4">
+          <div>
             {isCreatingLayer ? (
               <div className="flex gap-2">
                 <input
@@ -203,7 +203,7 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
                   value={newLayerName}
                   onChange={(e) => setNewLayerName(e.target.value)}
                   placeholder="Layer name"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-3 py-1.5 bg-truecost-glass-bg border border-truecost-glass-border rounded-md text-sm text-truecost-text-primary placeholder:text-truecost-text-muted focus:outline-none focus:ring-2 focus:ring-truecost-cyan/50"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleCreateLayer();
@@ -212,13 +212,13 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
                 />
                 <button
                   onClick={handleCreateLayer}
-                  className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                  className="px-3 py-1.5 bg-truecost-cyan text-truecost-bg-primary rounded-md text-sm font-medium hover:bg-truecost-cyan/90 transition-colors"
                 >
                   Create
                 </button>
                 <button
                   onClick={() => setIsCreatingLayer(false)}
-                  className="px-3 py-2 bg-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-400"
+                  className="px-3 py-1.5 bg-truecost-glass-bg text-truecost-text-secondary border border-truecost-glass-border rounded-md text-sm hover:bg-truecost-glass-bg/80 transition-colors"
                 >
                   Cancel
                 </button>
@@ -226,7 +226,7 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
             ) : (
               <button
                 onClick={() => setIsCreatingLayer(true)}
-                className="w-full px-3 py-2 bg-gray-100 text-gray-700 rounded-md text-sm hover:bg-gray-200 flex items-center justify-center gap-2"
+                className="w-full px-3 py-2 bg-truecost-glass-bg text-truecost-text-secondary border border-truecost-glass-border rounded-md text-sm hover:bg-truecost-glass-bg/80 hover:text-truecost-text-primary flex items-center justify-center gap-2 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -238,7 +238,7 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
         </div>
 
         {/* Layers List - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-3">
           <div className="space-y-2">
           {sortedLayers.map((layer) => {
             // Handle shapes without layerId (created before layer system) - assign them to default layer
@@ -247,15 +247,6 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
               return shapeLayerId === layer.id;
             });
             
-            // Debug: Log shape filtering for the specific layer
-            if (layer.id === 'layer-1760809297826-bal5kbob6') {
-              console.log('🔍 LayersPanel - Layer shapes:', {
-                layerId: layer.id,
-                layerName: layer.name,
-                allShapes: Array.from(shapes.values()).map(s => ({ id: s.id, layerId: s.layerId })),
-                shapesInLayer: shapesInLayer.map(s => ({ id: s.id, layerId: s.layerId }))
-              });
-            }
             const isSelected = selectedShapeIds.some(shapeId => 
               shapesInLayer.some(shape => shape.id === shapeId)
             );
@@ -269,31 +260,31 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
                   e.preventDefault();
                   e.stopPropagation();
                   if (draggedShapeId) {
-                    e.currentTarget.classList.add('border-blue-400', 'bg-blue-50');
+                    e.currentTarget.classList.add('border-truecost-cyan/50', 'bg-truecost-cyan/10');
                   }
                   handleDragOver(e);
                 }}
                 onDragLeave={(e) => {
-                  e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50');
+                  e.currentTarget.classList.remove('border-truecost-cyan/50', 'bg-truecost-cyan/10');
                 }}
                 onDrop={(e) => {
-                  e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50');
+                  e.currentTarget.classList.remove('border-truecost-cyan/50', 'bg-truecost-cyan/10');
                   handleDrop(e, layer.id);
                 }}
                 onClick={() => setActiveLayer(layer.id)}
-                className={`p-3 border rounded-md cursor-pointer transition-colors ${
+                className={`p-2.5 border rounded-md cursor-pointer transition-colors ${
                   layer.id === activeLayerId 
-                    ? 'border-blue-500 bg-blue-50' 
+                    ? 'border-truecost-cyan bg-truecost-cyan/10' 
                     : isSelected 
-                      ? 'border-blue-300 bg-blue-25' 
-                      : 'border-gray-200'
+                      ? 'border-truecost-cyan/50 bg-truecost-cyan/5' 
+                      : 'border-truecost-glass-border bg-truecost-glass-bg/30 hover:bg-truecost-glass-bg/50'
                 } ${draggedLayerId === layer.id ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 flex-1">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
                     <button
-                      onClick={() => toggleLayerVisibility(layer.id)}
-                      className="text-gray-400 hover:text-gray-600"
+                      onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(layer.id); }}
+                      className="text-truecost-text-muted hover:text-truecost-text-primary transition-colors flex-shrink-0"
                     >
                       {layer.visible ? (
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -308,8 +299,8 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
                     </button>
                     
                     <button
-                      onClick={() => toggleLayerLock(layer.id)}
-                      className="text-gray-400 hover:text-gray-600"
+                      onClick={(e) => { e.stopPropagation(); toggleLayerLock(layer.id); }}
+                      className="text-truecost-text-muted hover:text-truecost-text-primary transition-colors flex-shrink-0"
                     >
                       {layer.locked ? (
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -322,12 +313,13 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
                       )}
                     </button>
 
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
                         <span className="sr-only">{layer.name}</span>
                         <input
-                          className="text-sm font-medium text-gray-900 bg-transparent border-b border-transparent focus:border-blue-400 focus:outline-none"
+                          className="text-sm font-medium text-truecost-text-primary bg-transparent border-b border-transparent focus:border-truecost-cyan focus:outline-none truncate max-w-[120px]"
                           value={layer.name}
+                          onClick={(e) => e.stopPropagation()}
                           onChange={(e) => {
                             const name = e.target.value;
                             updateLayerInStore(layer.id, { name });
@@ -343,19 +335,13 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
                               (e.target as HTMLInputElement).blur();
                             }
                             if (e.key === 'Escape') {
-                              // revert to current layer.name
                               (e.target as HTMLInputElement).value = layer.name;
                               (e.target as HTMLInputElement).blur();
                             }
                           }}
                         />
-                        <span className="text-xs text-gray-500">
-                          ({shapesInLayer.length}
-                          {layer.name === 'AI Annotations' && (() => {
-                            const boundingBoxCount = shapesInLayer.filter(s => s.type === 'boundingbox').length;
-                            return boundingBoxCount > 0 ? `, ${boundingBoxCount} box${boundingBoxCount !== 1 ? 'es' : ''}` : '';
-                          })()}
-                          )
+                        <span className="text-xs text-truecost-text-muted flex-shrink-0">
+                          ({shapesInLayer.length})
                         </span>
                       </div>
                       {/* Layer totals */}
@@ -363,16 +349,16 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
                         const totals = getLayerTotals(shapesInLayer);
                         if (!totals) return null;
                         return (
-                          <div className="text-xs text-gray-600 mt-0.5 font-mono">
-                            {totals.totalLength && <div>📏 Total: {totals.totalLength}</div>}
-                            {totals.totalArea && <div>📐 Total: {totals.totalArea}</div>}
+                          <div className="text-xs text-truecost-text-secondary mt-0.5 font-mono truncate">
+                            {totals.totalLength && <span className="mr-2">📏 {totals.totalLength}</span>}
+                            {totals.totalArea && <span>📐 {totals.totalArea}</span>}
                           </div>
                         );
                       })()}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <ColorPicker
                       currentColor={layer.color || '#3B82F6'}
                       onColorChange={(c) => {
@@ -383,12 +369,13 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
                     />
                     {layer.id !== 'default-layer' && (
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           if (window.confirm('Delete this layer and ALL shapes on it? This cannot be undone.')) {
                             handleDeleteLayer(layer.id);
                           }
                         }}
-                        className="text-red-400 hover:text-red-600"
+                        className="text-red-400 hover:text-red-500 transition-colors"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -400,7 +387,7 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
 
                 {/* Shapes in layer */}
                 {shapesInLayer.length > 0 && (
-                  <div className="mt-2 ml-6 space-y-1">
+                  <div className="mt-2 ml-4 space-y-1 max-h-32 overflow-y-auto">
                     {shapesInLayer.map((shape) => {
                       const measurement = getShapeMeasurement(shape);
                       const isDragging = draggedShapeId === shape.id;
@@ -414,33 +401,31 @@ export function LayersPanel({ isVisible, onClose, projectId }: LayersPanelProps)
                             handleShapeDragStart(e, shape.id);
                           }}
                           onDragEnd={handleShapeDragEnd}
-                          className={`text-xs p-2 rounded cursor-move transition-all ${
+                          className={`text-xs p-1.5 rounded cursor-move transition-all ${
                             isDragging
-                              ? 'opacity-50 bg-gray-200'
+                              ? 'opacity-50 bg-truecost-glass-bg'
                               : selectedShapeIds.includes(shape.id) 
-                                ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' 
-                                : 'text-gray-600 hover:bg-gray-100 bg-white border border-gray-200'
+                                ? 'bg-truecost-cyan/20 text-truecost-cyan border border-truecost-cyan/30' 
+                                : 'text-truecost-text-secondary hover:bg-truecost-glass-bg/50 bg-truecost-bg-primary/50 border border-truecost-glass-border/50'
                           }`}
                           title="Drag to move to different layer"
                         >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <svg 
-                                className="w-3 h-3 text-gray-400 flex-shrink-0" 
-                                fill="none" 
-                                viewBox="0 0 24 24" 
-                                stroke="currentColor"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 12h16M4 16h16" />
-                              </svg>
-                              <span className="truncate font-medium">{shape.type}</span>
-                              <span className="text-gray-400 text-xs">({shape.id.slice(-4)})</span>
-                              {measurement && (
-                                <span className="font-mono text-xs text-gray-500 flex-shrink-0 ml-auto">
-                                  {measurement}
-                                </span>
-                              )}
-                            </div>
+                          <div className="flex items-center gap-1.5">
+                            <svg 
+                              className="w-3 h-3 text-truecost-text-muted flex-shrink-0" 
+                              fill="none" 
+                              viewBox="0 0 24 24" 
+                              stroke="currentColor"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 12h16M4 16h16" />
+                            </svg>
+                            <span className="truncate font-medium capitalize">{shape.type}</span>
+                            <span className="text-truecost-text-muted text-xs flex-shrink-0">({shape.id.slice(-4)})</span>
+                            {measurement && (
+                              <span className="font-mono text-xs text-truecost-text-secondary flex-shrink-0 ml-auto">
+                                {measurement}
+                              </span>
+                            )}
                           </div>
                         </div>
                       );

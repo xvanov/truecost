@@ -64,6 +64,21 @@ export function AnnotatePage() {
   const [showLayersPanel, setShowLayersPanel] = useState(false);
   const [showAlignmentToolbar, setShowAlignmentToolbar] = useState(false);
 
+  // Helper to toggle panels - ensures only one is open at a time
+  const toggleLayersPanel = () => {
+    setShowLayersPanel(prev => {
+      if (!prev) setShowAlignmentToolbar(false); // Close other panel
+      return !prev;
+    });
+  };
+
+  const toggleAlignmentToolbar = () => {
+    setShowAlignmentToolbar(prev => {
+      if (!prev) setShowLayersPanel(false); // Close other panel
+      return !prev;
+    });
+  };
+
   const { user } = useAuth();
   const setCurrentUser = useCanvasStore((state) => state.setCurrentUser);
   const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
@@ -343,8 +358,8 @@ export function AnnotatePage() {
         canGenerateEstimate={true}
         onCreateShape={handleCreateShape}
         stageRef={canvasRef.current?.getStage()}
-        onToggleLayers={() => setShowLayersPanel(!showLayersPanel)}
-        onToggleAlignment={() => setShowAlignmentToolbar(!showAlignmentToolbar)}
+        onToggleLayers={toggleLayersPanel}
+        onToggleAlignment={toggleAlignmentToolbar}
         onToggleGrid={() => {}}
         onActivatePolylineTool={() => canvasRef.current?.activatePolylineTool()}
         onActivatePolygonTool={() => canvasRef.current?.activatePolygonTool()}
