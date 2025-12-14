@@ -30,6 +30,11 @@ import { useAuth } from "../../hooks/useAuth";
 import { useStepCompletion } from "../../hooks/useStepCompletion";
 import { getBOM } from "../../services/bomService";
 import { loadScopeConfig } from "../../services/scopeConfigService";
+import {
+  saveCPM,
+  transformTimelineOutputToCPM,
+  type TimelineOutput,
+} from "../../services/cpmService";
 import { functions, firestore } from "../../services/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { getProjectCanvasStoreApi } from "../../store/projectCanvasStore";
@@ -662,6 +667,36 @@ export function EstimatePage() {
                       "[FLOW][Estimate] Transformed estimate to BOM. Switching to results."
                     );
                     setBillOfMaterials(bom);
+
+                    // Save timeline data as CPM for TimeView
+                    if (estimateData.timelineOutput && projectId && user) {
+                      console.log(
+                        "[FLOW][Estimate] Saving timeline as CPM...",
+                        {
+                          hasTimelineOutput: !!estimateData.timelineOutput,
+                          taskCount: estimateData.timelineOutput?.tasks?.length || 0,
+                        }
+                      );
+                      const cpm = transformTimelineOutputToCPM(
+                        estimateData.timelineOutput as TimelineOutput,
+                        projectId,
+                        user.uid
+                      );
+                      if (cpm) {
+                        saveCPM(projectId, cpm, user.uid)
+                          .then(() => {
+                            console.log("[FLOW][Estimate] CPM saved successfully");
+                          })
+                          .catch((err) => {
+                            console.error("[FLOW][Estimate] Failed to save CPM:", err);
+                          });
+                      } else {
+                        console.warn(
+                          "[FLOW][Estimate] Could not transform timeline to CPM (empty or error)"
+                        );
+                      }
+                    }
+
                     setPhase("results");
                     return;
                   }
@@ -731,7 +766,7 @@ export function EstimatePage() {
     );
 
     return () => unsubscribe();
-  }, [projectId, estimateId, phase, isGenerating, setBillOfMaterials]);
+  }, [projectId, estimateId, phase, isGenerating, setBillOfMaterials, user]);
 
   const buildClarificationOutput =
     useCallback(async (): Promise<ClarificationOutputPayload | null> => {

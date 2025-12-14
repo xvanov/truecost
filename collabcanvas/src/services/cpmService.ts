@@ -219,3 +219,132 @@ export function calculateCriticalPath(tasks: CPMTask[]): {
   };
 }
 
+/**
+ * Timeline Output from the estimation pipeline's Timeline Agent
+ * This is the structure stored in estimates/{estimateId}.timelineOutput
+ */
+export interface TimelineOutputTask {
+  id: string;
+  name: string;
+  phase: string;
+  duration: number;
+  start?: string;
+  end?: string;
+  dependencies: string[];
+  isCritical: boolean;
+  isMilestone?: boolean;
+  trade?: string;
+  laborHours?: number;
+}
+
+export interface TimelineOutput {
+  estimateId: string;
+  generatedDate?: string;
+  startDate: string;
+  endDate: string;
+  tasks: TimelineOutputTask[];
+  milestones?: Array<{
+    id: string;
+    name: string;
+    date: string;
+    description?: string;
+  }>;
+  criticalPath: string[];
+  totalDuration: number;
+  totalCalendarDays: number;
+  durationRange?: {
+    optimistic: number;
+    expected: number;
+    pessimistic: number;
+  };
+  weatherImpact?: {
+    expectedDelayDays: number;
+    bufferDays: number;
+    riskLevel: string;
+  };
+  summary?: string;
+  assumptions?: string[];
+  scheduleRisks?: string[];
+  confidence?: number;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+/**
+ * Map Timeline Agent phase names to CPM category names
+ */
+const PHASE_TO_CATEGORY: Record<string, string> = {
+  preconstruction: 'prep',
+  demolition: 'demo',
+  site_prep: 'prep',
+  foundation: 'foundation',
+  framing: 'framing',
+  rough_in: 'rough-in',
+  insulation: 'insulation',
+  drywall: 'drywall',
+  finish: 'finish',
+  fixtures: 'finish',
+  final_inspection: 'finish',
+  punch_list: 'finish',
+};
+
+/**
+ * Transform Timeline Agent output to CPM format
+ *
+ * @param timelineOutput - The timelineOutput from estimates/{estimateId}
+ * @param projectId - The project ID
+ * @param userId - The user ID who generated the estimate
+ * @returns CPM object ready to save, or null if timeline has no valid tasks
+ */
+export function transformTimelineOutputToCPM(
+  timelineOutput: TimelineOutput,
+  projectId: string,
+  userId: string
+): CPM | null {
+  // Check if timeline has an error or no tasks
+  if (timelineOutput.error || !timelineOutput.tasks || timelineOutput.tasks.length === 0) {
+    console.warn('[transformTimelineOutputToCPM] Timeline has no valid tasks or has error:', timelineOutput.error);
+    return null;
+  }
+
+  const now = Date.now();
+
+  // Transform tasks
+  const cpmTasks: CPMTask[] = timelineOutput.tasks.map((task) => ({
+    id: task.id,
+    name: task.name,
+    description: task.trade ? `Trade: ${task.trade}` : undefined,
+    duration: task.duration,
+    dependencies: task.dependencies || [],
+    isCritical: task.isCritical,
+    category: PHASE_TO_CATEGORY[task.phase] || task.phase || 'general',
+    // Optional: include start/end dates if available
+    ...(task.start && { startDate: new Date(task.start).getTime() }),
+    ...(task.end && { endDate: new Date(task.end).getTime() }),
+  }));
+
+  // Use critical path from timeline output, or calculate it
+  let criticalPath = timelineOutput.criticalPath || [];
+  let totalDuration = timelineOutput.totalDuration || 0;
+
+  // If critical path not provided, calculate it
+  if (criticalPath.length === 0 || totalDuration === 0) {
+    const calculated = calculateCriticalPath(cpmTasks);
+    criticalPath = calculated.criticalPath;
+    totalDuration = calculated.totalDuration;
+  }
+
+  return {
+    id: `cpm-${projectId}`,
+    projectId,
+    tasks: cpmTasks,
+    criticalPath,
+    totalDuration,
+    createdAt: now,
+    createdBy: userId,
+    updatedAt: now,
+  };
+}
+
