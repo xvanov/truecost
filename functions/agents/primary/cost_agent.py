@@ -216,6 +216,20 @@ class CostAgent(BaseA2AAgent):
         location_factor = location_output.get("locationFactor", 1.0)
         zip_code = location_output.get("zipCode", "00000")
         
+        # Extract project_id for price comparison service
+        # Try from clarification first, then use estimate_id as fallback
+        project_id = None
+        if isinstance(clarification, dict):
+            project_id = (
+                clarification.get("projectId") or
+                clarification.get("project_id") or
+                (clarification.get("projectBrief", {}) or {}).get("projectId") or
+                (clarification.get("projectBrief", {}) or {}).get("project_id")
+            )
+        # Use estimate_id as project_id if not found (they may be the same)
+        if not project_id:
+            project_id = estimate_id
+        
         logger.info(
             "cost_agent_inputs",
             estimate_id=estimate_id,
@@ -230,6 +244,7 @@ class CostAgent(BaseA2AAgent):
             scope_output=scope_output,
             zip_code=zip_code,
             waste_factor=user_prefs["waste_factor"],
+            project_id=project_id,
         )
         
         # Step 3: Calculate subtotals
@@ -320,16 +335,36 @@ class CostAgent(BaseA2AAgent):
         scope_output: Dict[str, Any],
         zip_code: str,
         waste_factor: float,
+        project_id: Optional[str] = None,
     ) -> tuple[List[DivisionCost], int, int]:
         """Calculate costs for all divisions and line items.
         
         Args:
+            estimate_id: Estimate document ID.
             scope_output: Bill of Quantities from Scope Agent.
             zip_code: Project ZIP code for labor rates.
+            waste_factor: Waste factor multiplier.
+            project_id: Optional project ID for price comparison service.
             
         Returns:
             Tuple of (division_costs, total_items, exact_matches).
         """
+        # Batch pre-fetch prices for all products if project_id provided
+        if project_id:
+            product_descriptions = []
+            for div_data in scope_output.get("divisions", []):
+                for item in div_data.get("lineItems", []):
+                    description = item.get("item", item.get("description", ""))
+                    if description:
+                        product_descriptions.append(description)
+            
+            if product_descriptions:
+                await self.cost_data_service.batch_prefetch_prices(
+                    product_descriptions=product_descriptions,
+                    project_id=project_id,
+                    zip_code=zip_code
+                )
+        
         division_costs = []
         total_items = 0
         exact_matches = 0
@@ -344,7 +379,8 @@ class CostAgent(BaseA2AAgent):
             for item in div_data.get("lineItems", []):
                 item_cost, is_exact = await self._calculate_line_item_cost(
                     item=item,
-                    zip_code=zip_code
+                    zip_code=zip_code,
+                    project_id=project_id
                 )
                 
                 if item_cost:
@@ -501,13 +537,15 @@ class CostAgent(BaseA2AAgent):
     async def _calculate_line_item_cost(
         self,
         item: Dict[str, Any],
-        zip_code: str
+        zip_code: str,
+        project_id: Optional[str] = None
     ) -> tuple[Optional[LineItemCost], bool]:
         """Calculate cost for a single line item.
         
         Args:
             item: Line item data from BoQ.
             zip_code: Project ZIP code for labor rates.
+            project_id: Optional project ID for price comparison service.
             
         Returns:
             Tuple of (LineItemCost, is_exact_match).
@@ -527,10 +565,12 @@ class CostAgent(BaseA2AAgent):
             except ValueError:
                 primary_trade = TradeCategory.GENERAL_LABOR
             
-            # Look up material cost
+            # Look up material cost (with price comparison if project_id provided)
             material_data = await self.cost_data_service.get_material_cost(
                 cost_code=cost_code,
-                item_description=description
+                item_description=description,
+                project_id=project_id,
+                zip_code=zip_code
             )
             
             is_exact = material_data.get("confidence_score", 0) >= 0.85

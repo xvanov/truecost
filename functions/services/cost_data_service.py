@@ -14,6 +14,21 @@ import structlog
 
 from models.cost_estimate import CostRange, CostConfidenceLevel
 from models.bill_of_quantities import TradeCategory
+
+# Lazy import to avoid circular dependencies
+_price_comparison_service = None
+
+def _get_price_comparison_service():
+    """Lazy import of price comparison service."""
+    global _price_comparison_service
+    if _price_comparison_service is None:
+        try:
+            from services.price_comparison_service import get_material_prices
+            _price_comparison_service = get_material_prices
+        except ImportError:
+            logger.warning("price_comparison_service_not_available")
+            _price_comparison_service = None
+    return _price_comparison_service
 from models.location_factors import (
     LocationFactors as LocationLocationFactors,
     LaborRates as LocationLaborRates,
@@ -733,7 +748,9 @@ class CostDataService:
     async def get_material_cost(
         self,
         cost_code: str,
-        item_description: Optional[str] = None
+        item_description: Optional[str] = None,
+        project_id: Optional[str] = None,
+        zip_code: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get material cost with P50/P80/P90 range for a cost code.
         
@@ -742,9 +759,14 @@ class CostDataService:
         - P80 (medium): Base × 1.15 (conservative)
         - P90 (high): Base × 1.25 (pessimistic)
         
+        If project_id is provided, attempts to get real prices from price comparison
+        service first, falling back to hardcoded costs if unavailable.
+        
         Args:
             cost_code: Cost code to look up.
             item_description: Optional item description for fuzzy matching.
+            project_id: Optional project ID for real-time price lookup.
+            zip_code: Optional ZIP code for location-specific pricing.
             
         Returns:
             Dict with unit_cost (CostRange), labor_hours, equipment_cost (CostRange),
@@ -753,9 +775,73 @@ class CostDataService:
         logger.debug(
             "get_material_cost",
             cost_code=cost_code,
-            item_description=item_description[:50] if item_description else None
+            item_description=item_description[:50] if item_description else None,
+            project_id=project_id,
+            zip_code=zip_code
         )
         
+        # Try price comparison service first if project_id provided
+        if project_id and item_description:
+            try:
+                price_service = _get_price_comparison_service()
+                if price_service:
+                    # Check cache first (per-project cache)
+                    cache_key = f"{project_id}:{item_description}"
+                    if not hasattr(self, '_price_cache'):
+                        self._price_cache: Dict[str, float] = {}
+                    
+                    if cache_key in self._price_cache:
+                        price = self._price_cache[cache_key]
+                        logger.debug(
+                            "using_cached_price",
+                            product=item_description[:50],
+                            price=price
+                        )
+                        return self._build_material_cost_from_price(
+                            price=price,
+                            cost_code=cost_code,
+                            item_description=item_description
+                        )
+                    
+                    # Call price comparison service
+                    prices = await price_service(
+                        product_names=[item_description],
+                        project_id=project_id,
+                        zip_code=zip_code,
+                        force_refresh=False
+                    )
+                    
+                    if prices and item_description in prices:
+                        price = prices[item_description]
+                        # Cache the result
+                        self._price_cache[cache_key] = price
+                        logger.info(
+                            "using_real_price",
+                            product=item_description[:50],
+                            price=price,
+                            project_id=project_id
+                        )
+                        return self._build_material_cost_from_price(
+                            price=price,
+                            cost_code=cost_code,
+                            item_description=item_description
+                        )
+                    else:
+                        logger.debug(
+                            "price_comparison_no_match",
+                            product=item_description[:50],
+                            project_id=project_id
+                        )
+            except Exception as e:
+                logger.warning(
+                    "price_comparison_failed",
+                    product=item_description[:50] if item_description else None,
+                    project_id=project_id,
+                    error=str(e)
+                )
+                # Fall through to hardcoded costs
+        
+        # Fallback to hardcoded costs
         # Try exact cost code match first
         for code_data in MOCK_COST_CODES:
             if code_data["code"] == cost_code:
@@ -779,6 +865,138 @@ class CostDataService:
         # Return default costs based on code prefix
         division = cost_code[:2] if len(cost_code) >= 2 else "00"
         return self._get_default_material_cost(division)
+    
+    async def batch_prefetch_prices(
+        self,
+        product_descriptions: List[str],
+        project_id: str,
+        zip_code: Optional[str] = None
+    ) -> None:
+        """Pre-fetch prices for multiple products to populate cache.
+        
+        This allows batching price comparison calls instead of calling
+        get_material_cost individually for each product.
+        
+        Args:
+            product_descriptions: List of product descriptions to price.
+            project_id: Project ID for price comparison service.
+            zip_code: Optional ZIP code for location-specific pricing.
+        """
+        if not product_descriptions or not project_id:
+            return
+        
+        try:
+            price_service = _get_price_comparison_service()
+            if price_service:
+                # Initialize cache if needed
+                if not hasattr(self, '_price_cache'):
+                    self._price_cache: Dict[str, float] = {}
+                
+                # Filter out already cached products
+                uncached_products = [
+                    desc for desc in product_descriptions
+                    if f"{project_id}:{desc}" not in self._price_cache
+                ]
+                
+                if not uncached_products:
+                    logger.debug(
+                        "batch_prefetch_all_cached",
+                        project_id=project_id,
+                        total=len(product_descriptions)
+                    )
+                    return
+                
+                logger.info(
+                    "batch_prefetch_prices",
+                    project_id=project_id,
+                    total=len(product_descriptions),
+                    uncached=len(uncached_products)
+                )
+                
+                # Call price comparison service with all products at once
+                prices = await price_service(
+                    product_names=uncached_products,
+                    project_id=project_id,
+                    zip_code=zip_code,
+                    force_refresh=False
+                )
+                
+                # Cache all results
+                for product in uncached_products:
+                    cache_key = f"{project_id}:{product}"
+                    if product in prices:
+                        self._price_cache[cache_key] = prices[product]
+                        logger.debug(
+                            "batch_prefetch_cached",
+                            product=product[:50],
+                            price=prices[product]
+                        )
+        except Exception as e:
+            logger.warning(
+                "batch_prefetch_prices_failed",
+                project_id=project_id,
+                product_count=len(product_descriptions),
+                error=str(e)
+            )
+            # Non-fatal - individual calls will still work with fallback
+    
+    def _build_material_cost_from_price(
+        self,
+        price: float,
+        cost_code: str,
+        item_description: str
+    ) -> Dict[str, Any]:
+        """Build material cost result from real price comparison.
+        
+        Uses the real price as P50 (median) and applies variance multipliers
+        for P80/P90 ranges to account for price variations and market conditions.
+        
+        Args:
+            price: Real price from price comparison service (best of Home Depot/Lowe's).
+            cost_code: Cost code for the item.
+            item_description: Item description.
+            
+        Returns:
+            Material cost result with CostRange values based on real price.
+        """
+        # Use real price as P50 (median)
+        # Apply variance multipliers: P80 = 15% higher, P90 = 25% higher
+        # This accounts for price variations, quantity discounts, and market fluctuations
+        unit_cost = CostRange.from_base_cost(price, p80_multiplier=1.15, p90_multiplier=1.25)
+        
+        # Infer unit and trade from cost code prefix
+        division = cost_code[:2] if len(cost_code) >= 2 else "00"
+        unit = "EA"  # Default unit
+        primary_trade = TradeCategory.GENERAL_LABOR  # Default trade
+        
+        # Try to get unit and trade from cost code if available
+        for code_data in MOCK_COST_CODES:
+            if code_data["code"] == cost_code:
+                unit = code_data.get("unit", "EA")
+                primary_trade = TradeCategory(code_data["primary_trade"])
+                break
+        
+        # Estimate labor hours based on division (conservative defaults)
+        labor_hours = 0.5  # Default
+        if division == "12":  # Furnishings
+            labor_hours = 1.5
+        elif division == "22":  # Plumbing
+            labor_hours = 1.5
+        elif division == "26":  # Electrical
+            labor_hours = 0.75
+        
+        return {
+            "cost_code": cost_code,
+            "description": item_description,
+            "unit": unit,
+            "unit_cost": unit_cost,
+            "labor_hours_per_unit": labor_hours,
+            "equipment_cost": CostRange.zero(),
+            "primary_trade": primary_trade,
+            "secondary_trades": [],
+            "confidence": CostConfidenceLevel.HIGH,  # Real prices are high confidence
+            "confidence_score": 0.90  # Real prices from retailers
+        }
     
     def _build_material_cost_result(
         self,

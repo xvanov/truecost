@@ -46,6 +46,58 @@
 | OpenAI GPT-4o | Vision for CAD images |
 | OpenAI Whisper | Voice transcription fallback |
 
+## Data Acquisition Architecture
+
+### Live Data Sources (Currently Active)
+
+**Labor Rates Service** (`functions/services/bls_service.py`):
+- **API**: Bureau of Labor Statistics (BLS) Occupational Employment Statistics
+- **Endpoint**: `https://api.bls.gov/publicAPI/v2/timeseries/data/`
+- **Data**: Real hourly wage data for construction trades by MSA
+- **Update Frequency**: Annual (May release)
+- **Rate Limit**: 500 queries/day (higher with API key)
+- **Fallback**: Cached/default data on API failure
+
+**Weather Service** (`functions/services/weather_service.py`):
+- **API**: Open-Meteo Historical Weather API
+- **Endpoint**: `https://archive-api.open-meteo.com/v1/archive`
+- **Data**: Historical daily temperature and precipitation
+- **Cost**: Free, no API key required
+- **Fallback**: Regional default data on API failure
+
+**Retail Material Price Comparison** (`collabcanvas/functions/src/priceComparison.ts`):
+- **API**: SerpApi Google Shopping (plus optional OpenAI matching)
+- **Data**: Live retailer prices (Home Depot / Lowe's) and best-price selection
+- **Storage**: Results written to Firestore at `/projects/{projectId}/priceComparison/latest`
+- **Python consumption**: `functions/services/price_comparison_service.py` triggers the callable via HTTP, polls Firestore, and extracts best prices for CostAgent
+- **Fallback**: CostAgent falls back to mock unit costs when no match / API failure
+
+### Mock Data Sources (Awaiting Dev 4)
+
+**Cost Data Service** (`functions/services/cost_data_service.py`):
+- **Current**: Static mock data for location factors, material costs
+- **Future**: Real RSMeans/cost database integration
+- **P50/P80/P90**: Variance multipliers (1.0/1.15/1.25) for probabilistic estimates
+
+**Monte Carlo Service** (`functions/services/monte_carlo_service.py`):
+- **Current**: NumPy triangular distributions
+- **Future**: Real Monte Carlo simulation from Dev 4
+- **Iterations**: Configurable via `MONTE_CARLO_ITERATIONS` (default: 10K)
+
+### Data Acquisition Flow
+
+```
+Agent → LangChain Tool → Service → Live API → Response
+                                     ↓
+                               Cached Fallback (on failure)
+```
+
+**Key Features**:
+- **Real-time Priority**: Attempts live API calls first
+- **Graceful Degradation**: Falls back to cached/default data on network/API failures
+- **Retry Logic**: Tenacity library with exponential backoff
+- **Structured Logging**: All data acquisition logged with `structlog`
+
 ## Project Structure
 
 ```

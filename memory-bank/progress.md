@@ -4,13 +4,12 @@
 
 **Phase**: Post-Merge Integration (Epic 6) + Production Readiness
 **Sprint**: 1
-**Date**: December 12, 2025
+**Date**: December 14, 2025
 **Working Branch**: `bugfix/post-merge-integration`
 **Primary Tracking**: `docs/sprint-artifacts/sprint-status.yaml`
 **Local Dev**: ✅ Running (Firebase emulators + Vite dev server)
 **Test Status**:
-- Python deep pipeline unit tests: **205 passing** (Epic 2)
-- Repo-wide test count: **295+ passing** (per `docs/sprint-artifacts/sprint-1-completion-report.md`)
+- Python unit tests (functions): **469 passing**, **1 skipped** (latest run)
 
 Recent pipeline change:
 - User-selected cost defaults are now supported via `projectBrief.costPreferences` (overhead/profit/contingency/wasteFactor),
@@ -22,6 +21,18 @@ Recent pipeline change:
 - TimelineCritic no longer enforces fixed remodel duration heuristics (e.g., “small 20–30 / large 60–90 days”); critique is structural/consistency-based.
 - Added `code_compliance` agent (ICC: IBC/IRC/IECC family) to generate code-related warnings; Final output now includes `codeCompliance.warnings`.
 - Pipeline agent sequence is now 7 steps: `location → scope → code_compliance → cost → risk → timeline → final`.
+
+New material pricing change:
+- **CostAgent now pulls live retail material prices** via Epic 5 price comparison:
+  - TS callable: `collabcanvas/functions/src/priceComparison.ts` (`comparePrices`)
+  - Python wrapper: `functions/services/price_comparison_service.py` (HTTP trigger + Firestore polling)
+  - Integrated into: `functions/services/cost_data_service.py` and `functions/agents/primary/cost_agent.py`
+  - Uses batching (`batch_prefetch_prices`) and caching; falls back to mock unit costs on failure/no match.
+
+Test stability changes:
+- Added tests for the integration: `functions/tests/unit/test_price_comparison_integration.py`
+- Fixed `functions/tools/data_tools.py` missing typing imports (`Dict`, `Any`) that broke pytest collection
+- Removed SciPy dependency from `functions/services/monte_carlo.py` (NumPy-only); updated flaky schedule Monte Carlo test to allow ties in integer percentiles (`p50_days <= p80_days <= p90_days`).
 
 ---
 
@@ -273,9 +284,11 @@ Key doc: `docs/sprint-artifacts/tech-spec-post-merge-integration.md`
 | Dependency | From | Status | Notes |
 |------------|------|--------|-------|
 | `ClarificationOutput` v3.0.0 | Dev 3 | ✅ Schema defined | Example JSON available |
-| `cost_data_service.get_location_factors()` | Dev 4 | 🔲 Not started | Will mock |
-| `cost_data_service.get_material_cost()` | Dev 4 | 🔲 Not started | Will mock |
-| `monte_carlo.run_simulation()` | Dev 4 | 🔲 Not started | Will mock |
+| `get_labor_rates_for_zip()` (BLS API) | Dev 2 | ✅ **Live Implementation** | Real BLS Occupational Employment Statistics |
+| `get_weather_factors()` (Open-Meteo API) | Dev 2 | ✅ **Live Implementation** | Real historical weather data |
+| `cost_data_service.get_location_factors()` | Dev 4 | 🔲 Mock Implementation | Static data (awaiting Dev 4 real service) |
+| `cost_data_service.get_material_cost()` | Dev 4 | 🔲 Mock Implementation | Static data (awaiting Dev 4 real service) |
+| `monte_carlo.run_simulation()` | Dev 4 | 🔲 Mock Implementation | NumPy simulation (awaiting Dev 4 real service) |
 
 ---
 

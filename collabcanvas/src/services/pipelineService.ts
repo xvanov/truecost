@@ -157,7 +157,8 @@ function getDeepPipelineHttpBaseUrl(): string {
   }
 
   if (useEmulators) {
-    return `http://127.0.0.1:5001/${projectId}/${region}`;
+    // Use localhost (not 127.0.0.1) to reduce cross-origin/CORS friction during local dev.
+    return `http://localhost:5001/${projectId}/${region}`;
   }
 
   return `https://${region}-${projectId}.cloudfunctions.net`;
