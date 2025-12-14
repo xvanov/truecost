@@ -33,6 +33,9 @@ if (process.env.NODE_ENV !== 'production') {
   console.log('[PRICE_COMPARISON] - OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET');
 }
 
+// Lazy-initialized Firestore instance
+let _db: Firestore | null = null;
+
 function initFirebaseAdmin(): void {
   try {
     admin.app();
@@ -43,7 +46,6 @@ function initFirebaseAdmin(): void {
 
 function getDb(): Firestore {
   if (!_db) {
-    initializeEnv();
     initFirebaseAdmin();
     _db = getFirestore();
   }
@@ -109,7 +111,6 @@ async function fetchFromSerpApi(
   productName: string,
   retailer: Retailer
 ): Promise<unknown[]> {
-  initializeEnv();
   const apiKey = process.env.SERP_API_KEY;
   if (!apiKey) {
     console.error('[PRICE_COMPARISON] SERP_API_KEY not configured');
@@ -213,7 +214,6 @@ async function selectBestMatch(
     return { index: -1, confidence: 0, reasoning: 'No search results' };
   }
 
-  initializeEnv();
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     console.error('[PRICE_COMPARISON] OPENAI_API_KEY not configured');

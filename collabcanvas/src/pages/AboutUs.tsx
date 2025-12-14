@@ -1,58 +1,11 @@
 import { PublicLayout } from '../components/layouts/PublicLayout';
-
-// Team member images
-import kalinImg from '../assets/team/truecost-kalin.jpeg';
-import yahavImg from '../assets/team/truecost-yahav.jpeg';
-import ankitImg from '../assets/team/truecost-ankit.jpeg';
-import kishorImg from '../assets/team/truecost-kishor.jpeg';
-import atharvaImg from '../assets/team/truecost-atharva.jpeg';
-
-// Team member descriptions
-import {
-  kalin_desc,
-  yahav_desc,
-  ankit_desc,
-  kishor_desc,
-  atharva_desc,
-} from '../assets/desc/teamDescriptions';
+import { teamMembers } from '../assets/team/teamMembers';
 
 /**
  * About Us Page
  * Company information and team member profiles
  */
 export function AboutUs() {
-  const teamMembers = [
-    {
-      name: 'Kalin Ivanov',
-      role: 'Co-Founder & CEO',
-      image: kalinImg,
-      desc: kalin_desc,
-    },
-    {
-      name: 'Yahav Corcos',
-      role: 'Co-Founder & COO',
-      image: yahavImg,
-      desc: yahav_desc,
-    },
-    {
-      name: 'Ankit Rijal',
-      role: 'Co-Founder & CTO',
-      image: ankitImg,
-      desc: ankit_desc,
-    },
-    {
-      name: 'Kishor Kashid',
-      role: 'Co-Founder & CFO',
-      image: kishorImg,
-      desc: kishor_desc,
-    },
-    {
-      name: 'Atharva Sardar',
-      role: 'Co-Founder & Lead AI Engineer',
-      image: atharvaImg,
-      desc: atharva_desc,
-    },
-  ];
 
   const values = [
     {

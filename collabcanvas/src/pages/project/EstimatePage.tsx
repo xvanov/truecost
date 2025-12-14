@@ -23,6 +23,7 @@ import { ComparisonView } from "../../components/money/ComparisonView";
 import { TimeView } from "../../components/time/TimeView";
 import { PriceComparisonPanel } from "../../components/estimate/PriceComparisonPanel";
 import { PipelineDebugPanel } from "../../components/estimate/PipelineDebugPanel";
+import { RiskAnalysisView } from "../../components/estimate/RiskAnalysisView";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useAuth } from "../../hooks/useAuth";
@@ -42,9 +43,10 @@ import {
   getPipelineStatus,
 } from "../../services/pipelineService";
 import {
-  exportEstimateAsPDF,
-  type BOMExportView,
-} from "../../services/exportService";
+  generateContractorPDF,
+  generateClientPDF,
+  openPDFInNewTab,
+} from "../../services/pdfService";
 import type { EstimateConfig } from "./ScopePage";
 import type {
   CSIDivision,
@@ -60,6 +62,7 @@ type ResultTab =
   | "materials"
   | "labor"
   | "time"
+  | "riskAnalysis"
   | "priceComparison"
   | "estimateVsActual";
 
@@ -71,6 +74,7 @@ const RESULT_TABS: { id: ResultTab; label: string }[] = [
   { id: "materials", label: "Materials" },
   { id: "labor", label: "Labor" },
   { id: "time", label: "Time" },
+  { id: "riskAnalysis", label: "Risk Analysis" },
   { id: "priceComparison", label: "Price Comparison" },
   { id: "estimateVsActual", label: "Estimate vs Actual" },
 ];
@@ -129,8 +133,8 @@ const mapProjectType = (
  * Transform deep pipeline estimate data to BillOfMaterials format
  * This allows the results view to display data from the estimates collection
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const transformEstimateToBOM = (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   estimateData: any,
   estimateId: string
 ): BillOfMaterials | null => {
@@ -292,7 +296,6 @@ interface MaterialSpec {
 }
 
 export function EstimatePage() {
-  console.log("Functions URL:", import.meta.env.VITE_FIREBASE_FUNCTIONS_URL);
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -316,11 +319,8 @@ export function EstimatePage() {
     () => ({
       // Project details (defaults for when navigating directly to this page)
       projectName: "",
-      location: "",
       projectType: "",
-      approximateSize: "",
       useUnionLabor: false,
-      zipCodeOverride: "",
       // Scope
       scopeText: "",
       // Estimate configuration
@@ -371,6 +371,8 @@ export function EstimatePage() {
 
   // JSON generation state (for TS estimation pipeline)
   const [isGeneratingJSON, setIsGeneratingJSON] = useState(false);
+  const [showJSONViewer, setShowJSONViewer] = useState(false);
+  const [jsonOutput, setJsonOutput] = useState<Record<string, unknown> | null>(null);
 
   // Clarification JSON payload shared between Generate JSON + pipeline trigger
   const [clarificationPayload, setClarificationPayload] =
@@ -814,9 +816,10 @@ export function EstimatePage() {
           clarificationData: {
             // Pass structured location data from estimateConfig
             location: {
-              fullAddress: estimateConfig.address
-                ? `${estimateConfig.address.streetAddress}, ${estimateConfig.address.city}, ${estimateConfig.address.state} ${estimateConfig.address.zipCode}`
-                : "",
+              fullAddress: estimateConfig.address?.formattedAddress ||
+                (estimateConfig.address
+                  ? `${estimateConfig.address.streetAddress}, ${estimateConfig.address.city}, ${estimateConfig.address.state} ${estimateConfig.address.zipCode}`
+                  : ""),
               streetAddress: estimateConfig.address?.streetAddress || "",
               city: estimateConfig.address?.city || "",
               state: estimateConfig.address?.state || "",
@@ -826,7 +829,6 @@ export function EstimatePage() {
               estimateConfig.projectType,
               useProjectStore.getState().currentProject?.name
             ),
-            approximateSize: estimateConfig.approximateSize,
             // Pass start date for timeline agent
             desiredStart: estimateConfig.startDate,
           },
@@ -939,17 +941,23 @@ export function EstimatePage() {
     }
   }, [projectId, user, clarificationPayload, buildClarificationOutput]);
 
-  // Handle generate JSON button click - uses TS estimation pipeline, logs to console
+  // Handle generate JSON button click - always recalculates fresh, no caching
   const handleGenerateJSON = useCallback(async () => {
     if (!projectId || !user) return;
 
     setIsGeneratingJSON(true);
+    // Clear any previous output to ensure fresh calculation
+    setJsonOutput(null);
+    
     try {
+      // Always build fresh - no caching
       const payload = await buildClarificationOutput();
       if (payload) {
-        setClarificationPayload(payload);
+        // Only set for display, don't cache in clarificationPayload
+        setJsonOutput(payload as unknown as Record<string, unknown>);
+        setShowJSONViewer(true);
         console.log(
-          "[FLOW][Estimate] Clarification payload cached for future pipeline run."
+          "[FLOW][Estimate] JSON output generated fresh (no caching)."
         );
       }
     } finally {
@@ -957,33 +965,44 @@ export function EstimatePage() {
     }
   }, [projectId, user, buildClarificationOutput]);
 
-  // Handle PDF generation - uses local PDF generation from exportService
+  // Handle PDF generation - uses Cloud Function PDF generator
   const handleGeneratePDF = useCallback(
-    (type: "contractor" | "client") => {
-      if (!projectId || !billOfMaterials) {
+    async (type: "contractor" | "client") => {
+      // Use estimateId if available (from deep pipeline), otherwise fall back to projectId
+      const pdfEstimateId = estimateId || projectId;
+
+      if (!pdfEstimateId) {
         setError("No estimate data available to export");
         return;
       }
 
       setIsGeneratingPDF(true);
       setPdfType(type);
+      setError(null);
 
       try {
-        // Use local PDF generation from exportService
-        // Maps "contractor" -> "contractor" view, "client" -> "customer" view
-        const view: BOMExportView =
-          type === "contractor" ? "contractor" : "customer";
-        exportEstimateAsPDF(billOfMaterials, view, {
-          projectName: billOfMaterials.projectName || `Project-${projectId}`,
-        });
+        // Call Cloud Function PDF generator
+        const result = type === "contractor"
+          ? await generateContractorPDF(pdfEstimateId)
+          : await generateClientPDF(pdfEstimateId);
+
+        if (!result.success) {
+          throw new Error(result.error || "PDF generation failed");
+        }
+
+        // Open the generated PDF in a new tab
+        if (result.pdfUrl) {
+          openPDFInNewTab(result.pdfUrl);
+        }
       } catch (err) {
+        console.error("[PDF] Generation error:", err);
         setError(err instanceof Error ? err.message : "PDF generation failed");
       } finally {
         setIsGeneratingPDF(false);
         setPdfType(null);
       }
     },
-    [projectId, billOfMaterials]
+    [estimateId, projectId]
   );
 
   // Navigation handlers
@@ -1336,12 +1355,7 @@ export function EstimatePage() {
                               Size
                             </p>
                             <p className="text-sm font-medium text-truecost-text-primary">
-                              {String(
-                                scopeSummary?.totalSqft ||
-                                  estimateConfig.approximateSize ||
-                                  "0"
-                              )}{" "}
-                              sq ft
+                              {String(scopeSummary?.totalSqft || "0")} sq ft
                             </p>
                           </div>
                           <div>
@@ -1806,6 +1820,9 @@ export function EstimatePage() {
         {activeTab === "time" && projectId && (
           <TimeView projectId={projectId} />
         )}
+        {activeTab === "riskAnalysis" && projectId && (
+          <RiskAnalysisView projectId={projectId} estimateId={estimateId} />
+        )}
         {activeTab === "priceComparison" && projectId && (
           <PriceComparisonPanel projectId={projectId} />
         )}
@@ -1919,6 +1936,97 @@ export function EstimatePage() {
             isVisible={showDebug}
             onClose={() => setShowDebug(false)}
           />
+        )}
+
+        {/* JSON Output Viewer Modal */}
+        {showJSONViewer && jsonOutput && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <div className="relative w-full max-w-5xl max-h-[90vh] bg-truecost-bg-secondary border border-truecost-glass-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-truecost-glass-border bg-truecost-bg-primary/50">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-truecost-cyan/20">
+                    <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-truecost-text-primary">
+                      ClarificationOutput JSON
+                    </h2>
+                    <p className="text-xs text-truecost-text-muted">
+                      Generated estimation pipeline output
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Copy button */}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(jsonOutput, null, 2));
+                      // Could add toast notification here
+                    }}
+                    className="px-3 py-1.5 text-sm rounded-lg bg-truecost-glass-bg hover:bg-truecost-glass-bg/80 text-truecost-text-secondary hover:text-truecost-text-primary transition-colors flex items-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copy
+                  </button>
+                  {/* Download button */}
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([JSON.stringify(jsonOutput, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `clarification-output-${Date.now()}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="px-3 py-1.5 text-sm rounded-lg bg-truecost-cyan/20 hover:bg-truecost-cyan/30 text-truecost-cyan transition-colors flex items-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Download
+                  </button>
+                  {/* Close button */}
+                  <button
+                    onClick={() => setShowJSONViewer(false)}
+                    className="p-2 rounded-lg hover:bg-truecost-glass-bg text-truecost-text-muted hover:text-truecost-text-primary transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              
+              {/* JSON Content */}
+              <div className="flex-1 overflow-auto p-4 bg-truecost-bg-primary/30">
+                <pre className="text-sm font-mono text-truecost-text-primary/90 whitespace-pre-wrap break-words leading-relaxed">
+                  <code>
+                    {JSON.stringify(jsonOutput, null, 2)}
+                  </code>
+                </pre>
+              </div>
+              
+              {/* Modal Footer */}
+              <div className="px-6 py-3 border-t border-truecost-glass-border bg-truecost-bg-primary/50 flex justify-between items-center">
+                <p className="text-xs text-truecost-text-muted">
+                  Schema Version: {String((jsonOutput as Record<string, unknown>)?.schemaVersion ?? 'N/A')} •
+                  Estimate ID: {String((jsonOutput as Record<string, unknown>)?.estimateId ?? 'N/A')}
+                </p>
+                <button
+                  onClick={() => setShowJSONViewer(false)}
+                  className="btn-pill-secondary"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </AuthenticatedLayout>
     </div>

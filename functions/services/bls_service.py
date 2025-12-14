@@ -90,6 +90,14 @@ MSA_CODE_MAP: Dict[str, Dict] = {
     # Atlanta-Sandy Springs-Alpharetta, GA
     "30301": {"msa_code": "12060", "metro_name": "Atlanta-Sandy Springs-Alpharetta, GA"},
     "30302": {"msa_code": "12060", "metro_name": "Atlanta-Sandy Springs-Alpharetta, GA"},
+    # Durham-Chapel Hill, NC
+    "27701": {"msa_code": "20500", "metro_name": "Durham-Chapel Hill, NC"},
+    "27702": {"msa_code": "20500", "metro_name": "Durham-Chapel Hill, NC"},
+    "27703": {"msa_code": "20500", "metro_name": "Durham-Chapel Hill, NC"},
+    # Austin-Round Rock-San Marcos, TX
+    "78701": {"msa_code": "12420", "metro_name": "Austin-Round Rock-San Marcos, TX"},
+    "78702": {"msa_code": "12420", "metro_name": "Austin-Round Rock-San Marcos, TX"},
+    "78703": {"msa_code": "12420", "metro_name": "Austin-Round Rock-San Marcos, TX"},
 }
 
 # Zip prefix to MSA mapping for fallback (when specific zip not in MSA_CODE_MAP)
@@ -110,6 +118,11 @@ ZIP_PREFIX_TO_MSA: Dict[str, Dict] = {
     "982": {"msa_code": "42660", "metro_name": "Seattle-Tacoma-Bellevue, WA"},
     "303": {"msa_code": "12060", "metro_name": "Atlanta-Sandy Springs-Alpharetta, GA"},
     "304": {"msa_code": "12060", "metro_name": "Atlanta-Sandy Springs-Alpharetta, GA"},
+    # Durham-Chapel Hill, NC
+    "277": {"msa_code": "20500", "metro_name": "Durham-Chapel Hill, NC"},
+    # Austin-Round Rock-San Marcos, TX
+    "787": {"msa_code": "12420", "metro_name": "Austin-Round Rock-San Marcos, TX"},
+    "786": {"msa_code": "12420", "metro_name": "Austin-Round Rock-San Marcos, TX"},
 }
 
 # Default benefits burden percentage (35%)
@@ -174,99 +187,121 @@ class BLSResponse:
 # =============================================================================
 
 # Default labor rates by MSA for fallback when API fails (AC 4.5.8)
+# Updated with O*NET 2024 median hourly wages (source: BLS OES via O*NET Online)
 DEFAULT_RATES_BY_MSA: Dict[str, Dict[str, float]] = {
-    "35620": {  # NYC
-        "electrician": 87.20,
-        "plumber": 84.50,
-        "carpenter": 63.80,
-        "hvac_tech": 79.50,
-        "roofer": 56.20,
-        "painter": 47.50,
-        "tile_setter": 53.10,
-        "general_labor": 36.80,
+    "35620": {  # NYC - New York-Newark-Jersey City
+        "electrician": 36.76,
+        "plumber": 38.18,
+        "carpenter": 33.50,
+        "hvac_tech": 35.62,
+        "roofer": 35.80,
+        "painter": 28.10,
+        "tile_setter": 35.02,
+        "general_labor": 29.74,
     },
-    "31080": {  # LA
-        "electrician": 78.50,
-        "plumber": 75.20,
-        "carpenter": 58.90,
-        "hvac_tech": 72.30,
-        "roofer": 52.10,
-        "painter": 44.80,
-        "tile_setter": 49.50,
-        "general_labor": 34.20,
+    "31080": {  # LA - Los Angeles-Long Beach-Anaheim
+        "electrician": 36.60,
+        "plumber": 31.30,
+        "carpenter": 35.50,
+        "hvac_tech": 31.16,
+        "roofer": 30.22,
+        "painter": 27.91,
+        "tile_setter": 26.54,
+        "general_labor": 28.62,
     },
-    "16980": {  # Chicago
-        "electrician": 82.30,
-        "plumber": 79.80,
-        "carpenter": 61.20,
-        "hvac_tech": 75.60,
-        "roofer": 54.30,
-        "painter": 46.10,
-        "tile_setter": 51.20,
-        "general_labor": 35.50,
+    "16980": {  # Chicago - Chicago-Naperville-Elgin
+        "electrician": 47.86,
+        "plumber": 47.54,
+        "carpenter": 36.79,
+        "hvac_tech": 35.77,
+        "roofer": 33.45,
+        "painter": 30.36,
+        "tile_setter": 25.69,
+        "general_labor": 32.89,
     },
-    "26420": {  # Houston
-        "electrician": 58.40,
-        "plumber": 55.90,
-        "carpenter": 45.60,
-        "hvac_tech": 54.20,
-        "roofer": 42.80,
-        "painter": 38.50,
-        "tile_setter": 43.10,
-        "general_labor": 28.90,
+    "26420": {  # Houston - Houston-Pasadena-The Woodlands
+        "electrician": 28.45,
+        "plumber": 28.96,
+        "carpenter": 23.51,
+        "hvac_tech": 27.84,
+        "roofer": 21.41,
+        "painter": 21.63,
+        "tile_setter": 20.98,
+        "general_labor": 18.51,
     },
-    "38060": {  # Phoenix
-        "electrician": 55.80,
-        "plumber": 53.20,
-        "carpenter": 44.10,
-        "hvac_tech": 58.60,
-        "roofer": 43.50,
-        "painter": 37.20,
-        "tile_setter": 41.80,
-        "general_labor": 27.60,
+    "38060": {  # Phoenix - Arizona state data (Phoenix MSA not available)
+        "electrician": 28.60,
+        "plumber": 29.78,
+        "carpenter": 26.22,
+        "hvac_tech": 27.20,
+        "roofer": 22.22,
+        "painter": 22.74,
+        "tile_setter": 23.15,
+        "general_labor": 22.21,
     },
-    "19740": {  # Denver
-        "electrician": 62.40,
-        "plumber": 59.80,
-        "carpenter": 50.20,
-        "hvac_tech": 61.50,
-        "roofer": 47.30,
-        "painter": 41.20,
-        "tile_setter": 46.50,
-        "general_labor": 31.40,
+    "19740": {  # Denver - Colorado data unavailable, using national averages
+        "electrician": 29.98,
+        "plumber": 30.27,
+        "carpenter": 28.51,
+        "hvac_tech": 28.75,
+        "roofer": 24.51,
+        "painter": 23.40,
+        "tile_setter": 25.11,
+        "general_labor": 22.47,
     },
-    "42660": {  # Seattle
-        "electrician": 76.80,
-        "plumber": 73.50,
-        "carpenter": 60.10,
-        "hvac_tech": 71.20,
-        "roofer": 53.40,
-        "painter": 45.80,
-        "tile_setter": 50.60,
-        "general_labor": 34.80,
+    "42660": {  # Seattle - Seattle-Tacoma-Bellevue
+        "electrician": 48.85,
+        "plumber": 41.90,
+        "carpenter": 36.90,
+        "hvac_tech": 36.30,
+        "roofer": 29.86,
+        "painter": 28.49,
+        "tile_setter": 35.25,
+        "general_labor": 28.70,
     },
-    "12060": {  # Atlanta
-        "electrician": 54.20,
-        "plumber": 51.80,
-        "carpenter": 43.50,
-        "hvac_tech": 52.90,
-        "roofer": 41.20,
-        "painter": 36.80,
-        "tile_setter": 40.50,
-        "general_labor": 27.20,
+    "12060": {  # Atlanta - Atlanta-Sandy Springs-Roswell
+        "electrician": 29.04,
+        "plumber": 28.22,
+        "carpenter": 24.71,
+        "hvac_tech": 27.32,
+        "roofer": 23.56,
+        "painter": 23.39,
+        "tile_setter": 23.78,
+        "general_labor": 19.02,
+    },
+    "20500": {  # Durham - Durham-Chapel Hill, NC
+        "electrician": 27.74,
+        "plumber": 28.36,
+        "carpenter": 23.51,
+        "hvac_tech": 27.11,
+        "roofer": 23.86,
+        "painter": 22.38,
+        "tile_setter": 21.26,  # NC state data (metro not available)
+        "general_labor": 21.57,
+    },
+    "12420": {  # Austin - Austin-Round Rock-San Marcos, TX
+        "electrician": 28.38,
+        "plumber": 29.94,
+        "carpenter": 23.87,
+        "hvac_tech": 28.30,
+        "roofer": 23.09,
+        "painter": 21.84,
+        "tile_setter": 20.93,  # TX state data (metro not available)
+        "general_labor": 18.94,
     },
 }
 
 # National average rates for fallback when MSA not found
+# Updated with O*NET 2024 median hourly wages (source: BLS OES via O*NET Online)
 NATIONAL_AVERAGE_RATES: Dict[str, float] = {
-    "electrician": 65.50,
-    "plumber": 62.80,
-    "carpenter": 52.30,
-    "hvac_tech": 61.20,
-    "roofer": 47.50,
-    "painter": 41.80,
-    "tile_setter": 46.20,
-    "general_labor": 30.50,
+    "electrician": 29.98,
+    "plumber": 30.27,
+    "carpenter": 28.51,
+    "hvac_tech": 28.75,
+    "roofer": 24.51,
+    "painter": 23.40,
+    "tile_setter": 25.11,
+    "general_labor": 22.47,
 }
 
 

@@ -66,6 +66,9 @@ export function MobileMenu() {
               <NavLink to="/how-it-works" onClick={closeMenu}>
                 How It Works
               </NavLink>
+              <NavLink to="/pricing" onClick={closeMenu}>
+                Pricing
+              </NavLink>
               <NavLink to="/about" onClick={closeMenu}>
                 About Us
               </NavLink>

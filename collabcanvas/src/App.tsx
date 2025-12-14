@@ -9,6 +9,7 @@ import { Signup } from './pages/Signup';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
 import { HowItWorks } from './pages/HowItWorks';
+import { Pricing } from './pages/Pricing';
 import { AboutUs } from './pages/AboutUs';
 import { ContactUs } from './pages/ContactUs';
 
@@ -76,6 +77,7 @@ function App() {
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/how-it-works" element={<HowItWorks />} />
+        <Route path="/pricing" element={<Pricing />} />
         <Route path="/about" element={<AboutUs />} />
         <Route path="/contact" element={<ContactUs />} />
 

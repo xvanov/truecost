@@ -37,5 +37,12 @@ firebase-debug.log*
 # Local development
 *.local
 
+# Generated outputs
+demo_output.json
+integration_test_output.json
+monte_carlo_results.html
+pipeline_dashboard.html
+sample_estimate*.pdf
+
 
 

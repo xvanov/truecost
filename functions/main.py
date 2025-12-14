@@ -508,6 +508,107 @@ async def _delete_estimate_async(estimate_id: str, user_id: str) -> None:
     await firestore_service.delete_estimate(estimate_id)
 
 
+# ============================================================================
+# PDF Generation
+# ============================================================================
+
+
+@https_fn.on_request(
+    timeout_sec=120,  # 2 minutes for PDF generation
+    memory=options.MemoryOption.GB_1,
+    region="us-central1"
+)
+def generate_pdf(req: https_fn.Request) -> https_fn.Response:
+    """Generate PDF estimate report.
+
+    This endpoint generates a professional PDF report using WeasyPrint + Jinja2.
+    Supports both contractor (full) and client (simplified) versions.
+
+    Request body:
+    {
+        "project_id": "proj-xxx",  // or "estimate_id" for backward compatibility
+        "client_ready": false,     // true for client version, false for contractor
+        "sections": ["executive_summary", "cost_breakdown", ...]  // Optional: specific sections
+    }
+
+    Response:
+    {
+        "success": true,
+        "pdf_url": "https://storage.googleapis.com/...",
+        "storage_path": "gs://bucket/pdfs/...",
+        "page_count": 12,
+        "file_size_bytes": 123456,
+        "generated_at": "2025-12-13T..."
+    }
+    """
+    if req.method == "OPTIONS":
+        return _cors_response()
+
+    try:
+        data = get_request_json(req)
+
+        # Support both project_id and estimate_id for flexibility
+        estimate_id = data.get("estimate_id") or data.get("project_id")
+        client_ready = data.get("client_ready", False)
+        sections = data.get("sections")  # Optional: list of sections to include
+
+        if not estimate_id:
+            return _json_response(
+                error_response(
+                    ErrorCode.MISSING_FIELD,
+                    "Missing estimate_id or project_id in request"
+                ),
+                status=400
+            )
+
+        logger.info(
+            "pdf_generation_requested",
+            estimate_id=estimate_id,
+            client_ready=client_ready,
+            sections=sections
+        )
+
+        # Run async PDF generation
+        result = asyncio.run(_generate_pdf_async(estimate_id, sections, client_ready))
+
+        return _json_response({
+            "success": True,
+            "pdf_url": result.pdf_url,
+            "storage_path": result.storage_path,
+            "page_count": result.page_count,
+            "file_size_bytes": result.file_size_bytes,
+            "generated_at": result.generated_at
+        })
+
+    except TrueCostError as e:
+        logger.error("pdf_generation_error", error=e.message, code=e.code)
+        return _json_response(
+            {"success": False, "error": e.message},
+            status=500
+        )
+    except Exception as e:
+        logger.exception("pdf_generation_exception", error=str(e))
+        return _json_response(
+            {"success": False, "error": f"Failed to generate PDF: {str(e)}"},
+            status=500
+        )
+
+
+async def _generate_pdf_async(
+    estimate_id: str,
+    sections: list | None,
+    client_ready: bool
+):
+    """Run PDF generation asynchronously."""
+    from services.pdf_generator import generate_pdf as generate_pdf_service
+
+    return await generate_pdf_service(
+        estimate_id=estimate_id,
+        sections=sections,
+        client_ready=client_ready
+    )
+
+
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",

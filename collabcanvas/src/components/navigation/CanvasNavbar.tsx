@@ -9,7 +9,6 @@ import { FileUpload } from '../FileUpload';
 import { ScaleTool } from '../ScaleTool';
 import { ExportDialog } from '../ExportDialog';
 import { ShortcutsHelp } from '../ShortcutsHelp';
-import { FloatingChatPanel } from '../estimate/FloatingChatPanel';
 import { MaterialEstimationPanel } from '../MaterialEstimationPanel';
 import logo from '../../assets/logo.png';
 import Konva from 'konva';
@@ -66,7 +65,6 @@ export function CanvasNavbar({
   const gridState = useCanvasStore((state) => state.gridState);
   const toggleGrid = useCanvasStore((state) => state.toggleGrid);
   const clearSelection = useCanvasStore((state) => state.clearSelection);
-  const isProcessingAICommand = useCanvasStore((state) => state.isProcessingAICommand);
 
   // Hooks
   const { deleteShapes: deleteShapesFromHook } = useShapes(projectId);
@@ -81,7 +79,6 @@ export function CanvasNavbar({
   // Dialog states
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isShortcutsHelpOpen, setIsShortcutsHelpOpen] = useState(false);
-  const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
   const [isMaterialPanelOpen, setIsMaterialPanelOpen] = useState(false);
 
   // Refs
@@ -228,7 +225,12 @@ export function CanvasNavbar({
                 <svg className="w-4 h-4 text-truecost-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-                <span className="text-sm text-truecost-text-muted">Estimate</span>
+                <button
+                  onClick={onGenerateEstimate}
+                  className="text-sm text-truecost-text-muted hover:text-truecost-cyan transition-colors"
+                >
+                  Estimate
+                </button>
               </div>
 
               {/* Divider */}
@@ -412,16 +414,6 @@ export function CanvasNavbar({
                         </button>
                         <div className="my-1 border-t border-truecost-glass-border" />
                         <button
-                          onClick={() => { setIsAIAssistantOpen(true); setIsAdvancedMenuOpen(false); }}
-                          disabled={!currentUser}
-                          className={dropdownItemClass}
-                        >
-                          {isProcessingAICommand ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-truecost-cyan" />
-                          ) : null}
-                          AI Assistant
-                        </button>
-                        <button
                           onClick={() => { setIsMaterialPanelOpen(true); setIsAdvancedMenuOpen(false); }}
                           disabled={!currentUser}
                           className={dropdownItemClass}
@@ -477,10 +469,6 @@ export function CanvasNavbar({
       <ShortcutsHelp
         isOpen={isShortcutsHelpOpen}
         onClose={() => setIsShortcutsHelpOpen(false)}
-      />
-      <FloatingChatPanel
-        isVisible={isAIAssistantOpen}
-        onClose={() => setIsAIAssistantOpen(false)}
       />
       <MaterialEstimationPanel
         isVisible={isMaterialPanelOpen}

@@ -154,12 +154,14 @@ function computeQuantitiesFromAnnotations(annotations) {
     const result = {
         hasScale: false,
         scaleUnit: 'feet',
-        pixelsPerUnit: 0,
+        pixelsPerUnit: 1,
         totalWallLength: 0,
         totalFloorArea: 0,
         totalRoomCount: 0,
         totalDoorCount: 0,
         totalWindowCount: 0,
+        totalWallLengthPixels: 0,
+        totalFloorAreaPixels: 0,
         walls: [],
         rooms: [],
         doors: [],
@@ -171,6 +173,7 @@ function computeQuantitiesFromAnnotations(annotations) {
     // Check if scale is available
     if (!annotations.scale || annotations.scale.pixelsPerUnit <= 0) {
         result.warnings.push('No scale set - measurements will be in pixels only');
+        // Keep defaults: hasScale=false, scaleUnit='feet' (valid schema value), pixelsPerUnit=1
     }
     else {
         result.hasScale = true;
@@ -179,7 +182,7 @@ function computeQuantitiesFromAnnotations(annotations) {
     }
     const { shapes, layers, scale } = annotations;
     const pixelsPerUnit = (scale === null || scale === void 0 ? void 0 : scale.pixelsPerUnit) || 1;
-    const unit = (scale === null || scale === void 0 ? void 0 : scale.unit) || 'pixels';
+    const unit = (scale === null || scale === void 0 ? void 0 : scale.unit) || 'feet'; // Default to 'feet' - schema requires valid unit
     // Create layer lookup
     const layerMap = new Map();
     for (const layer of layers) {
@@ -202,29 +205,37 @@ function computeQuantitiesFromAnnotations(annotations) {
             // Polylines are typically walls or linear measurements
             const points = flatPointsToPoints(shape.points);
             const lengthPixels = calculatePolylineLength(points);
-            const lengthReal = result.hasScale ? pixelsToReal(lengthPixels, pixelsPerUnit) : lengthPixels;
+            // Only compute real length when scale is available
+            const lengthReal = result.hasScale ? pixelsToReal(lengthPixels, pixelsPerUnit) : 0;
             const wall = {
                 id: shape.id,
                 label: shape.label,
                 lengthPixels,
                 lengthReal,
-                unit: result.hasScale ? unit : 'pixels',
+                unit: result.hasScale ? unit : 'feet',
                 layerName: layer.name,
                 confidence: 1.0,
                 source: 'cad_extraction',
             };
             result.walls.push(wall);
-            result.totalWallLength += lengthReal;
-            // Update layer summary
-            result.layerSummary[layer.name].totalLength = (result.layerSummary[layer.name].totalLength || 0) + lengthReal;
+            // Always accumulate pixel totals
+            result.totalWallLengthPixels += lengthPixels;
+            // Only accumulate real-world totals when scale is available
+            if (result.hasScale) {
+                result.totalWallLength += lengthReal;
+            }
+            // Update layer summary (use real units when available, pixels otherwise)
+            const lengthForSummary = result.hasScale ? lengthReal : lengthPixels;
+            result.layerSummary[layer.name].totalLength = (result.layerSummary[layer.name].totalLength || 0) + lengthForSummary;
         }
         else if (shape.type === 'polygon' && shape.points && shape.points.length >= 6) {
             // Polygons are typically rooms/floor areas
             const points = flatPointsToPoints(shape.points);
             const areaPixels = calculatePolygonArea(points);
             const perimeterPixels = calculatePolygonPerimeter(points);
-            const areaReal = result.hasScale ? pixelAreaToReal(areaPixels, pixelsPerUnit) : areaPixels;
-            const perimeterReal = result.hasScale ? pixelsToReal(perimeterPixels, pixelsPerUnit) : perimeterPixels;
+            // Only compute real values when scale is available
+            const areaReal = result.hasScale ? pixelAreaToReal(areaPixels, pixelsPerUnit) : 0;
+            const perimeterReal = result.hasScale ? pixelsToReal(perimeterPixels, pixelsPerUnit) : 0;
             const room = {
                 id: shape.id,
                 name: shape.label || layer.name || 'Room',
@@ -232,16 +243,22 @@ function computeQuantitiesFromAnnotations(annotations) {
                 areaReal,
                 perimeterPixels,
                 perimeterReal,
-                unit: result.hasScale ? unit : 'pixels',
+                unit: result.hasScale ? unit : 'feet',
                 layerName: layer.name,
                 confidence: 1.0,
                 source: 'cad_extraction',
             };
             result.rooms.push(room);
-            result.totalFloorArea += areaReal;
+            // Always accumulate pixel totals
+            result.totalFloorAreaPixels += areaPixels;
+            // Only accumulate real-world totals when scale is available
+            if (result.hasScale) {
+                result.totalFloorArea += areaReal;
+            }
             result.totalRoomCount++;
-            // Update layer summary
-            result.layerSummary[layer.name].totalArea = (result.layerSummary[layer.name].totalArea || 0) + areaReal;
+            // Update layer summary (use real units when available, pixels otherwise)
+            const areaForSummary = result.hasScale ? areaReal : areaPixels;
+            result.layerSummary[layer.name].totalArea = (result.layerSummary[layer.name].totalArea || 0) + areaForSummary;
         }
         else if (shape.type === 'rect' || shape.type === 'boundingbox') {
             // Rectangles/bounding boxes - could be doors, windows, or fixtures
@@ -258,7 +275,7 @@ function computeQuantitiesFromAnnotations(annotations) {
                     widthReal,
                     heightPixels,
                     heightReal,
-                    unit: result.hasScale ? unit : 'pixels',
+                    unit: result.hasScale ? unit : 'feet',
                     layerName: layer.name,
                     confidence: 1.0,
                     source: 'cad_extraction',
@@ -274,7 +291,7 @@ function computeQuantitiesFromAnnotations(annotations) {
                     widthReal,
                     heightPixels,
                     heightReal,
-                    unit: result.hasScale ? unit : 'pixels',
+                    unit: result.hasScale ? unit : 'feet',
                     layerName: layer.name,
                     confidence: 1.0,
                     source: 'cad_extraction',
@@ -292,7 +309,7 @@ function computeQuantitiesFromAnnotations(annotations) {
                     widthReal,
                     heightPixels,
                     heightReal,
-                    unit: result.hasScale ? unit : 'pixels',
+                    unit: result.hasScale ? unit : 'feet',
                     layerName: layer.name,
                     confidence: 1.0,
                     source: 'cad_extraction',
@@ -301,21 +318,24 @@ function computeQuantitiesFromAnnotations(annotations) {
             }
         }
     }
-    // Add warnings for missing data
-    if (result.totalWallLength === 0 && shapes.length > 0) {
+    // Add warnings for missing data (check pixel totals since real totals are 0 when no scale)
+    if (result.totalWallLengthPixels === 0 && shapes.length > 0) {
         result.warnings.push('No wall measurements found - add polylines in a "Walls" layer');
     }
-    if (result.totalFloorArea === 0 && shapes.length > 0) {
+    if (result.totalFloorAreaPixels === 0 && shapes.length > 0) {
         result.warnings.push('No floor area measurements found - add polygons in a "Floor" or "Rooms" layer');
     }
     console.log('[QUANTIFIER] Computed from annotations:', {
         hasScale: result.hasScale,
+        scaleUnit: result.scaleUnit,
         walls: result.walls.length,
         rooms: result.rooms.length,
         doors: result.doors.length,
         windows: result.windows.length,
         totalWallLength: result.totalWallLength,
+        totalWallLengthPixels: result.totalWallLengthPixels,
         totalFloorArea: result.totalFloorArea,
+        totalFloorAreaPixels: result.totalFloorAreaPixels,
     });
     return result;
 }
@@ -324,7 +344,8 @@ exports.computeQuantitiesFromAnnotations = computeQuantitiesFromAnnotations;
  * Build SpaceModel from computed quantities
  */
 function buildSpaceModelFromQuantities(quantities) {
-    // Build rooms array
+    // Build rooms array - use real values when scale available, otherwise use pixel-based estimates
+    // Note: Schema requires length/width fields with valid units (feet/inches/meters)
     const rooms = quantities.rooms.map((room, index) => ({
         id: room.id,
         name: room.name || `Room ${index + 1}`,
@@ -333,64 +354,97 @@ function buildSpaceModelFromQuantities(quantities) {
                 room.layerName.toLowerCase().includes('bed') ? 'bedroom' :
                     room.layerName.toLowerCase().includes('living') ? 'living_room' :
                         'room',
-        sqft: quantities.scaleUnit === 'feet' ? room.areaReal :
-            quantities.scaleUnit === 'meters' ? room.areaReal * 10.764 : // convert sq m to sq ft
-                room.areaReal,
+        // Only provide sqft when we have a valid scale
+        sqft: quantities.hasScale
+            ? (quantities.scaleUnit === 'feet' ? room.areaReal :
+                quantities.scaleUnit === 'meters' ? room.areaReal * 10.764 : // convert sq m to sq ft
+                    room.areaReal)
+            : 0,
+        sqftPixels: room.areaPixels,
+        // Always use length/width field names (required by schema)
+        // When no scale, use pixel values as placeholders and flag for verification
         dimensions: {
-            // Approximate dimensions from area (assuming roughly square)
-            length: Math.sqrt(room.areaReal),
-            width: Math.sqrt(room.areaReal),
+            length: quantities.hasScale ? Math.sqrt(room.areaReal) : Math.sqrt(room.areaPixels),
+            width: quantities.hasScale ? Math.sqrt(room.areaReal) : Math.sqrt(room.areaPixels),
         },
-        confidence: room.confidence,
-        needsVerification: false,
+        confidence: quantities.hasScale ? room.confidence : 0.1,
+        needsVerification: !quantities.hasScale, // Flag for verification when no scale
     }));
-    // Build walls array
+    // Build walls array - use real values when scale available
     const walls = quantities.walls.map((wall, _index) => ({
         id: wall.id,
-        length: quantities.scaleUnit === 'feet' ? wall.lengthReal :
-            quantities.scaleUnit === 'meters' ? wall.lengthReal * 3.281 : // convert m to ft
-                wall.lengthReal,
+        length: quantities.hasScale
+            ? (quantities.scaleUnit === 'feet' ? wall.lengthReal :
+                quantities.scaleUnit === 'meters' ? wall.lengthReal * 3.281 : // convert m to ft
+                    wall.lengthReal)
+            : 0,
+        lengthPixels: wall.lengthPixels,
         type: 'interior',
         confidence: wall.confidence,
     }));
-    // Build openings array
+    // Build openings array using COUNTS with standard USA sizes
+    // Door and window quantities are COUNTS, not areas from bounding boxes
     const openings = [
-        ...quantities.doors.map(door => ({
+        // Standard USA interior door: 32" x 80" (2.67' x 6.67')
+        ...quantities.doors.map((door, index) => ({
             id: door.id,
             type: 'door',
-            width: door.widthReal,
-            height: door.heightReal || 6.67,
+            width: 2.67,
+            height: 6.67,
+            standardSize: '32" x 80"',
             confidence: door.confidence,
+            note: `Door ${index + 1} of ${quantities.doors.length} (standard USA size applied)`,
         })),
-        ...quantities.windows.map(window => ({
+        // Standard USA window: 36" x 48" (3' x 4')
+        ...quantities.windows.map((window, index) => ({
             id: window.id,
             type: 'window',
-            width: window.widthReal,
-            height: window.heightReal,
+            width: 3.0,
+            height: 4.0,
+            standardSize: '36" x 48"',
             confidence: window.confidence,
+            note: `Window ${index + 1} of ${quantities.windows.length} (standard USA size applied)`,
         })),
     ];
+    // Determine the output unit - default to 'feet' when no scale is available
+    // Schema requires units to be 'feet', 'inches', or 'meters' (not 'pixels')
+    const outputUnit = quantities.hasScale ? quantities.scaleUnit : 'feet';
     return {
-        totalSqft: quantities.totalFloorArea,
+        totalSqft: quantities.hasScale ? quantities.totalFloorArea : 0,
+        totalSqftPixels: quantities.totalFloorAreaPixels,
+        // Always use length/width/height field names (required by schema)
+        // When no scale, use pixel values as placeholders with 'feet' unit
         boundingBox: {
-            length: Math.sqrt(quantities.totalFloorArea) * 1.2,
-            width: Math.sqrt(quantities.totalFloorArea) * 1.2,
+            length: quantities.hasScale
+                ? Math.sqrt(quantities.totalFloorArea) * 1.2
+                : Math.sqrt(quantities.totalFloorAreaPixels) * 1.2,
+            width: quantities.hasScale
+                ? Math.sqrt(quantities.totalFloorArea) * 1.2
+                : Math.sqrt(quantities.totalFloorAreaPixels) * 1.2,
             height: 8,
-            units: quantities.scaleUnit,
+            units: outputUnit,
         },
         scale: {
             detected: quantities.hasScale,
             ratio: quantities.pixelsPerUnit,
-            units: quantities.scaleUnit,
+            units: outputUnit, // Use valid unit (not 'pixels')
         },
         rooms,
         walls,
         openings,
+        // Add flag to indicate data needs scale calibration
+        needsScaleCalibration: !quantities.hasScale,
     };
 }
 exports.buildSpaceModelFromQuantities = buildSpaceModelFromQuantities;
+// Unit conversion constants
+const METERS_TO_FEET = 3.28084;
+const SQ_METERS_TO_SQ_FEET = 10.7639;
 /**
  * Build CSI line items from computed quantities
+ * Note: Measurement-based items (linear feet, sqft) are only generated when scale is available.
+ * Count-based items (doors, windows) are always generated.
+ * All CSI items are output in US customary units (feet, sqft).
  */
 function buildCSIItemsFromQuantities(quantities) {
     const items = {
@@ -398,21 +452,54 @@ function buildCSIItemsFromQuantities(quantities) {
         div08_openings: [],
         div09_finishes: [], // Drywall, paint, flooring
     };
-    // Wall framing items (Div 06)
-    if (quantities.totalWallLength > 0) {
+    // Convert to feet/sqft based on source unit
+    const toLinearFeet = (value) => {
+        if (quantities.scaleUnit === 'meters')
+            return value * METERS_TO_FEET;
+        if (quantities.scaleUnit === 'inches')
+            return value / 12;
+        return value; // already in feet
+    };
+    const toSquareFeet = (value) => {
+        if (quantities.scaleUnit === 'meters')
+            return value * SQ_METERS_TO_SQ_FEET;
+        if (quantities.scaleUnit === 'inches')
+            return value / 144;
+        return value; // already in sqft
+    };
+    // Wall framing items (Div 06) - only when scale is available
+    if (quantities.hasScale && quantities.totalWallLength > 0) {
+        const wallLengthFeet = toLinearFeet(quantities.totalWallLength);
         items.div06_wood_plastics_composites.push({
             id: 'wall-framing-001',
             item: 'Wall Framing - Studs',
-            quantity: quantities.totalWallLength,
+            quantity: wallLengthFeet,
             unit: 'linear_feet',
             unitDescription: 'linear feet of wall',
             specifications: '2x4 studs @ 16" OC',
             confidence: 1.0,
             source: 'cad_extraction',
-            notes: `Calculated from ${quantities.walls.length} annotated wall segments`,
+            notes: `Calculated from ${quantities.walls.length} annotated wall segments` +
+                (quantities.scaleUnit !== 'feet' ? ` (converted from ${quantities.scaleUnit})` : ''),
         });
     }
-    // Door items (Div 08)
+    else if (!quantities.hasScale && quantities.totalWallLengthPixels > 0) {
+        // Add placeholder when no scale but walls exist
+        items.div06_wood_plastics_composites.push({
+            id: 'wall-framing-001',
+            item: 'Wall Framing - Studs',
+            quantity: 0,
+            quantityPixels: quantities.totalWallLengthPixels,
+            unit: 'linear_feet',
+            unitDescription: 'linear feet of wall (SCALE REQUIRED)',
+            specifications: '2x4 studs @ 16" OC',
+            confidence: 0,
+            source: 'cad_extraction',
+            notes: `${quantities.walls.length} wall segments detected but scale not set - set scale to calculate quantities`,
+            requiresScale: true,
+        });
+    }
+    // Door items (Div 08) - counts are always valid
     if (quantities.doors.length > 0) {
         items.div08_openings.push({
             id: 'doors-001',
@@ -425,7 +512,7 @@ function buildCSIItemsFromQuantities(quantities) {
             notes: 'Count from annotated door locations',
         });
     }
-    // Window items (Div 08)
+    // Window items (Div 08) - counts are always valid
     if (quantities.windows.length > 0) {
         items.div08_openings.push({
             id: 'windows-001',
@@ -438,10 +525,11 @@ function buildCSIItemsFromQuantities(quantities) {
             notes: 'Count from annotated window locations',
         });
     }
-    // Drywall from wall length (Div 09)
-    if (quantities.totalWallLength > 0) {
-        // Assume 8ft ceiling height, both sides of wall
-        const wallSqft = quantities.totalWallLength * 8 * 2;
+    // Drywall from wall length (Div 09) - only when scale is available
+    if (quantities.hasScale && quantities.totalWallLength > 0) {
+        // Convert wall length to feet, then calculate sqft (8ft ceiling height, both sides)
+        const wallLengthFeet = toLinearFeet(quantities.totalWallLength);
+        const wallSqft = wallLengthFeet * 8 * 2;
         items.div09_finishes.push({
             id: 'drywall-001',
             item: 'Drywall - Walls',
@@ -454,29 +542,73 @@ function buildCSIItemsFromQuantities(quantities) {
             notes: 'Calculated from wall lengths x 8ft height x 2 sides',
         });
     }
-    // Flooring from room areas (Div 09)
-    if (quantities.totalFloorArea > 0) {
+    else if (!quantities.hasScale && quantities.totalWallLengthPixels > 0) {
+        items.div09_finishes.push({
+            id: 'drywall-001',
+            item: 'Drywall - Walls',
+            quantity: 0,
+            quantityPixels: quantities.totalWallLengthPixels,
+            unit: 'square_feet',
+            unitDescription: 'square feet of drywall (SCALE REQUIRED)',
+            specifications: '1/2" gypsum board',
+            confidence: 0,
+            source: 'cad_extraction',
+            notes: 'Wall segments detected but scale not set - set scale to calculate quantities',
+            requiresScale: true,
+        });
+    }
+    // Flooring from room areas (Div 09) - only when scale is available
+    if (quantities.hasScale && quantities.totalFloorArea > 0) {
+        const floorAreaSqft = toSquareFeet(quantities.totalFloorArea);
         items.div09_finishes.push({
             id: 'flooring-001',
             item: 'Flooring',
-            quantity: quantities.totalFloorArea,
+            quantity: floorAreaSqft,
             unit: 'square_feet',
             unitDescription: 'square feet of flooring',
             specifications: 'To be specified',
             confidence: 1.0,
             source: 'cad_extraction',
-            notes: `Calculated from ${quantities.rooms.length} annotated room areas`,
+            notes: `Calculated from ${quantities.rooms.length} annotated room areas` +
+                (quantities.scaleUnit !== 'feet' ? ` (converted from ${quantities.scaleUnit})` : ''),
         });
         // Paint for ceiling
         items.div09_finishes.push({
             id: 'paint-ceiling-001',
             item: 'Ceiling Paint',
-            quantity: quantities.totalFloorArea,
+            quantity: floorAreaSqft,
             unit: 'square_feet',
             specifications: 'Ceiling paint, 2 coats',
             confidence: 1.0,
             source: 'cad_extraction',
             notes: 'Ceiling area equals floor area',
+        });
+    }
+    else if (!quantities.hasScale && quantities.totalFloorAreaPixels > 0) {
+        items.div09_finishes.push({
+            id: 'flooring-001',
+            item: 'Flooring',
+            quantity: 0,
+            quantityPixels: quantities.totalFloorAreaPixels,
+            unit: 'square_feet',
+            unitDescription: 'square feet of flooring (SCALE REQUIRED)',
+            specifications: 'To be specified',
+            confidence: 0,
+            source: 'cad_extraction',
+            notes: `${quantities.rooms.length} room areas detected but scale not set - set scale to calculate quantities`,
+            requiresScale: true,
+        });
+        items.div09_finishes.push({
+            id: 'paint-ceiling-001',
+            item: 'Ceiling Paint',
+            quantity: 0,
+            quantityPixels: quantities.totalFloorAreaPixels,
+            unit: 'square_feet',
+            specifications: 'Ceiling paint, 2 coats',
+            confidence: 0,
+            source: 'cad_extraction',
+            notes: 'Room areas detected but scale not set - set scale to calculate quantities',
+            requiresScale: true,
         });
     }
     return items;
