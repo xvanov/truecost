@@ -4,9 +4,6 @@
  * Story: 6-2 - Dual PDF export (Contractor vs Client)
  */
 
-import { httpsCallable } from 'firebase/functions';
-import { functions } from './firebase';
-
 /**
  * PDF generation options
  */
@@ -22,46 +19,77 @@ export interface PDFGenerateOptions {
 export interface PDFGenerateResult {
   success: boolean;
   pdfUrl?: string;
+  storagePath?: string;
+  pageCount?: number;
+  fileSizeBytes?: number;
+  generatedAt?: string;
   error?: string;
+}
+
+/**
+ * Get the Python Functions URL for PDF generation
+ * PDF generation runs in the Python backend, not TypeScript Firebase Functions
+ */
+function getPythonFunctionsUrl(): string {
+  // Check for explicit Python Functions URL (local development)
+  const pythonUrl = import.meta.env.VITE_PYTHON_FUNCTIONS_URL;
+  if (pythonUrl) {
+    return pythonUrl;
+  }
+
+  // Production: Use Cloud Run or deployed Python functions URL
+  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+  return `https://us-central1-${projectId}.cloudfunctions.net`;
 }
 
 /**
  * Generate a PDF estimate document
  * Calls the generate_pdf Cloud Function from Epic 4
  *
- * @param projectId - The project ID to generate PDF for
+ * @param estimateId - The estimate ID to generate PDF for
  * @param clientReady - true for simplified client PDF, false for full contractor PDF
  * @param sections - Optional array of sections to include (defaults to all)
  * @returns Promise with PDF URL or error
  */
 export async function generatePDF(
-  projectId: string,
+  estimateId: string,
   clientReady: boolean,
   sections?: string[]
 ): Promise<PDFGenerateResult> {
   try {
-    // Call the generate_pdf Cloud Function
-    // This was implemented in Epic 4 with WeasyPrint + Jinja2
-    const generatePdfFn = httpsCallable(functions, 'generate_pdf');
+    const baseUrl = getPythonFunctionsUrl();
+    const url = `${baseUrl}/generate_pdf`;
 
-    const result = await generatePdfFn({
-      project_id: projectId,
-      client_ready: clientReady,
-      sections: sections,
+    console.log('[PDF] Calling Cloud Function:', url, { estimateId, clientReady });
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        estimate_id: estimateId,
+        client_ready: clientReady,
+        sections: sections,
+      }),
     });
 
-    const data = result.data as { success: boolean; pdf_url?: string; error?: string };
+    const data = await response.json();
 
-    if (!data.success) {
+    if (!response.ok || !data.success) {
       return {
         success: false,
-        error: data.error || 'PDF generation failed',
+        error: data.error || `PDF generation failed (${response.status})`,
       };
     }
 
     return {
       success: true,
       pdfUrl: data.pdf_url,
+      storagePath: data.storage_path,
+      pageCount: data.page_count,
+      fileSizeBytes: data.file_size_bytes,
+      generatedAt: data.generated_at,
     };
   } catch (error) {
     console.error('[PDF] Error generating PDF:', error);

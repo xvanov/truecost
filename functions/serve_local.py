@@ -35,20 +35,24 @@ from main import (
     start_deep_pipeline,
     get_pipeline_status,
     delete_estimate,
+    generate_pdf,
     a2a_location,
     a2a_scope,
+    a2a_code_compliance,
     a2a_cost,
     a2a_risk,
     a2a_timeline,
     a2a_final,
     a2a_location_scorer,
     a2a_scope_scorer,
+    a2a_code_compliance_scorer,
     a2a_cost_scorer,
     a2a_risk_scorer,
     a2a_timeline_scorer,
     a2a_final_scorer,
     a2a_location_critic,
     a2a_scope_critic,
+    a2a_code_compliance_critic,
     a2a_cost_critic,
     a2a_risk_critic,
     a2a_timeline_critic,
@@ -97,6 +101,10 @@ def handle_get_status():
 def handle_delete_estimate():
     return wrap_firebase_function(delete_estimate)()
 
+@app.route('/collabcanvas-dev/us-central1/generate_pdf', methods=['POST', 'OPTIONS'])
+def handle_generate_pdf():
+    return wrap_firebase_function(generate_pdf)()
+
 # A2A endpoints
 @app.route('/collabcanvas-dev/us-central1/a2a_location', methods=['POST', 'OPTIONS'])
 def handle_a2a_location():
@@ -105,6 +113,10 @@ def handle_a2a_location():
 @app.route('/collabcanvas-dev/us-central1/a2a_scope', methods=['POST', 'OPTIONS'])
 def handle_a2a_scope():
     return wrap_firebase_function(a2a_scope)()
+
+@app.route('/collabcanvas-dev/us-central1/a2a_code_compliance', methods=['POST', 'OPTIONS'])
+def handle_a2a_code_compliance():
+    return wrap_firebase_function(a2a_code_compliance)()
 
 @app.route('/collabcanvas-dev/us-central1/a2a_cost', methods=['POST', 'OPTIONS'])
 def handle_a2a_cost():
@@ -131,6 +143,10 @@ def handle_a2a_location_scorer():
 def handle_a2a_scope_scorer():
     return wrap_firebase_function(a2a_scope_scorer)()
 
+@app.route('/collabcanvas-dev/us-central1/a2a_code_compliance_scorer', methods=['POST', 'OPTIONS'])
+def handle_a2a_code_compliance_scorer():
+    return wrap_firebase_function(a2a_code_compliance_scorer)()
+
 @app.route('/collabcanvas-dev/us-central1/a2a_cost_scorer', methods=['POST', 'OPTIONS'])
 def handle_a2a_cost_scorer():
     return wrap_firebase_function(a2a_cost_scorer)()
@@ -155,6 +171,10 @@ def handle_a2a_location_critic():
 @app.route('/collabcanvas-dev/us-central1/a2a_scope_critic', methods=['POST', 'OPTIONS'])
 def handle_a2a_scope_critic():
     return wrap_firebase_function(a2a_scope_critic)()
+
+@app.route('/collabcanvas-dev/us-central1/a2a_code_compliance_critic', methods=['POST', 'OPTIONS'])
+def handle_a2a_code_compliance_critic():
+    return wrap_firebase_function(a2a_code_compliance_critic)()
 
 @app.route('/collabcanvas-dev/us-central1/a2a_cost_critic', methods=['POST', 'OPTIONS'])
 def handle_a2a_cost_critic():

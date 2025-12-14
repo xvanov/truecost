@@ -183,12 +183,12 @@ export function LaborRiskPanel({ data }: LaborRiskPanelProps) {
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span className="text-body text-truecost-text-primary">
-                        {formatPercentage(risk.varianceContribution * 100)}
+                        {risk.varianceContribution != null ? formatPercentage(risk.varianceContribution * 100) : 'N/A'}
                       </span>
                     </td>
                     <td className="py-3 pl-4 text-right">
                       <span className="text-body text-truecost-text-secondary">
-                        {risk.sensitivity.toFixed(3)}
+                        {risk.sensitivity?.toFixed(3) ?? 'N/A'}
                       </span>
                     </td>
                   </tr>

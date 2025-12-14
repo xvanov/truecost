@@ -102,8 +102,8 @@ export function CostRiskPanel({ data }: CostRiskPanelProps) {
                     />
                   </div>
                   <div className="flex justify-between text-xs text-truecost-text-muted">
-                    <span>Sensitivity: {risk.sensitivity.toFixed(3)}</span>
-                    <span>Probability: {formatPercentage(risk.probability * 100)}</span>
+                    <span>Sensitivity: {risk.sensitivity?.toFixed(3) ?? 'N/A'}</span>
+                    <span>Probability: {risk.probability != null ? formatPercentage(risk.probability * 100) : 'N/A'}</span>
                   </div>
                 </div>
               );

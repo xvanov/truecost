@@ -43,9 +43,10 @@ import {
   getPipelineStatus,
 } from "../../services/pipelineService";
 import {
-  exportEstimateAsPDF,
-  type BOMExportView,
-} from "../../services/exportService";
+  generateContractorPDF,
+  generateClientPDF,
+  openPDFInNewTab,
+} from "../../services/pdfService";
 import type { EstimateConfig } from "./ScopePage";
 import type {
   CSIDivision,
@@ -295,7 +296,6 @@ interface MaterialSpec {
 }
 
 export function EstimatePage() {
-  console.log("Functions URL:", import.meta.env.VITE_FIREBASE_FUNCTIONS_URL);
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -957,33 +957,44 @@ export function EstimatePage() {
     }
   }, [projectId, user, buildClarificationOutput]);
 
-  // Handle PDF generation - uses local PDF generation from exportService
+  // Handle PDF generation - uses Cloud Function PDF generator
   const handleGeneratePDF = useCallback(
-    (type: "contractor" | "client") => {
-      if (!projectId || !billOfMaterials) {
+    async (type: "contractor" | "client") => {
+      // Use estimateId if available (from deep pipeline), otherwise fall back to projectId
+      const pdfEstimateId = estimateId || projectId;
+
+      if (!pdfEstimateId) {
         setError("No estimate data available to export");
         return;
       }
 
       setIsGeneratingPDF(true);
       setPdfType(type);
+      setError(null);
 
       try {
-        // Use local PDF generation from exportService
-        // Maps "contractor" -> "contractor" view, "client" -> "customer" view
-        const view: BOMExportView =
-          type === "contractor" ? "contractor" : "customer";
-        exportEstimateAsPDF(billOfMaterials, view, {
-          projectName: billOfMaterials.projectName || `Project-${projectId}`,
-        });
+        // Call Cloud Function PDF generator
+        const result = type === "contractor"
+          ? await generateContractorPDF(pdfEstimateId)
+          : await generateClientPDF(pdfEstimateId);
+
+        if (!result.success) {
+          throw new Error(result.error || "PDF generation failed");
+        }
+
+        // Open the generated PDF in a new tab
+        if (result.pdfUrl) {
+          openPDFInNewTab(result.pdfUrl);
+        }
       } catch (err) {
+        console.error("[PDF] Generation error:", err);
         setError(err instanceof Error ? err.message : "PDF generation failed");
       } finally {
         setIsGeneratingPDF(false);
         setPdfType(null);
       }
     },
-    [projectId, billOfMaterials]
+    [estimateId, projectId]
   );
 
   // Navigation handlers

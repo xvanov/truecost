@@ -283,9 +283,13 @@ class ScopeAgent(BaseA2AAgent):
             status = div_data.get("status", "excluded")
             div_name = div_data.get("name", CSI_DIVISION_NAMES.get(div_code, f"Division {div_code}"))
             description = div_data.get("description", "")
-            
-            # Only process included divisions
-            if status != "included":
+            items = div_data.get("items", [])
+
+            # Process divisions that are included OR have items (to handle status mismatch)
+            # A division with items should be treated as included even if status says otherwise
+            should_process = status == "included" or (isinstance(items, list) and len(items) > 0)
+
+            if not should_process:
                 # Create placeholder for excluded divisions
                 enriched_divisions.append(EnrichedDivision(
                     division_code=div_code,
@@ -296,9 +300,19 @@ class ScopeAgent(BaseA2AAgent):
                     item_count=0
                 ))
                 continue
-            
-            # Enrich line items
-            items = div_data.get("items", [])
+
+            # Override status to included if we're processing items
+            if status != "included" and len(items) > 0:
+                logger.info(
+                    "division_status_override",
+                    division_code=div_code,
+                    original_status=status,
+                    item_count=len(items),
+                    reason="Division has items but was not marked as included"
+                )
+                status = "included"
+
+            # Enrich line items (items already retrieved above)
             enriched_items = []
             
             for item in items:

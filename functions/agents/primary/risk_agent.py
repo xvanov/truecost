@@ -361,7 +361,7 @@ class RiskAgent(BaseA2AAgent):
                     for r in labor_mc_result.top_labor_risks
                 ],
                 "histogram": [
-                    {"binStart": b.bin_start, "binEnd": b.bin_end, "count": b.count}
+                    {"binStart": b.range_low, "binEnd": b.range_high, "count": b.count}
                     for b in labor_mc_result.histogram
                 ],
             }
@@ -389,7 +389,7 @@ class RiskAgent(BaseA2AAgent):
                     for t in schedule_mc_result.task_sensitivities
                 ],
                 "histogram": [
-                    {"binStart": b.bin_start, "binEnd": b.bin_end, "count": b.count}
+                    {"binStart": b.range_low, "binEnd": b.range_high, "count": b.count}
                     for b in schedule_mc_result.histogram
                 ],
             }

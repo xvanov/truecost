@@ -74,13 +74,13 @@ export function ScheduleRiskPanel({ data }: ScheduleRiskPanelProps) {
         <div className="glass-panel p-4">
           <p className="text-body-meta text-truecost-text-muted mb-1">Mean Duration</p>
           <p className="font-heading text-h4 text-truecost-text-primary">
-            {data.meanDays.toFixed(1)} days
+            {data.meanDays?.toFixed(1) ?? 'N/A'} days
           </p>
         </div>
         <div className="glass-panel p-4">
           <p className="text-body-meta text-truecost-text-muted mb-1">Std Deviation</p>
           <p className="font-heading text-h4 text-truecost-text-primary">
-            {data.stdDevDays.toFixed(1)} days
+            {data.stdDevDays?.toFixed(1) ?? 'N/A'} days
           </p>
         </div>
         <div className="glass-panel p-4">
@@ -111,7 +111,7 @@ export function ScheduleRiskPanel({ data }: ScheduleRiskPanelProps) {
               {/* Indicator */}
               <div
                 className="absolute top-0 h-full w-1 bg-white shadow-lg transition-all duration-500"
-                style={{ left: `${data.scheduleRiskIndex * 100}%` }}
+                style={{ left: `${(data.scheduleRiskIndex ?? 0) * 100}%` }}
               />
             </div>
             <div className="flex justify-between text-xs text-truecost-text-muted mt-1">
@@ -122,11 +122,11 @@ export function ScheduleRiskPanel({ data }: ScheduleRiskPanelProps) {
 
           {/* Risk value */}
           <div className="text-right">
-            <span className={`font-heading text-h2 ${getRiskIndexColor(data.scheduleRiskIndex)}`}>
-              {formatPercentage(data.scheduleRiskIndex * 100)}
+            <span className={`font-heading text-h2 ${getRiskIndexColor(data.scheduleRiskIndex ?? 0)}`}>
+              {formatPercentage((data.scheduleRiskIndex ?? 0) * 100)}
             </span>
-            <p className={`text-body-meta ${getRiskIndexColor(data.scheduleRiskIndex)}`}>
-              {getRiskIndexLabel(data.scheduleRiskIndex)}
+            <p className={`text-body-meta ${getRiskIndexColor(data.scheduleRiskIndex ?? 0)}`}>
+              {getRiskIndexLabel(data.scheduleRiskIndex ?? 0)}
             </p>
           </div>
         </div>
@@ -136,7 +136,7 @@ export function ScheduleRiskPanel({ data }: ScheduleRiskPanelProps) {
           <div className="flex justify-between text-body-meta">
             <span className="text-truecost-text-muted">Critical Path Variance:</span>
             <span className="text-truecost-text-primary">
-              {data.criticalPathVariance.toFixed(1)} days²
+              {data.criticalPathVariance?.toFixed(1) ?? 'N/A'} days²
             </span>
           </div>
         </div>
@@ -173,7 +173,7 @@ export function ScheduleRiskPanel({ data }: ScheduleRiskPanelProps) {
                       )}
                     </div>
                     <span className="text-truecost-warning">
-                      {formatPercentage(task.varianceContribution * 100)}
+                      {task.varianceContribution != null ? formatPercentage(task.varianceContribution * 100) : 'N/A'}
                     </span>
                   </div>
                   <div className="h-2 bg-truecost-glass-bg rounded-pill overflow-hidden">

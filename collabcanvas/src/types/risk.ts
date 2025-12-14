@@ -196,7 +196,8 @@ export function getRiskLevelColors(level: RiskLevel): {
 /**
  * Format currency for display.
  */
-export function formatCurrency(value: number): string {
+export function formatCurrency(value: number | undefined | null): string {
+  if (value == null || isNaN(value)) return '$0';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -208,14 +209,16 @@ export function formatCurrency(value: number): string {
 /**
  * Format percentage for display.
  */
-export function formatPercentage(value: number): string {
+export function formatPercentage(value: number | undefined | null): string {
+  if (value == null || isNaN(value)) return 'N/A';
   return `${value.toFixed(1)}%`;
 }
 
 /**
  * Format days for display.
  */
-export function formatDays(days: number): string {
+export function formatDays(days: number | undefined | null): string {
+  if (days == null || isNaN(days)) return 'N/A';
   if (days === 1) return '1 day';
   return `${days} days`;
 }
