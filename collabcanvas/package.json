@@ -24,6 +24,9 @@
     "deploy:rules": "firebase deploy --only firestore:rules,database:rules"
   },
   "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
     "firebase": "^12.4.0",
     "jspdf": "^3.0.3",
     "konva": "^10.0.2",
