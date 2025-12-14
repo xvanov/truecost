@@ -85,32 +85,60 @@ const getEstimateStorageKey = (projectId: string) =>
 // Map frontend project types to schema-valid values
 const mapProjectType = (
   frontendType: string | undefined,
-  projectName?: string
+  projectName?: string,
+  scopeText?: string
 ): string => {
-  // First, try to infer from projectName
-  if (projectName) {
-    const nameLower = projectName.toLowerCase();
+  // Combine all text sources for keyword detection
+  const textSources = [projectName, scopeText].filter(Boolean).join(" ");
+
+  if (textSources) {
+    const textLower = textSources.toLowerCase();
     console.log(
-      "[mapProjectType] Checking projectName:",
-      projectName,
-      "nameLower:",
-      nameLower
+      "[mapProjectType] Checking text sources:",
+      { projectName, scopeTextLength: scopeText?.length },
+      "Combined text preview:",
+      textLower.substring(0, 100)
     );
-    if (nameLower.includes("bathroom")) {
+
+    // Check for specific room/project types in order of specificity
+    if (textLower.includes("bathroom") || textLower.includes("bath ") || textLower.includes("shower") || textLower.includes("toilet")) {
       console.log("[mapProjectType] Matched bathroom -> bathroom_remodel");
       return "bathroom_remodel";
     }
-    if (nameLower.includes("kitchen")) return "kitchen_remodel";
-    if (nameLower.includes("bedroom")) return "bedroom_remodel";
-    if (nameLower.includes("living")) return "living_room_remodel";
-    if (nameLower.includes("basement")) return "basement_finish";
-    if (nameLower.includes("attic")) return "attic_conversion";
-    if (nameLower.includes("deck") || nameLower.includes("patio"))
+    if (textLower.includes("kitchen") || textLower.includes("cabinet") || textLower.includes("countertop")) {
+      console.log("[mapProjectType] Matched kitchen -> kitchen_remodel");
+      return "kitchen_remodel";
+    }
+    if (textLower.includes("bedroom")) {
+      console.log("[mapProjectType] Matched bedroom -> bedroom_remodel");
+      return "bedroom_remodel";
+    }
+    if (textLower.includes("living room") || textLower.includes("family room")) {
+      console.log("[mapProjectType] Matched living -> living_room_remodel");
+      return "living_room_remodel";
+    }
+    if (textLower.includes("basement")) {
+      console.log("[mapProjectType] Matched basement -> basement_finish");
+      return "basement_finish";
+    }
+    if (textLower.includes("attic")) {
+      console.log("[mapProjectType] Matched attic -> attic_conversion");
+      return "attic_conversion";
+    }
+    if (textLower.includes("deck") || textLower.includes("patio")) {
+      console.log("[mapProjectType] Matched deck/patio -> deck_patio");
       return "deck_patio";
-    if (nameLower.includes("garage")) return "garage";
-    if (nameLower.includes("addition")) return "addition";
+    }
+    if (textLower.includes("garage")) {
+      console.log("[mapProjectType] Matched garage -> garage");
+      return "garage";
+    }
+    if (textLower.includes("addition") || textLower.includes("extension")) {
+      console.log("[mapProjectType] Matched addition -> addition");
+      return "addition";
+    }
   } else {
-    console.log("[mapProjectType] No projectName provided, using fallback");
+    console.log("[mapProjectType] No text sources provided, using fallback");
   }
 
   // Fallback to generic category mapping
@@ -827,7 +855,8 @@ export function EstimatePage() {
             },
             projectType: mapProjectType(
               estimateConfig.projectType,
-              useProjectStore.getState().currentProject?.name
+              estimateConfig.projectName || useProjectStore.getState().currentProject?.name,
+              estimateConfig.scopeText
             ),
             // Pass start date for timeline agent
             desiredStart: estimateConfig.startDate,
