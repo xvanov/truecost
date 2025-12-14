@@ -4,12 +4,13 @@
  * Displays project schedule from agent pipeline output
  */
 
-import { useState, useEffect, useMemo } from 'react';
-import { getCPM, calculateCriticalPath } from '../../services/cpmService';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { getCPM, saveCPM, calculateCriticalPath } from '../../services/cpmService';
 import type { CPM, CPMTask } from '../../types/cpm';
 
 interface TimeViewProps {
   projectId: string;
+  userId?: string; // For saving changes
 }
 
 type ViewMode = 'gantt' | 'network' | 'list';
@@ -69,11 +70,15 @@ const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string
   finish: { bg: 'bg-pink-200', border: 'border-pink-400', text: 'text-pink-800' },
 };
 
-export function TimeView({ projectId }: TimeViewProps) {
+export function TimeView({ projectId, userId = 'system' }: TimeViewProps) {
   const [cpm, setCpm] = useState<CPM | null>(null);
+  const [editableTasks, setEditableTasks] = useState<CPMTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('gantt');
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load CPM data
   useEffect(() => {
@@ -86,14 +91,17 @@ export function TimeView({ projectId }: TimeViewProps) {
 
         if (data) {
           setCpm(data);
+          setEditableTasks(data.tasks);
         } else {
           // Use sample data when no real CPM exists
           setCpm(SAMPLE_CPM);
+          setEditableTasks(SAMPLE_CPM.tasks);
         }
       } catch (err) {
         console.error('Error loading CPM:', err);
         // Fall back to sample data on error
         setCpm(SAMPLE_CPM);
+        setEditableTasks(SAMPLE_CPM.tasks);
       } finally {
         setLoading(false);
       }
@@ -102,25 +110,87 @@ export function TimeView({ projectId }: TimeViewProps) {
     loadCPM();
   }, [projectId]);
 
-  // Calculate critical path and task positions
-  const processedTasks = useMemo(() => {
-    if (!cpm) return { tasks: [], criticalPath: [], totalDuration: 0 };
+  // Handle task update - deferred to prevent UI freeze
+  const handleUpdateTask = useCallback((taskId: string, updates: Partial<CPMTask>) => {
+    // Use setTimeout to defer state update and prevent UI blocking
+    setTimeout(() => {
+      setEditableTasks(prevTasks => {
+        const newTasks = prevTasks.map(task =>
+          task.id === taskId ? { ...task, ...updates } : task
+        );
+        return newTasks;
+      });
+      setIsDirty(true);
+    }, 0);
+  }, []);
 
-    const { criticalPath, totalDuration, taskEndDates } = calculateCriticalPath(cpm.tasks);
+  // Debounced auto-save (skipped for test/dev routes without real auth)
+  useEffect(() => {
+    if (!isDirty) return;
+
+    // Skip saving for test projects (dev mode)
+    const isDevMode = projectId === 'test-project' || userId === 'test-user';
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // In dev mode, just mark as saved without hitting Firestore
+    if (isDevMode) {
+      setIsDirty(false);
+      return;
+    }
+
+    // Set new timeout for debounced save to Firestore
+    saveTimeoutRef.current = setTimeout(async () => {
+      setIsSaving(true);
+      try {
+        const { criticalPath, totalDuration } = calculateCriticalPath(editableTasks);
+        const updatedCpm: CPM = {
+          ...cpm!,
+          tasks: editableTasks,
+          criticalPath,
+          totalDuration,
+          updatedAt: Date.now(),
+        };
+        await saveCPM(projectId, updatedCpm, userId);
+        setIsDirty(false);
+      } catch (err) {
+        console.error('Auto-save failed:', err);
+        setError('Failed to save changes. Will retry...');
+      } finally {
+        setIsSaving(false);
+      }
+    }, 1000); // 1 second debounce
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [isDirty, editableTasks, projectId, userId]);
+
+  // Calculate critical path and task positions (uses editableTasks for real-time updates)
+  const processedTasks = useMemo(() => {
+    if (editableTasks.length === 0) return { tasks: [], criticalPath: [], totalDuration: 0 };
+
+    const { criticalPath, totalDuration, taskEndDates } = calculateCriticalPath(editableTasks);
 
     // Calculate start dates for each task
     const taskStartDates = new Map<string, number>();
-    cpm.tasks.forEach((task) => {
+    editableTasks.forEach((task) => {
       const endDate = taskEndDates.get(task.id) || 0;
       taskStartDates.set(task.id, endDate - task.duration);
     });
 
     // Enhance tasks with calculated values
-    const enhancedTasks: (CPMTask & { startDay: number; isCritical: boolean })[] = cpm.tasks.map(
+    // Note: isCritical can be manually overridden - if task.isCritical is explicitly set, use it
+    const enhancedTasks: (CPMTask & { startDay: number; isCritical: boolean })[] = editableTasks.map(
       (task) => ({
         ...task,
         startDay: taskStartDates.get(task.id) || 0,
-        isCritical: criticalPath.includes(task.id),
+        isCritical: task.isCritical !== undefined ? task.isCritical : criticalPath.includes(task.id),
       })
     );
 
@@ -129,7 +199,7 @@ export function TimeView({ projectId }: TimeViewProps) {
       criticalPath,
       totalDuration,
     };
-  }, [cpm]);
+  }, [editableTasks]);
 
   if (loading) {
     return (
@@ -186,6 +256,20 @@ export function TimeView({ projectId }: TimeViewProps) {
                   </span>
                 </span>
               )}
+              {/* Save status indicator */}
+              <span className="ml-4">
+                {isSaving ? (
+                  <span className="text-blue-600">
+                    <svg className="inline w-4 h-4 animate-spin mr-1" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Saving...
+                  </span>
+                ) : isDirty ? (
+                  <span className="text-amber-600">Unsaved changes</span>
+                ) : null}
+              </span>
             </p>
           </div>
 
@@ -241,7 +325,12 @@ export function TimeView({ projectId }: TimeViewProps) {
           />
         )}
 
-        {viewMode === 'list' && <TaskListView tasks={processedTasks.tasks} />}
+        {viewMode === 'list' && (
+          <TaskListView
+            tasks={processedTasks.tasks}
+            onUpdateTask={handleUpdateTask}
+          />
+        )}
       </div>
     </div>
   );
@@ -274,14 +363,21 @@ function GanttChart({
           <span className="text-gray-600">Critical Path</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-4 h-4 bg-blue-500 rounded" />
+          <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded" />
           <span className="text-gray-600">Standard Task</span>
         </div>
       </div>
 
       <div className="overflow-x-auto">
         <div style={{ minWidth: chartWidth + 200 }}>
-          {/* Header row with days */}
+          {/* Header row with "Day" label */}
+          <div className="flex border-b border-gray-200">
+            <div className="w-48 flex-shrink-0 px-4 py-1 bg-gray-100 border-r border-gray-200" />
+            <div className="flex-1 text-center text-xs font-medium text-gray-600 py-1 bg-gray-50">
+              Day
+            </div>
+          </div>
+          {/* Header row with day numbers */}
           <div className="flex border-b border-gray-200">
             <div className="w-48 flex-shrink-0 px-4 py-2 bg-gray-100 font-medium text-gray-700 border-r border-gray-200">
               Task
@@ -290,10 +386,10 @@ function GanttChart({
               {dayMarkers.map((day) => (
                 <div
                   key={day}
-                  className="text-center text-xs text-gray-500 border-r border-gray-100"
+                  className="text-center text-xs text-gray-500 border-r border-gray-100 py-1"
                   style={{ width: dayWidth }}
                 >
-                  Day {day + 1}
+                  {day + 1}
                 </div>
               ))}
             </div>
@@ -321,10 +417,10 @@ function GanttChart({
                 {/* Gantt bar area */}
                 <div className="flex-1 relative py-2">
                   <div
-                    className={`absolute h-8 rounded ${
-                      task.isCritical ? 'bg-red-500' : colors.bg
-                    } ${task.isCritical ? '' : colors.border} border flex items-center justify-center text-xs font-medium ${
-                      task.isCritical ? 'text-white' : colors.text
+                    className={`absolute h-8 rounded cursor-pointer ${
+                      task.isCritical ? 'bg-red-500' : 'bg-blue-200'
+                    } ${task.isCritical ? '' : 'border-blue-400'} border flex items-center justify-center text-xs font-medium ${
+                      task.isCritical ? 'text-white' : 'text-blue-800'
                     }`}
                     style={{
                       left: task.startDay * dayWidth,
@@ -332,6 +428,7 @@ function GanttChart({
                       top: '50%',
                       transform: 'translateY(-50%)',
                     }}
+                    title={`${task.name} (${task.duration} day${task.duration !== 1 ? 's' : ''})`}
                   >
                     {task.duration > 2 && task.name}
                     {task.isCritical && <span className="ml-1">★</span>}
@@ -347,25 +444,117 @@ function GanttChart({
 }
 
 /**
- * Task List view
+ * Task List view with editable duration, dependencies, and critical toggle
  */
 function TaskListView({
   tasks,
+  onUpdateTask,
 }: {
   tasks: (CPMTask & { startDay: number; isCritical: boolean })[];
+  onUpdateTask?: (taskId: string, updates: Partial<CPMTask>) => void;
 }) {
+  const [editingDurationId, setEditingDurationId] = useState<string | null>(null);
+  const [editingDepsId, setEditingDepsId] = useState<string | null>(null);
+  const [durationValue, setDurationValue] = useState<string>('');
+  // Local state for dependency editing (batched updates)
+  const [localDeps, setLocalDeps] = useState<string[]>([]);
+
+  // Duration editing handlers
+  const handleStartDurationEdit = (task: CPMTask) => {
+    // Close deps editor first and save if open
+    if (editingDepsId) {
+      handleSaveDeps();
+    }
+    setEditingDurationId(task.id);
+    setDurationValue(task.duration.toString());
+  };
+
+  const handleSaveDuration = (taskId: string) => {
+    const newDuration = parseInt(durationValue, 10);
+    if (!isNaN(newDuration) && newDuration >= 1 && onUpdateTask) {
+      onUpdateTask(taskId, { duration: newDuration });
+    }
+    setEditingDurationId(null);
+    setDurationValue('');
+  };
+
+  const handleDurationKeyDown = (e: React.KeyboardEvent, taskId: string) => {
+    if (e.key === 'Enter') {
+      handleSaveDuration(taskId);
+    } else if (e.key === 'Escape') {
+      setEditingDurationId(null);
+      setDurationValue('');
+    }
+  };
+
+  // Dependencies editing handlers - uses local state, saves on close
+  const handleStartDepsEdit = (task: CPMTask & { startDay: number; isCritical: boolean }) => {
+    // Close duration editor if open
+    if (editingDurationId) {
+      setEditingDurationId(null);
+      setDurationValue('');
+    }
+    setEditingDepsId(task.id);
+    setLocalDeps([...task.dependencies]); // Copy current deps to local state
+  };
+
+  const handleToggleDependency = (depId: string) => {
+    // Only update local state - don't trigger parent update yet
+    setLocalDeps(prev =>
+      prev.includes(depId)
+        ? prev.filter(d => d !== depId)
+        : [...prev, depId]
+    );
+  };
+
+  const handleSaveDeps = () => {
+    if (editingDepsId && onUpdateTask) {
+      const originalTask = tasks.find(t => t.id === editingDepsId);
+      // Only save if dependencies actually changed
+      if (originalTask && JSON.stringify(originalTask.dependencies.sort()) !== JSON.stringify(localDeps.sort())) {
+        onUpdateTask(editingDepsId, { dependencies: localDeps });
+      }
+    }
+    setEditingDepsId(null);
+    setLocalDeps([]);
+  };
+
+  const handleCancelDeps = () => {
+    setEditingDepsId(null);
+    setLocalDeps([]);
+  };
+
+  // Critical toggle handler
+  const handleToggleCritical = (task: CPMTask & { isCritical: boolean }) => {
+    if (!onUpdateTask) return;
+    onUpdateTask(task.id, { isCritical: !task.isCritical });
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      {/* Edit hint */}
+      <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 text-sm text-blue-700">
+        Click on Duration, Dependencies, or Critical to edit. Changes update Gantt and CPM in real-time.
+      </div>
       <table className="w-full">
         <thead>
           <tr className="bg-gray-50 border-b border-gray-200">
             <th className="text-left py-3 px-4 font-semibold text-gray-600">Task</th>
             <th className="text-left py-3 px-4 font-semibold text-gray-600">Category</th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-600">Duration</th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-600">Start Day</th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-600">End Day</th>
-            <th className="text-center py-3 px-4 font-semibold text-gray-600">Dependencies</th>
-            <th className="text-center py-3 px-4 font-semibold text-gray-600">Critical</th>
+            <th className="text-right py-3 px-4 font-semibold text-gray-600">
+              Duration
+              <span className="ml-1 text-xs font-normal text-blue-500">(edit)</span>
+            </th>
+            <th className="text-right py-3 px-4 font-semibold text-gray-600">Start</th>
+            <th className="text-right py-3 px-4 font-semibold text-gray-600">End</th>
+            <th className="text-center py-3 px-4 font-semibold text-gray-600">
+              Dependencies
+              <span className="ml-1 text-xs font-normal text-blue-500">(edit)</span>
+            </th>
+            <th className="text-center py-3 px-4 font-semibold text-gray-600">
+              Critical
+              <span className="ml-1 text-xs font-normal text-blue-500">(toggle)</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -386,27 +575,134 @@ function TaskListView({
                   {task.category || 'General'}
                 </span>
               </td>
-              <td className="py-3 px-4 text-right text-gray-900">
-                {task.duration} day{task.duration !== 1 ? 's' : ''}
-              </td>
-              <td className="py-3 px-4 text-right text-gray-900">Day {task.startDay + 1}</td>
-              <td className="py-3 px-4 text-right text-gray-900">
-                Day {task.startDay + task.duration}
-              </td>
-              <td className="py-3 px-4 text-center text-gray-600 text-sm">
-                {task.dependencies.length > 0
-                  ? tasks
-                      .filter((t) => task.dependencies.includes(t.id))
-                      .map((t) => t.name)
-                      .join(', ')
-                  : '—'}
-              </td>
-              <td className="py-3 px-4 text-center">
-                {task.isCritical ? (
-                  <span className="text-red-600 font-bold">★ Yes</span>
+
+              {/* Editable Duration Cell */}
+              <td className="py-3 px-4 text-right">
+                {editingDurationId === task.id ? (
+                  <div className="flex items-center justify-end gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={durationValue}
+                      onChange={(e) => setDurationValue(e.target.value)}
+                      onKeyDown={(e) => handleDurationKeyDown(e, task.id)}
+                      onBlur={() => handleSaveDuration(task.id)}
+                      autoFocus
+                      className="w-16 px-2 py-1 text-right text-gray-900 bg-white border border-blue-400 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                    <span className="text-gray-500 text-sm">days</span>
+                  </div>
                 ) : (
-                  <span className="text-gray-400">No</span>
+                  <button
+                    onClick={() => handleStartDurationEdit(task)}
+                    className="group px-2 py-1 rounded hover:bg-blue-100 transition-colors cursor-pointer text-gray-900"
+                    title="Click to edit duration"
+                  >
+                    {task.duration} day{task.duration !== 1 ? 's' : ''}
+                    <svg
+                      className="inline-block w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 text-blue-500 transition-opacity"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
                 )}
+              </td>
+
+              <td className="py-3 px-4 text-right text-gray-900">Day {task.startDay + 1}</td>
+              <td className="py-3 px-4 text-right text-gray-900">Day {task.startDay + task.duration}</td>
+
+              {/* Editable Dependencies Cell */}
+              <td className="py-3 px-4 text-center relative">
+                {editingDepsId === task.id ? (
+                  <div className="absolute z-10 right-0 top-full mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-lg p-2">
+                    <div className="flex justify-between items-center mb-2 pb-2 border-b">
+                      <span className="text-sm font-medium text-gray-700">Select Dependencies</span>
+                      <button
+                        onClick={handleCancelDeps}
+                        className="text-gray-400 hover:text-gray-600"
+                        title="Cancel"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {tasks.filter(t => t.id !== task.id).map(otherTask => (
+                        <label
+                          key={otherTask.id}
+                          className="flex items-center gap-2 p-1.5 rounded hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={localDeps.includes(otherTask.id)}
+                            onChange={() => handleToggleDependency(otherTask.id)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700 truncate">{otherTask.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {/* Save/Cancel buttons */}
+                    <div className="flex justify-end gap-2 mt-2 pt-2 border-t">
+                      <button
+                        onClick={handleCancelDeps}
+                        className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveDeps}
+                        className="px-2 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                <button
+                  onClick={() => handleStartDepsEdit(task)}
+                  className="group px-2 py-1 rounded hover:bg-blue-100 transition-colors cursor-pointer text-gray-600 text-sm"
+                  title="Click to edit dependencies"
+                >
+                  {task.dependencies.length > 0 ? (
+                    <span className="flex items-center justify-center gap-1">
+                      <span className="max-w-32 truncate">
+                        {tasks.filter(t => task.dependencies.includes(t.id)).map(t => t.name).join(', ')}
+                      </span>
+                      <span className="text-blue-500 text-xs">({task.dependencies.length})</span>
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">None</span>
+                  )}
+                  <svg
+                    className="inline-block w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 text-blue-500 transition-opacity"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              </td>
+
+              {/* Toggleable Critical Cell */}
+              <td className="py-3 px-4 text-center">
+                <button
+                  onClick={() => handleToggleCritical(task)}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                    task.isCritical
+                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                  title="Click to toggle critical path"
+                >
+                  {task.isCritical ? '★ Critical' : 'Normal'}
+                </button>
               </td>
             </tr>
           ))}
@@ -641,15 +937,13 @@ function CPMNetworkDiagram({
                   height={28}
                   rx="8"
                   ry="8"
-                  fill={task.isCritical ? '#ef4444' : colors.bg.replace('bg-', '#').replace('-200', '')}
-                  className={task.isCritical ? '' : colors.bg}
+                  fill={task.isCritical ? '#ef4444' : '#3b82f6'}
                 />
                 <rect
                   y={20}
                   width={pos.width}
                   height={8}
-                  fill={task.isCritical ? '#ef4444' : colors.bg.replace('bg-', '#').replace('-200', '')}
-                  className={task.isCritical ? '' : colors.bg}
+                  fill={task.isCritical ? '#ef4444' : '#3b82f6'}
                 />
 
                 {/* Task name */}
@@ -657,8 +951,8 @@ function CPMNetworkDiagram({
                   x={pos.width / 2}
                   y={18}
                   textAnchor="middle"
-                  className={`text-xs font-semibold ${task.isCritical ? 'fill-white' : colors.text}`}
-                  fill={task.isCritical ? 'white' : undefined}
+                  className="text-xs font-semibold"
+                  fill="white"
                 >
                   {task.name.length > 20 ? task.name.substring(0, 18) + '...' : task.name}
                 </text>

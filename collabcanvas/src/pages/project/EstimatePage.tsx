@@ -1817,8 +1817,8 @@ export function EstimatePage() {
         )}
         {activeTab === "materials" && <MoneyView mode="materials" />}
         {activeTab === "labor" && <MoneyView mode="labor" />}
-        {activeTab === "time" && projectId && (
-          <TimeView projectId={projectId} />
+        {activeTab === "time" && projectId && user && (
+          <TimeView projectId={projectId} userId={user.uid} />
         )}
         {activeTab === "riskAnalysis" && projectId && (
           <RiskAnalysisView projectId={projectId} estimateId={estimateId} />
