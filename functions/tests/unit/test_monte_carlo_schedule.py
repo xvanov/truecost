@@ -3,7 +3,7 @@ Unit Tests for Schedule Monte Carlo Simulation.
 
 Tests run_schedule_simulation() and run_correlated_simulation() functionality:
 - Schedule simulation runs correct number of iterations
-- P50 < P80 < P90 days always hold
+- P50 <= P80 <= P90 days always hold (integer-day percentiles can tie)
 - Critical path tasks are identified
 - Task sensitivities are calculated correctly
 - Correlated simulations produce correlated results
@@ -111,23 +111,28 @@ def test_schedule_simulation_custom_iterations(simple_schedule_tasks):
 
 
 # =============================================================================
-# Test: P50 < P80 < P90 days
+# Test: P50 <= P80 <= P90 days
 # =============================================================================
 
 
 def test_schedule_percentiles_ordered_correctly(simple_schedule_tasks):
-    """P50 < P80 < P90 days always holds for schedule simulation."""
+    """P50 <= P80 <= P90 days always holds for schedule simulation.
+
+    Note: Percentiles are returned as integer days; ties are possible with
+    discrete/rounded totals and finite iterations.
+    """
     result = run_schedule_simulation(simple_schedule_tasks, iterations=1000)
 
-    assert result.p50_days < result.p80_days, f"P50 ({result.p50_days}) should be < P80 ({result.p80_days})"
-    assert result.p80_days < result.p90_days, f"P80 ({result.p80_days}) should be < P90 ({result.p90_days})"
+    assert result.p50_days <= result.p80_days, f"P50 ({result.p50_days}) should be <= P80 ({result.p80_days})"
+    assert result.p80_days <= result.p90_days, f"P80 ({result.p80_days}) should be <= P90 ({result.p90_days})"
+    assert result.p50_days <= result.p90_days, f"P50 ({result.p50_days}) should be <= P90 ({result.p90_days})"
 
 
 def test_schedule_percentiles_ordered_multiple_runs(simple_schedule_tasks):
-    """P50 < P80 < P90 holds across multiple runs."""
+    """P50 <= P80 <= P90 holds across multiple runs (ties are allowed)."""
     for _ in range(5):
         result = run_schedule_simulation(simple_schedule_tasks, iterations=1000)
-        assert result.p50_days < result.p80_days < result.p90_days
+        assert result.p50_days <= result.p80_days <= result.p90_days
 
 
 def test_schedule_percentiles_positive(simple_schedule_tasks):

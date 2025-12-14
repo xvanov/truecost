@@ -197,7 +197,10 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, AddressAutocompl
           componentRestrictions: { country: 'us' }, // Restrict to US addresses
           sessionToken: sessionTokenRef.current || undefined,
         },
-        (predictions, status) => {
+        (
+          predictions: google.maps.places.AutocompletePrediction[] | null,
+          status: google.maps.places.PlacesServiceStatus
+        ) => {
           if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
             setSuggestions(predictions);
             setShowSuggestions(true);
@@ -226,7 +229,10 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, AddressAutocompl
           fields: ['formatted_address', 'address_components'],
           sessionToken: sessionTokenRef.current || undefined,
         },
-        (place, status) => {
+        (
+          place: google.maps.places.PlaceResult | null,
+          status: google.maps.places.PlacesServiceStatus
+        ) => {
           if (status === window.google.maps.places.PlacesServiceStatus.OK && place) {
             const parsed = parseAddressComponents(place);
             onChange(parsed.formattedAddress, parsed);

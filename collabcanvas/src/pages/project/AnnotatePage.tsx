@@ -10,6 +10,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useAuth } from '../../hooks/useAuth';
 import { useShapes } from '../../hooks/useShapes';
 import { useLayers } from '../../hooks/useLayers';
+import { useLayerTemplates } from '../../hooks/useLayerTemplates';
 import { useLocks } from '../../hooks/useLocks';
 import { useOffline } from '../../hooks/useOffline';
 import { DiagnosticsHud } from '../../components/DiagnosticsHud';
@@ -92,6 +93,14 @@ export function AnnotatePage() {
   const { createShape, reloadShapesFromFirestore, deleteShapes, duplicateShapes, updateShapeRotation } =
     useShapes(projectId);
   useLayers(projectId);
+  
+  // Layer templates - pre-populate layers based on scope text analysis
+  const {
+    createTemplatedLayers,
+    layersInitialized,
+    isLoading: layersLoading,
+  } = useLayerTemplates(projectId, estimateConfig);
+  
   const { clearStaleLocks } = useLocks();
   const { isOnline } = useOffline();
   const canvasRef = useRef<CanvasHandle | null>(null);
@@ -184,6 +193,19 @@ export function AnnotatePage() {
       if (unsubscribe) unsubscribe();
     };
   }, [projectId]);
+  
+  // Auto-create templated layers based on scope when entering annotate page
+  useEffect(() => {
+    if (!projectId || !estimateConfig || layersInitialized || layersLoading) return;
+    
+    // Wait a bit for existing layers to load from Firestore before creating templates
+    const timer = setTimeout(() => {
+      console.log('[AnnotatePage] Creating templated layers based on scope...');
+      createTemplatedLayers();
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [projectId, estimateConfig, layersInitialized, layersLoading, createTemplatedLayers]);
 
   // Handle reconnection and reload shapes
   useEffect(() => {

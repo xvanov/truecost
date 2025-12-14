@@ -2,6 +2,12 @@
  * Estimation Pipeline Cloud Function
  * PRIMARY: Uses user annotations (polylines, polygons, bounding boxes) with scale for accurate measurements
  * SECONDARY: Uses OpenAI Vision only for inference/gap-filling when annotations are insufficient
+ * 
+ * ENHANCED v2.0:
+ * - Comprehensive CSI coverage (all 24 divisions)
+ * - Project-type-specific data extraction
+ * - Schema validation before output
+ * - Enhanced LLM prompts for better accuracy
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
@@ -13,9 +19,11 @@ import * as path from 'path';
 import {
   computeQuantitiesFromAnnotations,
   buildSpaceModelFromQuantities,
-  buildCSIItemsFromQuantities,
-  ComputedQuantities,
 } from './annotationQuantifier';
+import { buildEnhancedCSIItems } from './enhancedCsiMapper';
+import { extractProjectSpecificData, generateLayoutNarrative } from './projectSpecificExtractor';
+import { validateClarificationOutput, autoFixClarificationOutput, getValidationSummary } from './schemaValidator';
+import { runEnhancedInference, mergeInferenceIntoCSI } from './enhancedInference';
 
 // Lazy initialization to avoid timeout during module load
 let _openai: OpenAI | null = null;
@@ -88,6 +96,45 @@ interface AnnotationSnapshot {
   capturedAt?: number;
 }
 
+// Structured clarification context from annotation check conversations
+interface ClarificationContext {
+  confirmedQuantities?: {
+    doors?: number;
+    windows?: number;
+    rooms?: number;
+    walls?: number;
+  };
+  areaRelationships?: {
+    demolitionArea?: 'same_as_floor' | 'same_as_room' | 'custom' | 'none';
+    ceilingArea?: 'same_as_floor' | 'same_as_room' | 'custom' | 'none';
+    paintArea?: 'walls_only' | 'walls_and_ceiling' | 'custom';
+  };
+  exclusions?: {
+    electrical?: boolean;
+    plumbing?: boolean;
+    hvac?: boolean;
+    demolition?: boolean;
+    ceiling?: boolean;
+    trim?: boolean;
+    [key: string]: boolean | undefined;
+  };
+  inclusions?: {
+    windowTrim?: boolean;
+    doorHardware?: boolean;
+    baseTrim?: boolean;
+    crownMolding?: boolean;
+    [key: string]: boolean | undefined;
+  };
+  details?: {
+    ceilingType?: string;
+    flooringType?: string;
+    paintType?: string;
+    doorStyle?: string;
+    [key: string]: string | undefined;
+  };
+  notes?: string[];
+}
+
 interface EstimationRequest {
   projectId: string;
   sessionId: string;
@@ -95,6 +142,7 @@ interface EstimationRequest {
   scopeText: string;
   clarificationData: Record<string, unknown>;
   annotationSnapshot: AnnotationSnapshot;
+  clarificationContext?: ClarificationContext; // Structured context from annotation check
   passNumber: number;
 }
 
@@ -192,123 +240,36 @@ function isLocalUrl(url: string): boolean {
          url.includes('192.168.');
 }
 
-// ===================
-// LLM INFERENCE (SECONDARY - only for gap-filling)
-// ===================
-
-const INFERENCE_PROMPT = `You are a construction estimation assistant. The user has provided annotations on a floor plan with the following computed quantities:
-
-COMPUTED FROM ANNOTATIONS:
-{computedQuantities}
-
-SCOPE DESCRIPTION:
-{scopeText}
-
-CLARIFICATION DATA:
-{clarificationData}
-
-Based on the computed quantities, provide ONLY the following inferences (do not override the computed quantities):
-1. Room types based on layout (kitchen, bathroom, bedroom, etc.)
-2. Spatial relationships (what rooms are adjacent, traffic flow)
-3. Missing items that should be inferred (electrical outlets per room, HVAC returns, etc.)
-4. Standard allowances for items not annotated
-
-Return JSON with:
-{
-  "roomTypes": [{ "roomId": "...", "inferredType": "kitchen|bathroom|bedroom|living|other" }],
-  "spatialNarrative": "Description of the layout...",
-  "inferredItems": [{ "division": "div26_electrical", "item": "...", "quantity": N, "reason": "..." }],
-  "standardAllowances": [{ "division": "...", "item": "...", "quantity": N, "basis": "..." }]
+/**
+ * Infer project type from scope text
+ */
+function inferProjectType(scopeText: string): string {
+  const lower = scopeText.toLowerCase();
+  
+  if (lower.includes('kitchen')) return 'kitchen_remodel';
+  if (lower.includes('bathroom') || lower.includes('bath ')) return 'bathroom_remodel';
+  if (lower.includes('bedroom')) return 'bedroom_remodel';
+  if (lower.includes('living room') || lower.includes('family room')) return 'living_room_remodel';
+  if (lower.includes('basement')) return 'basement_finish';
+  if (lower.includes('attic')) return 'attic_conversion';
+  if (lower.includes('whole house') || lower.includes('full remodel')) return 'whole_house_remodel';
+  if (lower.includes('addition')) return 'addition';
+  if (lower.includes('deck') || lower.includes('patio')) return 'deck_patio';
+  if (lower.includes('garage')) return 'garage';
+  
+  return 'other';
 }
 
-IMPORTANT: Do NOT provide quantities for walls, floors, doors, or windows - those are computed from annotations.`;
+// ===================
+// LLM INFERENCE (SECONDARY - only for gap-filling)
+// Now uses enhanced inference module for better accuracy
+// ===================
 
-async function inferMissingData(
-  quantities: ComputedQuantities,
-  scopeText: string,
-  clarificationData: Record<string, unknown>,
-  planImageUrl?: string
-): Promise<Record<string, unknown>> {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    console.log('[ESTIMATION] No API key - skipping LLM inference');
-    return {
-      roomTypes: [],
-      spatialNarrative: 'Layout analysis requires OpenAI API key',
-      inferredItems: [],
-      standardAllowances: [],
-    };
+async function prepareImageForInference(planImageUrl: string): Promise<string> {
+  if (isLocalUrl(planImageUrl)) {
+    return await imageUrlToBase64(planImageUrl);
   }
-
-  const prompt = INFERENCE_PROMPT
-    .replace('{computedQuantities}', JSON.stringify({
-      totalWallLength: quantities.totalWallLength,
-      totalFloorArea: quantities.totalFloorArea,
-      totalRoomCount: quantities.totalRoomCount,
-      totalDoorCount: quantities.totalDoorCount,
-      totalWindowCount: quantities.totalWindowCount,
-      rooms: quantities.rooms.map(r => ({ id: r.id, name: r.name, area: r.areaReal })),
-      layerSummary: quantities.layerSummary,
-    }, null, 2))
-    .replace('{scopeText}', scopeText)
-    .replace('{clarificationData}', JSON.stringify(clarificationData, null, 2));
-
-  try {
-    // Build messages for OpenAI
-    const openai = getOpenAI();
-    let response;
-
-    if (planImageUrl) {
-      let imageContent = planImageUrl;
-      if (isLocalUrl(planImageUrl)) {
-        imageContent = await imageUrlToBase64(planImageUrl);
-      }
-
-      response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: imageContent, detail: 'high' } },
-            ],
-          },
-        ],
-        max_tokens: 2000,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-      });
-    } else {
-      response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        max_tokens: 2000,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-      });
-    }
-
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      return { roomTypes: [], spatialNarrative: '', inferredItems: [], standardAllowances: [] };
-    }
-
-    return JSON.parse(content);
-  } catch (error) {
-    console.error('[ESTIMATION] LLM inference error:', error);
-    return {
-      roomTypes: [],
-      spatialNarrative: 'Inference failed - using annotation data only',
-      inferredItems: [],
-      standardAllowances: [],
-    };
-  }
+  return planImageUrl;
 }
 
 // ===================
@@ -330,6 +291,7 @@ export const estimationPipeline = onCall({
       scopeText,
       clarificationData,
       annotationSnapshot,
+      clarificationContext: providedContext,
       passNumber = 1,
     } = data;
 
@@ -338,6 +300,42 @@ export const estimationPipeline = onCall({
     }
 
     console.log(`[ESTIMATION] Starting pass ${passNumber} for session ${sessionId}`);
+
+    // ===================
+    // LOAD CLARIFICATION CONTEXT FROM FIRESTORE (if not provided)
+    // ===================
+    let clarificationContext: ClarificationContext = providedContext || {};
+    
+    // Try to load from Firestore if not provided and we have auth context
+    if (!providedContext && request.auth?.uid) {
+      try {
+        initFirebaseAdmin();
+        const db = admin.firestore();
+        const contextDoc = await db
+          .collection('users')
+          .doc(request.auth.uid)
+          .collection('projects')
+          .doc(projectId)
+          .collection('context')
+          .doc('clarifications')
+          .get();
+        
+        if (contextDoc.exists) {
+          const contextData = contextDoc.data();
+          clarificationContext = contextData?.clarifications || {};
+          console.log('[ESTIMATION] Loaded clarification context from Firestore:', clarificationContext);
+        }
+      } catch (err) {
+        console.warn('[ESTIMATION] Could not load clarification context:', err);
+      }
+    }
+    
+    console.log('[ESTIMATION] Using clarification context:', {
+      hasExclusions: Object.keys(clarificationContext.exclusions || {}).length > 0,
+      hasInclusions: Object.keys(clarificationContext.inclusions || {}).length > 0,
+      hasAreaRelationships: Object.keys(clarificationContext.areaRelationships || {}).length > 0,
+      confirmedQuantities: clarificationContext.confirmedQuantities,
+    });
 
     // ===================
     // STEP 1: COMPUTE QUANTITIES FROM ANNOTATIONS (PRIMARY)
@@ -376,50 +374,102 @@ export const estimationPipeline = onCall({
     const spaceModel = buildSpaceModelFromQuantities(quantities);
 
     // ===================
-    // STEP 3: BUILD CSI ITEMS FROM ANNOTATIONS
+    // STEP 3: DETERMINE PROJECT CONTEXT
     // ===================
-    console.log('[ESTIMATION] Building CSI items from computed quantities...');
-    const computedCSIItems = buildCSIItemsFromQuantities(quantities);
+    const projectType = (clarificationData.projectType as string) || 
+                        inferProjectType(scopeText) || 'other';
+    const finishLevel = (clarificationData.finishLevel as 'budget' | 'mid_range' | 'high_end' | 'luxury') || 'mid_range';
+    
+    console.log(`[ESTIMATION] Project type: ${projectType}, Finish level: ${finishLevel}`);
 
     // ===================
-    // STEP 4: LLM INFERENCE FOR GAP-FILLING (SECONDARY)
+    // STEP 4: BUILD ENHANCED CSI ITEMS FROM ANNOTATIONS
     // ===================
-    let inferredData: Record<string, unknown> = {
-      roomTypes: [],
-      spatialNarrative: '',
-      inferredItems: [],
-      standardAllowances: [],
+    console.log('[ESTIMATION] Building enhanced CSI items from computed quantities...');
+    
+    // Apply confirmed quantities from clarification context
+    if (clarificationContext.confirmedQuantities) {
+      if (clarificationContext.confirmedQuantities.doors !== undefined) {
+        console.log(`[ESTIMATION] Using confirmed door count: ${clarificationContext.confirmedQuantities.doors}`);
+        // Override door count if user confirmed a specific number
+        quantities.totalDoorCount = clarificationContext.confirmedQuantities.doors;
+      }
+      if (clarificationContext.confirmedQuantities.windows !== undefined) {
+        console.log(`[ESTIMATION] Using confirmed window count: ${clarificationContext.confirmedQuantities.windows}`);
+        quantities.totalWindowCount = clarificationContext.confirmedQuantities.windows;
+      }
+    }
+    
+    const projectContext = {
+      projectType,
+      finishLevel,
+      scopeText,
+      clarificationData,
+      clarificationContext, // Pass the full context for detailed processing
     };
+    let computedCSIItems: Record<string, unknown[]> = buildEnhancedCSIItems(quantities, projectContext);
 
+    // ===================
+    // STEP 5: EXTRACT PROJECT-SPECIFIC DATA
+    // ===================
+    console.log('[ESTIMATION] Extracting project-specific data...');
+    const projectSpecificData = extractProjectSpecificData(
+      quantities,
+      projectType,
+      clarificationData,
+      scopeText
+    );
+
+    // ===================
+    // STEP 6: LLM INFERENCE FOR GAP-FILLING (SECONDARY)
+    // ===================
+    let inferenceResult = null;
+    let spatialNarrative = '';
+    
     // Only use LLM if we have annotations but need inference for non-measured items
     if (quantities.hasScale && (quantities.totalWallLength > 0 || quantities.totalFloorArea > 0)) {
-      console.log('[ESTIMATION] Running LLM inference for gap-filling...');
-      inferredData = await inferMissingData(quantities, scopeText, clarificationData, planImageUrl);
-    } else if (!quantities.hasScale) {
-      console.log('[ESTIMATION] No scale set - skipping LLM inference, using annotation data only');
-    } else {
-      console.log('[ESTIMATION] No annotations - LLM inference would have no basis');
-    }
-
-    // ===================
-    // STEP 5: MERGE INFERRED ITEMS INTO CSI SCOPE
-    // ===================
-    const inferredItems = (inferredData.inferredItems as Array<{ division: string; item: string; quantity: number; reason: string }>) || [];
-    const standardAllowances = (inferredData.standardAllowances as Array<{ division: string; item: string; quantity: number; basis: string }>) || [];
-
-    // Add inferred items with lower confidence
-    for (const inferred of [...inferredItems, ...standardAllowances]) {
-      if (inferred.division && computedCSIItems[inferred.division]) {
-        computedCSIItems[inferred.division].push({
-          id: `inferred-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-          item: inferred.item,
-          quantity: inferred.quantity,
-          unit: 'each',
-          confidence: 0.7, // Lower confidence for inferred items
-          source: 'inferred',
-          notes: (inferred as { reason?: string; basis?: string }).reason || (inferred as { reason?: string; basis?: string }).basis,
-        });
+      const apiKey = getApiKey();
+      if (apiKey) {
+        console.log('[ESTIMATION] Running enhanced LLM inference for gap-filling...');
+        const openai = getOpenAI();
+        
+        // Prepare image URL if available
+        let imageUrl = planImageUrl;
+        if (planImageUrl && isLocalUrl(planImageUrl)) {
+          imageUrl = await prepareImageForInference(planImageUrl);
+        }
+        
+        inferenceResult = await runEnhancedInference(
+          openai,
+          quantities,
+          projectType,
+          finishLevel,
+          scopeText,
+          clarificationData,
+          imageUrl
+        );
+        
+        spatialNarrative = inferenceResult.spatialNarrative;
+        
+        // Merge inferred items into CSI items
+        computedCSIItems = mergeInferenceIntoCSI(computedCSIItems, inferenceResult);
+        
+        console.log(`[ESTIMATION] LLM inference added ${inferenceResult.inferredItems.length} items, ${inferenceResult.standardAllowances.length} allowances`);
+        if (inferenceResult.scopeAmbiguities.length > 0) {
+          console.log(`[ESTIMATION] Found ${inferenceResult.scopeAmbiguities.length} scope ambiguities for review`);
+        }
+      } else {
+        console.log('[ESTIMATION] No API key - using annotation data only');
       }
+    } else if (!quantities.hasScale) {
+      console.log('[ESTIMATION] No scale set - using annotation data only');
+    } else {
+      console.log('[ESTIMATION] No annotations - using defaults only');
+    }
+    
+    // Generate layout narrative from extracted data if LLM didn't provide one
+    if (!spatialNarrative || spatialNarrative.length < 200) {
+      spatialNarrative = generateLayoutNarrative(quantities, projectType, projectSpecificData);
     }
 
     // Create CSI scope with computed + inferred items
@@ -503,21 +553,34 @@ export const estimationPipeline = onCall({
       return 'png'; // Default to png
     };
 
-    const cadData = {
+    const cadData: Record<string, unknown> = {
       fileUrl: planImageUrl || 'placeholder://no-image-uploaded',
       fileType: getFileType(planImageUrl),
       extractionMethod: 'vision' as const, // Schema valid: "ezdxf" | "vision"
       extractionConfidence: quantities.hasScale ? 0.95 : 0.6, // High confidence with scale
       spaceModel,
       spatialRelationships: {
-        layoutNarrative: (inferredData.spatialNarrative as string) || 
-          `Space contains ${quantities.totalRoomCount} rooms with ${quantities.totalWallLength.toFixed(1)} ${quantities.scaleUnit} of walls and ${quantities.totalFloorArea.toFixed(1)} square ${quantities.scaleUnit} of floor area.`,
+        layoutNarrative: spatialNarrative,
         roomAdjacencies: [],
         entryPoints: [],
       },
     };
+    
+    // Add project-specific data based on project type
+    if (projectSpecificData.kitchenSpecific) {
+      cadData.kitchenSpecific = projectSpecificData.kitchenSpecific;
+    }
+    if (projectSpecificData.bathroomSpecific) {
+      cadData.bathroomSpecific = projectSpecificData.bathroomSpecific;
+    }
+    if (projectSpecificData.bedroomSpecific) {
+      cadData.bedroomSpecific = projectSpecificData.bedroomSpecific;
+    }
+    if (projectSpecificData.livingAreaSpecific) {
+      cadData.livingAreaSpecific = projectSpecificData.livingAreaSpecific;
+    }
 
-    // Build flags
+    // Build flags with enhanced data
     const flags = {
       lowConfidenceItems: [] as Array<{ field: string; confidence: number; reason: string }>,
       missingData: quantities.warnings,
@@ -531,6 +594,16 @@ export const estimationPipeline = onCall({
         confidence: 0.0,
         reason: 'No scale set - all measurements are in pixels',
       });
+    }
+    
+    // Add scope ambiguities from LLM inference as verification items
+    if (inferenceResult?.scopeAmbiguities) {
+      for (const ambiguity of inferenceResult.scopeAmbiguities) {
+        flags.verificationItems.push(ambiguity.clarificationNeeded);
+        if (ambiguity.issue) {
+          flags.missingData.push(ambiguity.issue);
+        }
+      }
     }
 
     const clarificationOutput = {
@@ -560,7 +633,36 @@ export const estimationPipeline = onCall({
         totalWindowCount: quantities.totalWindowCount,
         layerSummary: quantities.layerSummary,
       },
+      // Include inference metadata for transparency
+      inferenceMetadata: inferenceResult ? {
+        roomTypesInferred: inferenceResult.roomTypes.length,
+        itemsInferred: inferenceResult.inferredItems.length,
+        allowancesAdded: inferenceResult.standardAllowances.length,
+        ambiguitiesFound: inferenceResult.scopeAmbiguities.length,
+        materialsRecommended: inferenceResult.materialsAndFinishes.recommended.length,
+      } : null,
     };
+
+    // ===================
+    // STEP 8: VALIDATE AND AUTO-FIX OUTPUT
+    // ===================
+    console.log('[ESTIMATION] Validating ClarificationOutput...');
+    
+    // First validate
+    const validationResult = validateClarificationOutput(clarificationOutput);
+    console.log(`[ESTIMATION] Validation: ${validationResult.isValid ? 'PASSED' : 'NEEDS FIXES'}, Score: ${validationResult.completenessScore}/100`);
+    
+    if (validationResult.errors.length > 0) {
+      console.log(`[ESTIMATION] Found ${validationResult.errors.length} errors, ${validationResult.warnings.length} warnings`);
+      console.log(getValidationSummary(validationResult));
+    }
+    
+    // Auto-fix common issues
+    const fixedOutput = autoFixClarificationOutput(clarificationOutput);
+    
+    // Re-validate after fix
+    const finalValidation = validateClarificationOutput(fixedOutput);
+    console.log(`[ESTIMATION] After auto-fix: ${finalValidation.isValid ? 'PASSED' : 'STILL HAS ISSUES'}, Score: ${finalValidation.completenessScore}/100`);
 
     // Save to Firestore (use set with merge to create if doesn't exist)
     initFirebaseAdmin();
@@ -568,8 +670,12 @@ export const estimationPipeline = onCall({
     await db.collection('projects').doc(projectId)
       .collection('estimations').doc(sessionId)
       .set({
-        clarificationOutput,
-        status: 'complete',
+        clarificationOutput: fixedOutput, // Use validated and fixed output
+        status: finalValidation.isValid ? 'complete' : 'needs_review',
+        validationScore: finalValidation.completenessScore,
+        validationErrors: finalValidation.errors,
+        validationWarnings: finalValidation.warnings,
+        csiCoverage: finalValidation.csiCoverage,
         analysisPassCount: passNumber,
         lastAnalysisAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
@@ -584,9 +690,18 @@ export const estimationPipeline = onCall({
     return {
       success: true,
       estimateId,
-      clarificationOutput,
+      clarificationOutput: fixedOutput,
       passNumber,
       quantitiesSource: 'annotation',
+      validation: {
+        isValid: finalValidation.isValid,
+        completenessScore: finalValidation.completenessScore,
+        errorCount: finalValidation.errors.length,
+        warningCount: finalValidation.warnings.length,
+        csiCoverage: finalValidation.csiCoverage,
+      },
+      projectType,
+      finishLevel,
     };
   } catch (error) {
     console.error('Estimation Pipeline Error:', error);

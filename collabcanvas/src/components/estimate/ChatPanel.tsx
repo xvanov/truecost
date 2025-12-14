@@ -37,6 +37,10 @@ import {
   deleteChatMessage,
 } from '../../services/chatService';
 import { loadScopeConfig } from '../../services/scopeConfigService';
+import {
+  saveClarificationContext,
+  type ExtractedClarifications,
+} from '../../services/clarificationContextService';
 
 interface ChatPanelProps {
   onClarificationComplete?: (complete: boolean) => void;
@@ -101,6 +105,7 @@ export function ChatPanel({
   const [isProcessing, setIsProcessing] = useState(false);
   const [annotationCheckComplete, setAnnotationCheckComplete] = useState(false);
   const [annotationCheckConversation, setAnnotationCheckConversation] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [annotationCheckHasPendingQuestions, setAnnotationCheckHasPendingQuestions] = useState(false);
   const [showProceedAnywayButton, setShowProceedAnywayButton] = useState(false);
 
   // Scope clarification state
@@ -108,6 +113,9 @@ export function ChatPanel({
   const [clarificationExtractedData, setClarificationExtractedData] = useState<Record<string, unknown>>({});
   const [clarificationComplete, setClarificationComplete] = useState(false);
   const [clarificationStarted, setClarificationStarted] = useState(false);
+
+  // Conversation context - last N messages for all handlers
+  const CONTEXT_MESSAGE_COUNT = 10;
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -279,6 +287,15 @@ export function ChatPanel({
     }
   }, [projectId, user?.uid]);
 
+  // Get last N messages as conversation context for AI
+  const getConversationContext = useCallback((): Array<{ role: 'user' | 'assistant'; content: string }> => {
+    const recentMessages = messages.slice(-CONTEXT_MESSAGE_COUNT);
+    return recentMessages.map((m) => ({
+      role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+      content: m.content,
+    }));
+  }, [messages]);
+
   // Command detection
   const detectProceedToEstimateCommand = (query: string): boolean => {
     const lowerQuery = query.toLowerCase();
@@ -367,10 +384,22 @@ export function ChatPanel({
         } : undefined,
       };
 
-      const annotationCheckAgentFn = httpsCallable<unknown, { success: boolean; message: string; isComplete: boolean; missingAnnotations: string[]; clarificationQuestions: string[]; annotationSummary: { hasScale: boolean; wallCount: number; roomCount: number; doorCount: number; windowCount: number; totalWallLength: number; totalFloorArea: number } }>(functions, 'annotationCheckAgent');
+      const annotationCheckAgentFn = httpsCallable<unknown, { 
+        success: boolean; 
+        message: string; 
+        isComplete: boolean; 
+        missingAnnotations: string[]; 
+        clarificationQuestions: string[]; 
+        extractedClarifications?: ExtractedClarifications;
+        annotationSummary: { hasScale: boolean; wallCount: number; roomCount: number; doorCount: number; windowCount: number; totalWallLength: number; totalFloorArea: number } 
+      }>(functions, 'annotationCheckAgent');
+
+      // Merge general conversation context with annotation-specific context
+      const generalContext = getConversationContext();
+      const mergedConversation = [...generalContext, ...annotationCheckConversation].slice(-CONTEXT_MESSAGE_COUNT);
 
       const result = await annotationCheckAgentFn({
-        projectId, scopeText: comprehensiveScopeText, annotationSnapshot, conversationHistory: annotationCheckConversation,
+        projectId, scopeText: comprehensiveScopeText, annotationSnapshot, conversationHistory: mergedConversation,
         userMessage: userMessage.includes('annotation check') ? undefined : userMessage,
       });
 
@@ -385,15 +414,31 @@ export function ChatPanel({
       messageContent += `• Doors: ${summary.doorCount}\n`;
       messageContent += `• Windows: ${summary.windowCount}`;
 
+      // Save extracted clarifications to Firestore for use in estimation
+      if (response.extractedClarifications && user?.uid) {
+        try {
+          await saveClarificationContext(projectId, user.uid, response.extractedClarifications);
+          console.log('Saved annotation clarifications:', response.extractedClarifications);
+        } catch (err) {
+          console.error('Failed to save clarifications:', err);
+        }
+      }
+
       if (response.clarificationQuestions && response.clarificationQuestions.length > 0) {
         messageContent += '\n\n**Questions:**\n';
         response.clarificationQuestions.forEach((q, i) => { messageContent += `${i + 1}. ${q}\n`; });
+        // Mark that we have pending questions - next user message should be routed here
+        setAnnotationCheckHasPendingQuestions(true);
+      } else {
+        // No more questions
+        setAnnotationCheckHasPendingQuestions(false);
       }
 
       setAnnotationCheckConversation((prev) => [...prev, { role: 'user', content: userMessage }, { role: 'assistant', content: response.message }]);
 
       if (response.isComplete) {
         setAnnotationCheckComplete(true);
+        setAnnotationCheckHasPendingQuestions(false);
         onClarificationComplete?.(true);
         messageContent += '\n\n✅ **All required annotations are complete!**';
       }
@@ -531,11 +576,15 @@ export function ChatPanel({
     try {
       const clarificationAgentFn = httpsCallable<unknown, { success: boolean; message: string; questions: string[]; extractedData: Record<string, unknown>; clarificationComplete: boolean; completionReason: string | null; error?: string }>(functions, 'clarificationAgent');
 
+      // Merge general conversation context with clarification-specific context
+      const generalContext = getConversationContext();
+      const mergedConversation = [...generalContext, ...clarificationConversation].slice(-CONTEXT_MESSAGE_COUNT);
+
       const result = await clarificationAgentFn({
         projectId, 
         sessionId: projectId, 
         scopeText: comprehensiveScopeText, 
-        conversationHistory: clarificationConversation, 
+        conversationHistory: mergedConversation, 
         userMessage: isInitial ? '' : userMessage,
         projectContext, // Pass the project context separately too
       });
@@ -762,6 +811,56 @@ export function ChatPanel({
     }
   };
 
+  // Handle general contextual chat - uses conversation history for context
+  const handleGeneralChat = async (messageText: string) => {
+    const loadingId = addMessage('agent', '💭 Thinking...');
+    const conversationContext = getConversationContext();
+
+    try {
+      // Use the clarification agent with conversation context for general understanding
+      const baseScopeText = estimateConfig?.scopeText || estimationSession?.scopeText || projectDescription || '';
+      const clarificationAgentFn = httpsCallable<unknown, { success: boolean; message: string; questions: string[]; extractedData: Record<string, unknown>; clarificationComplete: boolean; completionReason: string | null; error?: string }>(functions, 'clarificationAgent');
+
+      const result = await clarificationAgentFn({
+        scopeText: baseScopeText,
+        conversationHistory: conversationContext,
+        userMessage: messageText,
+        projectContext: {
+          projectId,
+          hasAnnotations: shapes.size > 0,
+          annotationCount: shapes.size,
+          layerCount: layers.length,
+          hasScale: !!(scaleLine && scaleLine.realWorldLength > 0),
+          isGeneralChat: true, // Flag to tell the agent this is general chat
+        },
+      });
+
+      removeMessage(loadingId);
+      const response = result.data;
+
+      if (response.success && response.message) {
+        addMessage('agent', response.message);
+        
+        // If the agent asked follow-up questions, update the clarification state
+        if (response.questions && response.questions.length > 0) {
+          setClarificationStarted(true);
+          setClarificationConversation((prev) => [
+            ...prev,
+            { role: 'user', content: messageText },
+            { role: 'assistant', content: response.message },
+          ]);
+        }
+      } else {
+        // Fallback response
+        addMessage('agent', `I understand you're asking about: "${messageText}"\n\nHere are some things I can help with:\n\n• **"clarify scope"** - Define project details\n• **"annotation check"** - Verify your annotations\n• **"proceed to estimate"** - Continue to estimation\n• **"generate bom"** - Generate Bill of Materials\n• **"annotate plan"** - Auto-detect elements\n• Or ask about materials (e.g., "how much drywall do I need?")`);
+      }
+    } catch (error) {
+      removeMessage(loadingId);
+      console.error('General chat error:', error);
+      addMessage('agent', `I had trouble understanding that. Could you rephrase or try one of these commands:\n\n• **"clarify scope"** - Define project details\n• **"annotation check"** - Verify your annotations\n• **"proceed to estimate"** - Continue to estimation\n• **"generate bom"** - Generate Bill of Materials\n• **"annotate plan"** - Auto-detect elements`);
+    }
+  };
+
   // Simple keyword parser
   const parseSimpleKeywords = (text: string): Record<string, unknown> => {
     const lower = text.toLowerCase();
@@ -828,6 +927,8 @@ export function ChatPanel({
     try {
       if (detectProceedToEstimateCommand(messageText)) { await handleProceedToEstimate(); return; }
       if (detectAnnotationCheckCommand(messageText)) { await handleAnnotationCheck(messageText); return; }
+      // Route follow-up responses to annotation check if there are pending questions
+      if (annotationCheckHasPendingQuestions && !annotationCheckComplete) { await handleAnnotationCheck(messageText); return; }
       if (clarificationStarted && !clarificationComplete) { await handleScopeClarification(messageText, false); return; }
       if (detectScopeClarificationCommand(messageText)) { await handleScopeClarification(messageText, true); return; }
       if (detectBOMCPMGeneration(messageText)) { await handleBOMCPMGeneration(); return; }
@@ -843,8 +944,8 @@ export function ChatPanel({
       if (shouldUseMaterialEstimation) {
         await handleMaterialEstimation(messageText);
       } else {
-        // No matching command found
-        addMessage('agent', `I didn't recognize that command. Try one of these:\n\n• **"clarify scope"** - Define project details\n• **"annotation check"** - Verify your annotations\n• **"proceed to estimate"** - Continue to estimation\n• **"generate bom"** - Generate Bill of Materials\n• **"annotate plan"** - Auto-detect elements\n• Or ask about materials (e.g., "how much drywall do I need?")`);
+        // No matching command found - use general contextual chat
+        await handleGeneralChat(messageText);
       }
     } catch (error) {
       console.error('Error processing message:', error);

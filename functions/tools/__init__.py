@@ -25,6 +25,7 @@ from .data_tools import (
     get_location_factors,
 )
 from .simulation_tools import run_monte_carlo
+from .price_tools import get_material_prices_tool
 
 # Export all data tools for agent registration (Task 4.7)
 DATA_TOOLS = [
@@ -32,6 +33,7 @@ DATA_TOOLS = [
     get_weather_factors,
     get_location_factors,
     run_monte_carlo,
+    get_material_prices_tool,
 ]
 
 __all__ = [
@@ -40,4 +42,5 @@ __all__ = [
     "get_weather_factors",
     "get_location_factors",
     "run_monte_carlo",
+    "get_material_prices_tool",
 ]

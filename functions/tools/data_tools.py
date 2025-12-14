@@ -2,13 +2,13 @@
 Data Tools for TrueCost Agent Pipeline.
 
 Provides LangChain-compatible tools for agents to access labor rates,
-weather factors, and location data.
+weather factors, location data, and Monte Carlo simulation.
 
 Architecture:
 - Uses @tool decorator from langchain_core.tools
 - Pydantic schemas for input validation (OpenAI function calling compatible)
 - Structured dict responses with traceability fields
-- Wraps underlying BLS and Weather services
+- Wraps underlying BLS, Weather, and Monte Carlo services
 
 References:
 - Story 4.5: Real Data Integration (AC 4.5.10-4.5.14)
@@ -16,13 +16,13 @@ References:
 
 Tool Response Contract:
 All tools return structured dicts with:
-- zip_code: Echo of input for traceability
-- source: Data provenance ("BLS", "Open-Meteo", "cached")
-- cached: Boolean indicating if data came from cache
-- Actual data payload
+- estimate_id/zip_code: Echo of input for traceability
+- source: Data provenance ("BLS", "Open-Meteo", "Monte Carlo", "cached")
+- cached: Boolean indicating if data came from cache (where applicable)
+- Actual data payload with confidence intervals and risk analysis
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import asyncio
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -93,6 +93,25 @@ class LocationFactorsInput(BaseModel):
 
     zip_code: str = Field(
         description="5-digit US zip code for the location"
+    )
+
+
+class MonteCarloInput(BaseModel):
+    """Input schema for run_monte_carlo tool."""
+
+    estimate_id: str = Field(
+        description="Unique estimate identifier for this simulation"
+    )
+    cost_items: List[Dict[str, Any]] = Field(
+        description="List of cost items with quantity, unit_cost_low, unit_cost_likely, unit_cost_high"
+    )
+    iterations: Optional[int] = Field(
+        default=1000,
+        description="Number of simulation iterations (default 1000)"
+    )
+    risk_factors: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="Optional list of risk factors with impact probabilities"
     )
 
 
@@ -285,4 +304,135 @@ def get_location_factors(zip_code: str) -> dict:
             "inspection_fee": base_data.permit_costs.inspection_fee,
         },
         "combined_adjustment": combined_adjustment,
+    }
+
+
+# =============================================================================
+# MONTE CARLO SIMULATION TOOL
+# =============================================================================
+
+
+@tool(args_schema=MonteCarloInput)
+def run_monte_carlo(
+    estimate_id: str,
+    cost_items: List[Dict[str, Any]],
+    iterations: int = 1000,
+    risk_factors: Optional[List[Dict[str, Any]]] = None
+) -> dict:
+    """Run Monte Carlo simulation on cost estimate to calculate risk-adjusted confidence intervals.
+
+    This tool performs probabilistic cost analysis using triangular distributions
+    to simulate uncertainty in material costs, labor rates, and other factors.
+
+    Use this tool when you need to:
+    - Calculate P50/P80/P90 confidence intervals for cost estimates
+    - Assess project risk and recommended contingency
+    - Identify which cost items contribute most to variance
+    - Generate histogram data for cost distribution visualization
+
+    Args:
+        estimate_id: Unique identifier for tracking this simulation
+        cost_items: List of cost items, each with:
+            - id: Unique item identifier
+            - description: Item description
+            - quantity: Number of units
+            - unit_cost_low: Optimistic unit cost estimate
+            - unit_cost_likely: Most likely unit cost estimate
+            - unit_cost_high: Pessimistic unit cost estimate
+        iterations: Number of simulation iterations (default 1000)
+        risk_factors: Optional risk factors with probability and impact
+
+    Returns:
+        Dictionary containing:
+        - estimate_id: Echo of input for traceability
+        - iterations: Number of iterations run
+        - percentiles: P50, P80, P90 cost estimates
+        - statistics: Mean, standard deviation, min/max
+        - recommended_contingency: Suggested contingency percentage
+        - top_risks: Top 5 risk factors by variance contribution
+        - histogram: Bins for cost distribution visualization
+        - simulation_time_ms: Time taken to run simulation
+
+    Example:
+        >>> items = [
+        ...     {
+        ...         "id": "cabinet_1",
+        ...         "description": "Kitchen cabinets",
+        ...         "quantity": 20,
+        ...         "unit_cost_low": 175,
+        ...         "unit_cost_likely": 225,
+        ...         "unit_cost_high": 350
+        ...     }
+        ... ]
+        >>> result = run_monte_carlo("est_123", items, iterations=1000)
+        >>> result["percentiles"]["p50"]  # 50th percentile cost
+        4500.0
+    """
+    logger.info("tool_run_monte_carlo", estimate_id=estimate_id, item_count=len(cost_items), iterations=iterations)
+
+    # Import Monte Carlo service here to avoid circular imports
+    from services.monte_carlo import LineItemInput, RiskFactor as MCRiskFactor, run_simulation
+
+    # Convert cost_items to LineItemInput objects
+    line_items = []
+    for item in cost_items:
+        line_items.append(LineItemInput(
+            id=item["id"],
+            description=item["description"],
+            quantity=item["quantity"],
+            unit_cost_low=item["unit_cost_low"],
+            unit_cost_likely=item["unit_cost_likely"],
+            unit_cost_high=item["unit_cost_high"]
+        ))
+
+    # Convert risk factors if provided
+    mc_risk_factors = []
+    if risk_factors:
+        for rf in risk_factors:
+            # Convert risk factor format
+            mc_risk_factors.append(MCRiskFactor(
+                item=rf.get("item", "Unknown"),
+                impact=rf.get("impact", 0.0),
+                probability=rf.get("probability", 0.5),
+                sensitivity=rf.get("sensitivity", 0.0)
+            ))
+
+    # Run the simulation
+    result = run_simulation(line_items, iterations=iterations)
+
+    # Build response dict
+    return {
+        "estimate_id": estimate_id,
+        "iterations": result.iterations,
+        "percentiles": {
+            "p50": result.p50,
+            "p80": result.p80,
+            "p90": result.p90
+        },
+        "statistics": {
+            "mean": result.mean,
+            "std_dev": result.std_dev,
+            "min_value": result.min_value,
+            "max_value": result.max_value
+        },
+        "recommended_contingency": result.recommended_contingency,
+        "top_risks": [
+            {
+                "item": risk.item,
+                "impact": risk.impact,
+                "probability": risk.probability,
+                "sensitivity": risk.sensitivity
+            }
+            for risk in result.top_risks
+        ],
+        "histogram": [
+            {
+                "range_low": bin.range_low,
+                "range_high": bin.range_high,
+                "count": bin.count,
+                "percentage": bin.percentage
+            }
+            for bin in result.histogram
+        ],
+        "simulation_time_ms": None,  # Could be added if needed
     }

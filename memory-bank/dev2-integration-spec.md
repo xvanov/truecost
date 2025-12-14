@@ -616,7 +616,7 @@ Before calling PDF generation, verify:
 - [ ] `projectName` is set (non-empty string)
 - [ ] `address` is set (non-empty string)
 - [ ] `p50`, `p80`, `p90` are all numbers > 0
-- [ ] `p50 < p80 < p90` (valid percentile order)
+- [ ] `p50 <= p80 <= p90` (valid percentile order; ties are possible depending on rounding/discrete outputs)
 - [ ] `contingencyPct` is between 0 and 50
 - [ ] `laborAnalysis.trades` has at least 1 trade
 - [ ] `schedule.tasks` has at least 1 task
