@@ -79,7 +79,6 @@ Integration into the Python pipeline:
 - Fixed `tools/data_tools.py` missing typing imports (`Dict`, `Any`) that caused pytest collection failures
 - Removed SciPy dependency from `functions/services/monte_carlo.py` (uses `numpy.linalg` + an `erf`-based normal CDF)
 - Fixed flaky schedule Monte Carlo test by allowing ties: `p50_days <= p80_days <= p90_days` (integer day percentiles can tie)
-
 ### New: Primary Agents Now Use LangChain Deep Agents (Hybrid Migration)
 
 We have converted **primary agents** to run their LLM reasoning through **LangChain Deep Agents** (`deepagents`) while keeping the existing **A2A + Orchestrator + Scorer/Critic** framework intact.
@@ -107,7 +106,6 @@ Note: scorers/critics are intentionally unchanged (still use the existing LangCh
 
 On Windows, `weasyprint` can be installed but fail to import due to missing GTK/Pango native libs (`gobject-2.0-0`).
 We updated `functions/tests/unit/test_pdf_generator.py` to **skip cleanly** if WeasyPrint (or its native deps) cannot be imported.
-
 ### New: User-Selected Cost Defaults (Input JSON)
 
 The pipeline now supports user-selected costing defaults supplied in the incoming JSON:

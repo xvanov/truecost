@@ -21,7 +21,6 @@ Recent pipeline change:
 - TimelineCritic no longer enforces fixed remodel duration heuristics (e.g., “small 20–30 / large 60–90 days”); critique is structural/consistency-based.
 - Added `code_compliance` agent (ICC: IBC/IRC/IECC family) to generate code-related warnings; Final output now includes `codeCompliance.warnings`.
 - Pipeline agent sequence is now 7 steps: `location → scope → code_compliance → cost → risk → timeline → final`.
-
 Deep Agents migration (hybrid):
 - Primary agents now use **LangChain Deep Agents** (`deepagents`) via `functions/services/deep_agent_factory.py::deep_agent_generate_json(...)`.
 - Added Firestore-backed Deep Agents filesystem backend: `functions/services/deep_agents_backend.py::FirestoreAgentFsBackend`.
@@ -30,7 +29,6 @@ Deep Agents migration (hybrid):
 
 Windows test fix:
 - `functions/tests/unit/test_pdf_generator.py` now skips cleanly if WeasyPrint cannot import due to missing native libs (e.g., `gobject-2.0-0`).
-
 New material pricing change:
 - **CostAgent now pulls live retail material prices** via Epic 5 price comparison:
   - TS callable: `collabcanvas/functions/src/priceComparison.ts` (`comparePrices`)
