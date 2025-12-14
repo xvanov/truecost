@@ -70,17 +70,6 @@ interface ProjectContext {
 }
 
 // ===================
-// FINISH LEVEL MULTIPLIERS
-// ===================
-
-const FINISH_MULTIPLIERS = {
-  budget: 0.7,
-  mid_range: 1.0,
-  high_end: 1.5,
-  luxury: 2.2,
-};
-
-// ===================
 // INTELLIGENT CSI MAPPING
 // ===================
 
@@ -92,7 +81,6 @@ export function buildEnhancedCSIItems(
   context: ProjectContext
 ): Record<string, CSILineItem[]> {
   const items: Record<string, CSILineItem[]> = {};
-  const finishMultiplier = FINISH_MULTIPLIERS[context.finishLevel] || 1.0;
   const cc = context.clarificationContext || {}; // Shorthand for clarification context
 
   // ===================

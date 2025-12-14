@@ -5,7 +5,7 @@
  */
 
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { firestore } from './firebase';
 
 // Structured clarification data (mirrors the backend type)
 export interface ExtractedClarifications {
@@ -200,7 +200,7 @@ export async function saveClarificationContext(
   userId: string,
   clarifications: ExtractedClarifications
 ): Promise<void> {
-  const docRef = doc(db, 'users', userId, 'projects', projectId, 'context', 'clarifications');
+  const docRef = doc(firestore, 'users', userId, 'projects', projectId, 'context', 'clarifications');
   
   try {
     const existingDoc = await getDoc(docRef);
@@ -240,7 +240,7 @@ export async function loadClarificationContext(
   projectId: string,
   userId: string
 ): Promise<ClarificationContext | null> {
-  const docRef = doc(db, 'users', userId, 'projects', projectId, 'context', 'clarifications');
+  const docRef = doc(firestore, 'users', userId, 'projects', projectId, 'context', 'clarifications');
   
   try {
     const docSnap = await getDoc(docRef);

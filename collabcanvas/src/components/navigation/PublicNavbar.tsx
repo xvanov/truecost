@@ -48,10 +48,9 @@ export function PublicNavbar() {
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center space-x-8">
-            <NavLink to="/">Home</NavLink>
-            <NavLink to="/#features">Features</NavLink>
-            <NavLink to="/#pricing">Pricing</NavLink>
-            <NavLink to="/#contact">Contact</NavLink>
+            <NavLink to="/how-it-works">How It Works</NavLink>
+            <NavLink to="/about">About Us</NavLink>
+            <NavLink to="/contact">Contact Us</NavLink>
             <Link to="/login" className="btn-pill-primary">
               Sign In
             </Link>

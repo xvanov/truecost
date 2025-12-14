@@ -72,6 +72,8 @@ export function AnnotatePage() {
   const moveSelectedShapes = useCanvasStore((state) => state.moveSelectedShapes);
   const rotateSelectedShapes = useCanvasStore((state) => state.rotateSelectedShapes);
   const setBackgroundImage = useScopedCanvasStore(projectId, (state) => state.setBackgroundImage);
+  const undo = useScopedCanvasStore(projectId, (state) => state.undo);
+  const redo = useScopedCanvasStore(projectId, (state) => state.redo);
 
   const { createShape, reloadShapesFromFirestore, deleteShapes, duplicateShapes, updateShapeRotation } =
     useShapes(projectId);
@@ -218,10 +220,23 @@ export function AnnotatePage() {
         (event.key.toLowerCase() === 'd' && event.metaKey) ||
         (event.key.toLowerCase() === 'r' && event.ctrlKey) ||
         (event.key.toLowerCase() === 'r' && event.metaKey) ||
+        (event.key.toLowerCase() === 'z' && (event.ctrlKey || event.metaKey)) ||
         event.key === 'Escape';
 
       if (isCustomShortcut) {
         event.preventDefault();
+      }
+
+      // Undo (Cmd+Z or Ctrl+Z)
+      if (event.key.toLowerCase() === 'z' && (event.ctrlKey || event.metaKey) && !event.shiftKey) {
+        undo();
+        return;
+      }
+
+      // Redo (Cmd+Shift+Z or Ctrl+Shift+Z)
+      if (event.key.toLowerCase() === 'z' && (event.ctrlKey || event.metaKey) && event.shiftKey) {
+        redo();
+        return;
       }
 
       // Diagnostics toggle (Shift+D)
@@ -274,6 +289,8 @@ export function AnnotatePage() {
     rotateSelectedShapes,
     clearSelection,
     updateShapeRotation,
+    undo,
+    redo,
   ]);
 
   const handleCreateShape = (type: ShapeType) => {

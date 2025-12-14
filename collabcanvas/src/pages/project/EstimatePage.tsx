@@ -23,6 +23,7 @@ import { ComparisonView } from "../../components/money/ComparisonView";
 import { TimeView } from "../../components/time/TimeView";
 import { PriceComparisonPanel } from "../../components/estimate/PriceComparisonPanel";
 import { PipelineDebugPanel } from "../../components/estimate/PipelineDebugPanel";
+import { RiskAnalysisView } from "../../components/estimate/RiskAnalysisView";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useAuth } from "../../hooks/useAuth";
@@ -60,6 +61,7 @@ type ResultTab =
   | "materials"
   | "labor"
   | "time"
+  | "riskAnalysis"
   | "priceComparison"
   | "estimateVsActual";
 
@@ -71,6 +73,7 @@ const RESULT_TABS: { id: ResultTab; label: string }[] = [
   { id: "materials", label: "Materials" },
   { id: "labor", label: "Labor" },
   { id: "time", label: "Time" },
+  { id: "riskAnalysis", label: "Risk Analysis" },
   { id: "priceComparison", label: "Price Comparison" },
   { id: "estimateVsActual", label: "Estimate vs Actual" },
 ];
@@ -316,11 +319,8 @@ export function EstimatePage() {
     () => ({
       // Project details (defaults for when navigating directly to this page)
       projectName: "",
-      location: "",
       projectType: "",
-      approximateSize: "",
       useUnionLabor: false,
-      zipCodeOverride: "",
       // Scope
       scopeText: "",
       // Estimate configuration
@@ -816,9 +816,10 @@ export function EstimatePage() {
           clarificationData: {
             // Pass structured location data from estimateConfig
             location: {
-              fullAddress: estimateConfig.address
-                ? `${estimateConfig.address.streetAddress}, ${estimateConfig.address.city}, ${estimateConfig.address.state} ${estimateConfig.address.zipCode}`
-                : "",
+              fullAddress: estimateConfig.address?.formattedAddress ||
+                (estimateConfig.address
+                  ? `${estimateConfig.address.streetAddress}, ${estimateConfig.address.city}, ${estimateConfig.address.state} ${estimateConfig.address.zipCode}`
+                  : ""),
               streetAddress: estimateConfig.address?.streetAddress || "",
               city: estimateConfig.address?.city || "",
               state: estimateConfig.address?.state || "",
@@ -828,7 +829,6 @@ export function EstimatePage() {
               estimateConfig.projectType,
               useProjectStore.getState().currentProject?.name
             ),
-            approximateSize: estimateConfig.approximateSize,
             // Pass start date for timeline agent
             desiredStart: estimateConfig.startDate,
           },
@@ -1344,12 +1344,7 @@ export function EstimatePage() {
                               Size
                             </p>
                             <p className="text-sm font-medium text-truecost-text-primary">
-                              {String(
-                                scopeSummary?.totalSqft ||
-                                  estimateConfig.approximateSize ||
-                                  "0"
-                              )}{" "}
-                              sq ft
+                              {String(scopeSummary?.totalSqft || "0")} sq ft
                             </p>
                           </div>
                           <div>
@@ -1813,6 +1808,9 @@ export function EstimatePage() {
         {activeTab === "labor" && <MoneyView mode="labor" />}
         {activeTab === "time" && projectId && (
           <TimeView projectId={projectId} />
+        )}
+        {activeTab === "riskAnalysis" && projectId && (
+          <RiskAnalysisView projectId={projectId} estimateId={estimateId} />
         )}
         {activeTab === "priceComparison" && projectId && (
           <PriceComparisonPanel projectId={projectId} />
