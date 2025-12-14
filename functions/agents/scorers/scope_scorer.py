@@ -20,30 +20,30 @@ logger = structlog.get_logger()
 
 # Minimum expected line items by project type
 MIN_LINE_ITEMS_BY_PROJECT: Dict[str, int] = {
-    "kitchen_remodel": 25,
-    "bathroom_remodel": 15,
-    "bedroom_remodel": 10,
-    "living_room_remodel": 10,
-    "basement_finish": 20,
-    "attic_conversion": 20,
-    "whole_house_remodel": 50,
-    "addition": 40,
-    "deck_patio": 10,
-    "garage": 15,
+    "kitchen_remodel": 15,
+    "bathroom_remodel": 10,
+    "bedroom_remodel": 8,
+    "living_room_remodel": 8,
+    "basement_finish": 15,
+    "attic_conversion": 15,
+    "whole_house_remodel": 30,
+    "addition": 25,
+    "deck_patio": 8,
+    "garage": 10,
 }
 
 # Minimum included divisions by project type
 MIN_DIVISIONS_BY_PROJECT: Dict[str, int] = {
-    "kitchen_remodel": 7,
-    "bathroom_remodel": 6,
-    "bedroom_remodel": 4,
-    "living_room_remodel": 4,
-    "basement_finish": 7,
-    "attic_conversion": 7,
-    "whole_house_remodel": 10,
-    "addition": 9,
-    "deck_patio": 4,
-    "garage": 6,
+    "kitchen_remodel": 5,
+    "bathroom_remodel": 4,
+    "bedroom_remodel": 3,
+    "living_room_remodel": 3,
+    "basement_finish": 5,
+    "attic_conversion": 5,
+    "whole_house_remodel": 8,
+    "addition": 7,
+    "deck_patio": 3,
+    "garage": 4,
 }
 
 # Valid confidence range

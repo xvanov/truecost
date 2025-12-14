@@ -200,13 +200,13 @@ def health():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5002))
+    port = int(os.environ.get('PORT', 5003))
     print(f"""
 ╔════════════════════════════════════════════════════════════════╗
 ║  TrueCost Python Functions - Local Development Server          ║
 ╠════════════════════════════════════════════════════════════════╣
 ║                                                                ║
-║  Server running on: http://127.0.0.1:{port}                     ║
+║  Server running on: http://127.0.0.1:{port}                      ║
 ║                                                                ║
 ║  Endpoints:                                                    ║
 ║  • POST /collabcanvas-dev/us-central1/start_deep_pipeline      ║
@@ -214,9 +214,9 @@ if __name__ == '__main__':
 ║  • POST /collabcanvas-dev/us-central1/delete_estimate          ║
 ║  • POST /collabcanvas-dev/us-central1/a2a_*                    ║
 ║                                                                ║
-║  The TypeScript orchestrator expects port 5001, so either:     ║
-║  1. Update PYTHON_FUNCTIONS_URL env var, OR                    ║
-║  2. Run this on port 5001 if Firebase emulators aren't running ║
+║  Note: Port 5003 avoids conflicts with Firebase emulators      ║
+║  (5001=functions, 5002=hosting). Frontend .env is configured   ║
+║  to use VITE_FIREBASE_FUNCTIONS_URL=localhost:5003             ║
 ║                                                                ║
 ╚════════════════════════════════════════════════════════════════╝
 """)

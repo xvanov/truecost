@@ -23,8 +23,26 @@ from services.firestore_service import FirestoreService
 from validators.clarification_validator import validate_clarification_output
 
 # Initialize Firebase Admin SDK
+import os
+from firebase_admin import credentials as fb_credentials
+
+class _EmulatorCredential(fb_credentials.Base):
+    """Credential wrapper for Firebase emulators using google-auth AnonymousCredentials."""
+
+    def __init__(self):
+        from google.auth.credentials import AnonymousCredentials
+        self._g_credential = AnonymousCredentials()
+
+    def get_credential(self):
+        return self._g_credential
+
 try:
-    initialize_app()
+    # When using emulators, use AnonymousCredentials which is accepted by google-cloud-firestore
+    if os.environ.get('FIRESTORE_EMULATOR_HOST') or os.environ.get('FUNCTIONS_EMULATOR'):
+        cred = _EmulatorCredential()
+        initialize_app(cred, {'projectId': os.environ.get('GCLOUD_PROJECT', 'collabcanvas-dev')})
+    else:
+        initialize_app()
 except ValueError:
     # Already initialized
     pass
