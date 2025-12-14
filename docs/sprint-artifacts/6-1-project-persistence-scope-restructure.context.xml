@@ -1,0 +1,198 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>6</epicId>
+    <storyId>1</storyId>
+    <title>Project Persistence &amp; Scope Page Restructure</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-11</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/6-1-project-persistence-scope-restructure.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>contractor</asA>
+    <iWant>to create a new project that saves to my dashboard</iWant>
+    <soThat>I can return to it later and track my estimates</soThat>
+    <tasks>
+      <task id="1" title="Merge NewEstimate + PlanView into ScopePage.tsx" acs="3,4,5">
+        <subtask id="1.1">Create new src/pages/project/ScopePage.tsx</subtask>
+        <subtask id="1.2">Combine form fields from NewEstimate.tsx (Project Name, Location, Type, Size)</subtask>
+        <subtask id="1.3">Include file upload zone from NewEstimate.tsx (required)</subtask>
+        <subtask id="1.4">Rename "Additional Details" textarea to "Scope Definition"</subtask>
+        <subtask id="1.5">Add ZIP code override + Labor type toggle from PlanView.tsx</subtask>
+        <subtask id="1.6">Remove chatbot entirely (chatbot is on Annotate page only)</subtask>
+        <subtask id="1.7">Remove "Extracted Quantities" section</subtask>
+        <subtask id="1.8">Add "Continue to Annotate" button</subtask>
+        <subtask id="1.9">Delete src/pages/estimate/NewEstimate.tsx after merge</subtask>
+        <subtask id="1.10">Delete src/pages/estimate/PlanView.tsx after merge</subtask>
+      </task>
+      <task id="2" title="Fix project persistence in ScopePage" acs="1,2">
+        <subtask id="2.1">Replace mock ID generation (const mockProjectId = `est-${Date.now()}`)</subtask>
+        <subtask id="2.2">Call projectStore.createNewProject(name, scopeDefinition, userId) on form submit</subtask>
+        <subtask id="2.3">Save all form fields to Firestore project document</subtask>
+        <subtask id="2.4">Navigate to /project/${project.id}/annotate after save</subtask>
+        <subtask id="2.5">Verify project appears on Dashboard with correct status</subtask>
+      </task>
+      <task id="3" title="Create EstimateStepper.tsx component" acs="11,13">
+        <subtask id="3.1">Create src/components/estimate/EstimateStepper.tsx</subtask>
+        <subtask id="3.2">Define props: currentStep, projectId, completedSteps</subtask>
+        <subtask id="3.3">Implement three steps: Scope, Annotate, Estimate</subtask>
+        <subtask id="3.4">Make completed steps clickable (navigate to route)</subtask>
+        <subtask id="3.5">Highlight current step visually</subtask>
+        <subtask id="3.6">Disable future steps</subtask>
+        <subtask id="3.7">Add to ScopePage, AnnotatePage</subtask>
+      </task>
+      <task id="4" title="Update routes in App.tsx" acs="6,13">
+        <subtask id="4.1">Add /project/new → ScopePage (initial create)</subtask>
+        <subtask id="4.2">Add /project/:id/scope → ScopePage (edit mode)</subtask>
+        <subtask id="4.3">Add /project/:id/annotate → AnnotatePage</subtask>
+        <subtask id="4.4">Keep /project/:id/estimate → EstimatePage (Story 6.2)</subtask>
+        <subtask id="4.5">Remove old /estimate/new and /estimate/:id/plan routes</subtask>
+        <subtask id="4.6">Add redirects from old routes to new routes (optional)</subtask>
+      </task>
+      <task id="5" title="Rename terminology throughout UI" acs="12">
+        <subtask id="5.1">Dashboard: "New Estimate" button → "New Project"</subtask>
+        <subtask id="5.2">Headers: "Final Estimate" → "Project Estimate"</subtask>
+        <subtask id="5.3">Navigation labels: "Estimates" → "Projects"</subtask>
+        <subtask id="5.4">Sidebar menu items (if applicable)</subtask>
+        <subtask id="5.5">Grep codebase for remaining "estimate" → "project" terminology</subtask>
+      </task>
+      <task id="6" title="Create AnnotatePage.tsx with chatbot" acs="7,8,9,10">
+        <subtask id="6.1">Create src/pages/project/AnnotatePage.tsx</subtask>
+        <subtask id="6.2">Include Board component for plan annotation (existing)</subtask>
+        <subtask id="6.3">Include ChatPanel with clarification agent</subtask>
+        <subtask id="6.4">Wire up clarification agent to chatbot</subtask>
+        <subtask id="6.5">Implement agent back-and-forth Q&amp;A flow</subtask>
+        <subtask id="6.6">Listen for agent "have all information" signal</subtask>
+        <subtask id="6.7">Show "Generate Estimate" button when agent signals completion</subtask>
+        <subtask id="6.8">Button navigates to EstimatePage</subtask>
+        <subtask id="6.9">Include EstimateStepper at top (currentStep="annotate")</subtask>
+      </task>
+      <task id="7" title="Testing" acs="all">
+        <subtask id="7.1">Write unit tests for EstimateStepper component states</subtask>
+        <subtask id="7.2">Write unit tests for ScopePage form validation</subtask>
+        <subtask id="7.3">Write integration test: create project → verify in Firestore</subtask>
+        <subtask id="7.4">Write integration test: full flow Dashboard → Scope → Annotate</subtask>
+        <subtask id="7.5">Manual test: verify chatbot NOT on Scope page</subtask>
+        <subtask id="7.6">Manual test: verify back navigation preserves data</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Creating a new project saves it to Firestore immediately</ac>
+    <ac id="2">Project appears on dashboard after creation</ac>
+    <ac id="3">"Additional Details" renamed to "Scope Definition"</ac>
+    <ac id="4">"Extracted Quantities" section removed</ac>
+    <ac id="5">Chatbot NOT on Scope page (only on Annotate page)</ac>
+    <ac id="6">"Continue to Annotate" button navigates to Annotate page</ac>
+    <ac id="7">Annotate page has chatbot with clarification agent</ac>
+    <ac id="8">Agent asks clarifying questions back-and-forth</ac>
+    <ac id="9">Agent signals "have all information" when done</ac>
+    <ac id="10">"Generate Estimate" button appears after agent completion</ac>
+    <ac id="11">Visual stepper shows: Scope (current) → Annotate → Estimate</ac>
+    <ac id="12">All terminology changed from "Estimate" to "Project"</ac>
+    <ac id="13">Back navigation from Annotate returns to Scope with data preserved</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-post-merge-integration.md" title="Post-Merge Integration Tech Spec" section="Story 1">
+        Primary technical specification for Epic 6. Defines route changes (/project/new, /project/:id/scope, /project/:id/annotate), Firestore schema with projects collection, ScopePage requirements (no chatbot, scope definition field), AnnotatePage with chatbot and clarification agent, and EstimateStepper component design.
+      </doc>
+      <doc path="docs/architecture.md" title="TrueCost Architecture" section="Project Structure, Data Architecture">
+        System architecture using React 19 + TypeScript + Vite + shadcn/ui frontend. Firestore schema under users/{userId}/projects/{projectId}. Project status flow: 'draft' → 'clarifying' → 'processing' → 'plan_review' → 'final'. Zustand for state management with useProjectStore.
+      </doc>
+      <doc path="docs/ux/ux-design-specification.md" title="UX Design Specification" section="Design System, Navigation">
+        Design system using shadcn/ui with Modern Neutral theme. Three-view navigation pattern (Time/Space/Money). Button hierarchy: Primary (solid dark), Secondary (light with border). Form patterns: labels above input, validation on blur + submit.
+      </doc>
+      <doc path="docs/ux/ux-user-journey-flows.md" title="User Journey Flows" section="Flow 1: Complete Project Estimation">
+        Primary user flow: Project Setup → Plan Upload → Layer Creation → Pre-Flight Check → Generation. Steps 1-3 relevant to Scope page (create project, upload plan). Step 4 Pre-Flight validates scale reference, layers, annotations.
+      </doc>
+    </docs>
+    <code>
+      <file path="collabcanvas/src/App.tsx" kind="router" symbol="App" lines="65-158" reason="Main router - needs route updates from /estimate/* to /project/*. Current routes: /estimate/new, /estimate/:id/plan, /estimate/:id/canvas, /estimate/:id/final"/>
+      <file path="collabcanvas/src/pages/estimate/NewEstimate.tsx" kind="page" symbol="NewEstimate" lines="1-181" reason="TO DELETE after merge. Contains form fields (name, location, type, size) and mock ID generation (line 27: const mockProjectId = `est-${Date.now()}`)"/>
+      <file path="collabcanvas/src/pages/estimate/PlanView.tsx" kind="page" symbol="PlanView" lines="1-159" reason="TO DELETE after merge. Contains FileUploadZone, FilePreview, ChatPanel, CADDataTable, ZIP code override, labor type toggle. 'Additional Details' textarea needs renaming to 'Scope Definition'"/>
+      <file path="collabcanvas/src/pages/Dashboard.tsx" kind="page" symbol="Dashboard" lines="1-174" reason="Uses useProjectStore. DashboardHeader has 'New Estimate' button that needs renaming to 'New Project'. Navigate target /estimate/new needs changing to /project/new"/>
+      <file path="collabcanvas/src/pages/Board.tsx" kind="page" symbol="Board" lines="1-327" reason="Existing canvas page. Will be used inside AnnotatePage. Has FloatingAIChat component. Navigation buttons point to /estimate/:id/plan and /estimate/:id/final"/>
+      <file path="collabcanvas/src/store/projectStore.ts" kind="store" symbol="useProjectStore" lines="1-179" reason="Zustand store with createNewProject(name, description, userId) method. Returns Project object with id. Used for AC#1 project persistence"/>
+      <file path="collabcanvas/src/components/estimate/ChatPanel.tsx" kind="component" symbol="ChatPanel" lines="1-109" reason="Mock chatbot component. Currently has hardcoded responses. Needs to integrate with clarification agent for real Q&amp;A"/>
+      <file path="collabcanvas/src/components/estimate/FileUploadZone.tsx" kind="component" symbol="FileUploadZone" reason="File upload component to include in ScopePage"/>
+      <file path="collabcanvas/src/components/estimate/FilePreview.tsx" kind="component" symbol="FilePreview" reason="File preview component to include in ScopePage"/>
+      <file path="collabcanvas/src/components/layouts/AuthenticatedLayout.tsx" kind="layout" symbol="AuthenticatedLayout" reason="Layout wrapper used by all authenticated pages"/>
+      <file path="collabcanvas/src/components/dashboard/DashboardHeader.tsx" kind="component" symbol="DashboardHeader" reason="Contains 'New Estimate' button text that needs changing to 'New Project'"/>
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="react" version="^19.2.0">Core UI library</package>
+        <package name="react-dom" version="^19.2.0">React DOM rendering</package>
+        <package name="react-router-dom" version="^7.9.5">Client-side routing - Routes, useNavigate, useParams, useLocation</package>
+        <package name="zustand" version="^5.0.8">State management - useProjectStore, useCanvasStore</package>
+        <package name="firebase" version="^12.4.0">Backend - Auth, Firestore, Storage</package>
+        <package name="konva" version="^10.0.2">Canvas rendering library</package>
+        <package name="react-konva" version="^19.0.10">React bindings for Konva canvas</package>
+        <package name="tailwindcss" version="^3.4.18">Utility-first CSS framework</package>
+        <package name="typescript" version="~5.9.3">TypeScript compiler</package>
+        <package name="vite" version="^7.1.7">Build tool and dev server</package>
+        <package name="vitest" version="^3.2.4">Unit testing framework</package>
+        <package name="@testing-library/react" version="^16.3.0">React component testing utilities</package>
+        <package name="@playwright/test" version="^1.50.0">E2E testing framework</package>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="architecture">Frontend: React 19 + TypeScript + Vite + shadcn/ui + Tailwind CSS + Zustand</constraint>
+    <constraint source="architecture">State Management: Use existing useProjectStore for project CRUD operations</constraint>
+    <constraint source="architecture">Authentication: Firebase Auth with Google OAuth - all pages require ProtectedRoute wrapper</constraint>
+    <constraint source="architecture">Database: Firestore with users/{userId}/projects/{projectId} structure</constraint>
+    <constraint source="tech-spec">Route pattern must change from /estimate/* to /project/*</constraint>
+    <constraint source="tech-spec">Chatbot MUST NOT appear on ScopePage - only on AnnotatePage</constraint>
+    <constraint source="tech-spec">Project status values: 'scope' | 'annotating' | 'estimating' | 'complete'</constraint>
+    <constraint source="ux">Button styling: btn-pill-primary for primary actions, btn-pill-secondary for secondary</constraint>
+    <constraint source="ux">Glass panel styling: glass-panel class for card containers</constraint>
+    <constraint source="ux">Form input styling: glass-input class for text inputs</constraint>
+    <constraint source="dev-notes">Files to DELETE: NewEstimate.tsx, PlanView.tsx (after content merged)</constraint>
+    <constraint source="dev-notes">Files to CREATE: ScopePage.tsx, AnnotatePage.tsx, EstimateStepper.tsx</constraint>
+  </constraints>
+  <interfaces>
+    <interface name="useProjectStore.createNewProject" kind="function" signature="(name: string, description: string, userId: string) => Promise&lt;Project&gt;" path="collabcanvas/src/store/projectStore.ts"/>
+    <interface name="Project" kind="type" signature="{ id: string; name: string; description: string; status: ProjectStatus; createdAt: number; updatedAt: number; ownerId: string; collaborators: Collaborator[]; ... }" path="collabcanvas/src/types/project.ts"/>
+    <interface name="ProjectStatus" kind="type" signature="'draft' | 'in-progress' | 'completed' | 'archived'" path="collabcanvas/src/types/project.ts"/>
+    <interface name="useAuth" kind="hook" signature="() => { user: User | null; loading: boolean }" path="collabcanvas/src/hooks/useAuth.ts"/>
+    <interface name="ProtectedRoute" kind="component" signature="({ children }: { children: React.ReactNode }) => JSX.Element" path="collabcanvas/src/App.tsx"/>
+    <interface name="AuthenticatedLayout" kind="component" signature="({ children }: { children: React.ReactNode }) => JSX.Element" path="collabcanvas/src/components/layouts/AuthenticatedLayout.tsx"/>
+    <interface name="useNavigate" kind="hook" signature="() => NavigateFunction" path="react-router-dom"/>
+    <interface name="useParams" kind="hook" signature="&lt;T&gt;() => Readonly&lt;T&gt;" path="react-router-dom"/>
+  </interfaces>
+  <tests>
+    <standards>
+      Unit tests use Vitest with @testing-library/react. Tests are co-located with components (*.test.tsx).
+      Mock dependencies with vi.mock() and vi.mocked(). Wrap components in BrowserRouter for routing tests.
+      Use describe/it/expect pattern. Mock hooks (useAuth, useProjectStore) and services.
+      E2E tests use Playwright (tests/e2e/*.spec.ts). Run with 'npm run test:e2e'.
+    </standards>
+    <locations>
+      <location glob="collabcanvas/src/**/*.test.tsx">Unit tests co-located with source files</location>
+      <location glob="collabcanvas/src/**/*.test.ts">Unit tests for services and utilities</location>
+      <location glob="collabcanvas/tests/e2e/*.spec.ts">E2E tests with Playwright</location>
+      <location glob="collabcanvas/src/store/*.test.ts">Store unit tests</location>
+    </locations>
+    <ideas>
+      <idea acId="1">Test createNewProject saves to Firestore - mock projectStore.createNewProject, verify it's called with correct params</idea>
+      <idea acId="2">Test project appears on dashboard - render Dashboard, verify new project in list</idea>
+      <idea acId="3">Test "Scope Definition" label - render ScopePage, query for "Scope Definition" text</idea>
+      <idea acId="4">Test no "Extracted Quantities" - render ScopePage, verify absence of "Extracted Quantities"</idea>
+      <idea acId="5">Test no ChatPanel on ScopePage - render ScopePage, verify ChatPanel component not present</idea>
+      <idea acId="6">Test navigation to Annotate - click "Continue to Annotate" button, verify navigate called with correct path</idea>
+      <idea acId="7">Test ChatPanel on AnnotatePage - render AnnotatePage, verify ChatPanel component present</idea>
+      <idea acId="11">Test EstimateStepper renders 3 steps - render with currentStep="scope", verify Scope/Annotate/Estimate visible</idea>
+      <idea acId="11">Test EstimateStepper highlights current step - render with currentStep="annotate", verify visual indicator</idea>
+      <idea acId="11">Test EstimateStepper disables future steps - render with currentStep="scope", verify Annotate/Estimate disabled</idea>
+      <idea acId="12">Test terminology change - grep codebase for "New Estimate", verify changed to "New Project"</idea>
+      <idea acId="13">Test back navigation - E2E test navigating from Annotate back to Scope, verify form data preserved</idea>
+      <idea acId="e2e">E2E: Full flow Dashboard → click New Project → fill form → Continue to Annotate → verify project saved</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -12,6 +12,7 @@ from agents.base_agent import BaseA2AAgent
 from services.firestore_service import FirestoreService
 from services.llm_service import LLMService
 from services.monte_carlo_service import MonteCarloService
+from config.settings import settings
 from models.risk_analysis import (
     ConfidenceLevel,
     RiskAnalysis,
@@ -126,13 +127,37 @@ class RiskAgent(BaseA2AAgent):
             base_cost = float(total_range) if total_range else 0
         
         if base_cost <= 0:
-            # Fallback to subtotals
+            # Fallback to subtotals (still real data, not invented numbers)
             subtotals = cost_output.get("subtotals", {})
             subtotal = subtotals.get("subtotal", {})
             if isinstance(subtotal, dict):
-                base_cost = subtotal.get("low", 10000)
+                base_cost = subtotal.get("low", 0)
             else:
-                base_cost = 10000  # Default fallback
+                base_cost = 0
+
+        if base_cost <= 0:
+            # Do NOT invent a base cost. Without cost output, we cannot run Monte Carlo.
+            msg = "Insufficient cost data to run Monte Carlo (missing/zero cost totals/subtotals)."
+            logger.warning("risk_agent_insufficient_cost_data", estimate_id=estimate_id)
+            output = {
+                "estimateId": estimate_id,
+                "riskLevel": "n/a",
+                "error": {"code": "INSUFFICIENT_DATA", "message": msg},
+                "monteCarlo": None,
+                "contingency": None,
+                "topRisks": [],
+                "recommendations": [],
+            }
+            await self.firestore.save_agent_output(
+                estimate_id=estimate_id,
+                agent_name=self.name,
+                output=output,
+                summary="Risk analysis unavailable (insufficient cost data)",
+                confidence=0.0,
+                tokens_used=self._tokens_used,
+                duration_ms=self.duration_ms,
+            )
+            return output
         
         logger.info(
             "risk_agent_inputs",
@@ -164,7 +189,7 @@ class RiskAgent(BaseA2AAgent):
         mc_result = await self.monte_carlo.run_simulation(
             base_cost=base_cost,
             risk_factors=risk_factors,
-            iterations=1000,
+            iterations=settings.monte_carlo_iterations,
             cost_variance_low=0.92,
             cost_variance_high=1.08
         )

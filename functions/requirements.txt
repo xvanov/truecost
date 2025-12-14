@@ -56,3 +56,4 @@ httpx>=0.25.0,<0.28.0  # Async HTTP client for BLS/Weather API calls
 tenacity>=8.0.0,<9.0.0  # Retry logic with exponential backoff
 pydantic>=2.4.0,<3.0.0  # Input schema definitions for agent tools (>=2.4.0 excludes CVE-2024-3772)
 langchain-core>=0.3.0  # Tool decorator and schemas for agent tools
+flask-cors>=4.0.0

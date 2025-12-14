@@ -60,6 +60,7 @@
     {
       "source": "functions",
       "codebase": "default",
+      "runtime": "nodejs20",
       "ignore": [
         "node_modules",
         ".git",
@@ -73,17 +74,18 @@
     },
     {
       "source": "../functions",
-      "codebase": "deep-pipeline",
-      "runtime": "python311",
+      "codebase": "python",
+      "runtime": "python312",
       "ignore": [
-        "__pycache__",
-        ".git",
         "venv",
         ".venv",
+        "__pycache__",
         "*.pyc",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
         "*.local",
-        ".pytest_cache",
-        "tests"
+        "node_modules",
+        ".git"
       ]
     }
   ]

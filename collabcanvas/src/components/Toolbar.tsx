@@ -16,7 +16,7 @@ import { AIClarificationDialog } from './AIClarificationDialog';
 import { FileUpload } from './FileUpload';
 import { ScaleTool } from './ScaleTool';
 import { MaterialEstimationPanel } from './MaterialEstimationPanel';
-import { UnifiedAIChat } from './UnifiedAIChat';
+import { FloatingChatPanel } from './estimate/FloatingChatPanel';
 
 interface ToolbarProps {
   children?: React.ReactNode;
@@ -636,8 +636,8 @@ export function Toolbar({ children, fps, zoom, onCreateShape, stageRef, onToggle
         onClose={() => setIsShortcutsHelpOpen(false)}
       />
 
-      {/* Unified AI Chat */}
-      <UnifiedAIChat
+      {/* Floating AI Chat */}
+      <FloatingChatPanel
         isVisible={isAIAssistantOpen}
         onClose={() => setIsAIAssistantOpen(false)}
       />

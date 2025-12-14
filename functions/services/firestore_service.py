@@ -26,10 +26,22 @@ class FirestoreService:
     """
     
     COLLECTION_ESTIMATES = "estimates"
+    COLLECTION_PROJECTS = "projects"
+    SUBCOLLECTION_PIPELINE = "pipeline"
     SUBCOLLECTION_AGENT_OUTPUTS = "agentOutputs"
     SUBCOLLECTION_CONVERSATIONS = "conversations"
     SUBCOLLECTION_VERSIONS = "versions"
     SUBCOLLECTION_COST_ITEMS = "costItems"
+
+    # Map Python agent names to frontend stage names
+    AGENT_TO_STAGE_MAP = {
+        "location": "location",
+        "scope": "scope",
+        "cost": "cost",
+        "risk": "risk",
+        "timeline": "risk",  # Timeline maps to risk stage for UI
+        "final": "final",
+    }
     
     def __init__(self, db=None):
         """Initialize FirestoreService.
@@ -137,7 +149,101 @@ class FirestoreService:
         
         await self.update_estimate(estimate_id, update_data)
         logger.info("agent_status_updated", estimate_id=estimate_id, agent=agent_name, status=status)
-    
+
+    async def sync_to_project_pipeline(
+        self,
+        project_id: str,
+        estimate_id: str,
+        current_agent: Optional[str],
+        completed_agents: List[str],
+        progress: int,
+        status: str = "running",
+        error: Optional[str] = None,
+        user_id: Optional[str] = None,
+        started_at: Optional[int] = None,
+    ) -> None:
+        """Sync pipeline status to the project collection for frontend UI.
+
+        The frontend UI watches /projects/{projectId}/pipeline/status for
+        real-time progress updates. This method syncs the Python pipeline
+        status to that location.
+
+        Args:
+            project_id: The project document ID.
+            estimate_id: The estimate document ID (used as pipelineId).
+            current_agent: Current agent name (will be mapped to stage name).
+            completed_agents: List of completed agent names.
+            progress: Progress percentage (0-100).
+            status: Pipeline status ('running', 'complete', 'error', 'idle').
+            error: Optional error message.
+            user_id: User who triggered the pipeline.
+            started_at: Pipeline start timestamp (ms since epoch).
+        """
+        if not project_id:
+            logger.warning("sync_skipped_no_project_id", estimate_id=estimate_id)
+            return
+
+        try:
+            # Map agent names to stage names for the frontend
+            current_stage = self.AGENT_TO_STAGE_MAP.get(current_agent) if current_agent else None
+            completed_stages = [
+                self.AGENT_TO_STAGE_MAP.get(agent, agent)
+                for agent in completed_agents
+                if agent in self.AGENT_TO_STAGE_MAP
+            ]
+            # Remove duplicates while preserving order
+            completed_stages = list(dict.fromkeys(completed_stages))
+
+            # Build status document matching frontend expectations
+            status_data = {
+                "status": status,
+                "currentStage": current_stage,
+                "completedStages": completed_stages,
+                "progress": progress,
+                "pipelineId": estimate_id,
+                "projectId": project_id,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            }
+
+            if started_at:
+                status_data["startedAt"] = started_at
+            if user_id:
+                status_data["triggeredBy"] = user_id
+            if error:
+                status_data["error"] = error
+            if status == "complete":
+                import time
+                status_data["completedAt"] = int(time.time() * 1000)
+
+            # Write to /projects/{projectId}/pipeline/status
+            doc_ref = (
+                self.db
+                .collection(self.COLLECTION_PROJECTS)
+                .document(project_id)
+                .collection(self.SUBCOLLECTION_PIPELINE)
+                .document("status")
+            )
+
+            await self._maybe_await(doc_ref.set(status_data, merge=True))
+
+            logger.info(
+                "project_pipeline_synced",
+                project_id=project_id,
+                estimate_id=estimate_id,
+                status=status,
+                progress=progress,
+                current_stage=current_stage,
+            )
+
+        except Exception as e:
+            # Don't fail the pipeline if sync fails - just log warning
+            logger.warning(
+                "project_pipeline_sync_failed",
+                project_id=project_id,
+                estimate_id=estimate_id,
+                error=str(e),
+            )
+
     async def save_agent_output(
         self,
         estimate_id: str,

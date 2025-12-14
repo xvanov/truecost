@@ -1,9 +1,14 @@
 """Timeline Agent for TrueCost.
 
 Generates project timeline with tasks, dependencies, and critical path.
+
+Important:
+- Task lists are NOT hardcoded. The LLM generates tasks based on the user-defined
+  scope and the pipeline input JSON.
 """
 
 from datetime import datetime, timedelta
+import json
 from typing import Any, Dict, List, Optional
 import time
 import structlog
@@ -29,92 +34,43 @@ logger = structlog.get_logger()
 
 
 # =============================================================================
-# TIMELINE AGENT SYSTEM PROMPT
+# LLM TASK PLANNING PROMPT (NO HARDCODED TASK LISTS)
 # =============================================================================
 
 
-TIMELINE_AGENT_SYSTEM_PROMPT = """You are a construction scheduling expert for TrueCost.
+TIMELINE_TASK_PLANNER_PROMPT = """You are a construction scheduling expert for TrueCost.
 
-Your role is to analyze scope and provide timeline insights:
+Your job: generate a project schedule task list based strictly on the provided project context
+(user-defined scope + pipeline JSON). Do NOT use hardcoded templates.
 
-## Analysis Focus
-1. Validate task durations based on scope complexity
-2. Identify potential scheduling conflicts
-3. Assess weather impacts on schedule
-4. Recommend schedule optimizations
-5. Identify opportunities for parallel work
+Requirements:
+- Output JSON with a top-level key "tasks".
+- Each task MUST include:
+  - name: string
+  - phase: one of ["preconstruction","demolition","site_prep","foundation","framing","rough_in","insulation","drywall","finish","fixtures","punch_list","final_inspection"]
+  - duration_days: integer working days (>= 1)
+  - primary_trade: string (e.g., "plumber", "electrician", "carpenter", "general")
+  - depends_on: array of task names that must finish before this task starts
 
-## Output Requirements
-Provide analysis in this JSON format:
+Guidelines:
+- Keep dependencies realistic; allow parallel work when safe by not over-linking tasks.
+- Include permitting/lead-time/inspection tasks when appropriate for the given scope.
+- If information is missing, do NOT invent durations. Instead set duration_days to null and explain in "notes".
+
+Return format:
 {
-    "schedule_assessment": "Overall schedule feasibility",
-    "duration_notes": ["note about specific durations"],
-    "parallel_opportunities": ["tasks that could overlap"],
-    "weather_considerations": ["seasonal/weather impacts"],
-    "recommendations": ["scheduling recommendations"],
-    "confidence_factors": ["what affects schedule confidence"]
+  "tasks": [
+    {
+      "name": "...",
+      "phase": "...",
+      "duration_days": 3,
+      "primary_trade": "...",
+      "depends_on": ["..."],
+      "notes": "optional"
+    }
+  ]
 }
-
-## Best Practices
-- Consider trade sequencing requirements
-- Account for inspection wait times
-- Factor in material lead times
-- Consider crew availability
-- Allow for weather buffers in appropriate seasons
 """
-
-
-# =============================================================================
-# DEFAULT TASK TEMPLATES BY PROJECT TYPE
-# =============================================================================
-
-
-KITCHEN_REMODEL_TASKS = [
-    {"phase": PhaseType.PRECONSTRUCTION, "name": "Permits & Planning", "duration": 5, "trade": "general"},
-    {"phase": PhaseType.DEMOLITION, "name": "Demolition", "duration": 2, "trade": "demolition"},
-    {"phase": PhaseType.ROUGH_IN, "name": "Plumbing Rough-In", "duration": 2, "trade": "plumber"},
-    {"phase": PhaseType.ROUGH_IN, "name": "Electrical Rough-In", "duration": 2, "trade": "electrician"},
-    {"phase": PhaseType.FRAMING, "name": "Framing & Blocking", "duration": 1, "trade": "carpenter"},
-    {"phase": PhaseType.DRYWALL, "name": "Drywall & Taping", "duration": 3, "trade": "drywall_installer"},
-    {"phase": PhaseType.FINISH, "name": "Cabinet Installation", "duration": 3, "trade": "cabinet_installer"},
-    {"phase": PhaseType.FINISH, "name": "Countertop Installation", "duration": 2, "trade": "countertop_installer"},
-    {"phase": PhaseType.FIXTURES, "name": "Plumbing Fixtures", "duration": 1, "trade": "plumber"},
-    {"phase": PhaseType.FIXTURES, "name": "Electrical Fixtures", "duration": 1, "trade": "electrician"},
-    {"phase": PhaseType.FINISH, "name": "Backsplash & Finish", "duration": 2, "trade": "tile_setter"},
-    {"phase": PhaseType.FINISH, "name": "Appliance Installation", "duration": 1, "trade": "appliance_installer"},
-    {"phase": PhaseType.PUNCH_LIST, "name": "Punch List & Cleanup", "duration": 1, "trade": "general"},
-    {"phase": PhaseType.FINAL_INSPECTION, "name": "Final Inspection", "duration": 1, "trade": "general"},
-]
-
-BATHROOM_REMODEL_TASKS = [
-    {"phase": PhaseType.PRECONSTRUCTION, "name": "Permits & Planning", "duration": 5, "trade": "general"},
-    {"phase": PhaseType.DEMOLITION, "name": "Demolition", "duration": 2, "trade": "demolition"},
-    {"phase": PhaseType.ROUGH_IN, "name": "Plumbing Rough-In", "duration": 3, "trade": "plumber"},
-    {"phase": PhaseType.ROUGH_IN, "name": "Electrical Rough-In", "duration": 2, "trade": "electrician"},
-    {"phase": PhaseType.FRAMING, "name": "Framing & Blocking", "duration": 1, "trade": "carpenter"},
-    {"phase": PhaseType.INSULATION, "name": "Waterproofing", "duration": 2, "trade": "tile_setter"},
-    {"phase": PhaseType.DRYWALL, "name": "Drywall & Cement Board", "duration": 2, "trade": "drywall_installer"},
-    {"phase": PhaseType.FINISH, "name": "Tile Installation", "duration": 4, "trade": "tile_setter"},
-    {"phase": PhaseType.FINISH, "name": "Vanity & Countertop", "duration": 2, "trade": "cabinet_installer"},
-    {"phase": PhaseType.FIXTURES, "name": "Plumbing Fixtures", "duration": 2, "trade": "plumber"},
-    {"phase": PhaseType.FIXTURES, "name": "Electrical Fixtures", "duration": 1, "trade": "electrician"},
-    {"phase": PhaseType.FINISH, "name": "Paint & Accessories", "duration": 2, "trade": "painter"},
-    {"phase": PhaseType.PUNCH_LIST, "name": "Punch List & Cleanup", "duration": 1, "trade": "general"},
-    {"phase": PhaseType.FINAL_INSPECTION, "name": "Final Inspection", "duration": 1, "trade": "general"},
-]
-
-DEFAULT_REMODEL_TASKS = [
-    {"phase": PhaseType.PRECONSTRUCTION, "name": "Permits & Planning", "duration": 5, "trade": "general"},
-    {"phase": PhaseType.DEMOLITION, "name": "Demolition & Prep", "duration": 3, "trade": "demolition"},
-    {"phase": PhaseType.ROUGH_IN, "name": "Rough-In (Plumbing/Electrical)", "duration": 5, "trade": "general"},
-    {"phase": PhaseType.FRAMING, "name": "Framing & Structural", "duration": 3, "trade": "carpenter"},
-    {"phase": PhaseType.INSULATION, "name": "Insulation", "duration": 2, "trade": "insulation_installer"},
-    {"phase": PhaseType.DRYWALL, "name": "Drywall", "duration": 4, "trade": "drywall_installer"},
-    {"phase": PhaseType.FINISH, "name": "Finish Work", "duration": 7, "trade": "general"},
-    {"phase": PhaseType.FIXTURES, "name": "Fixtures & Trim", "duration": 3, "trade": "general"},
-    {"phase": PhaseType.PUNCH_LIST, "name": "Punch List", "duration": 2, "trade": "general"},
-    {"phase": PhaseType.FINAL_INSPECTION, "name": "Final Inspection", "duration": 1, "trade": "general"},
-]
 
 
 class TimelineAgent(BaseA2AAgent):
@@ -173,7 +129,7 @@ class TimelineAgent(BaseA2AAgent):
         # Get project type
         project_brief = clarification.get("projectBrief", {})
         project_type = project_brief.get("projectType", "renovation").lower()
-        total_sqft = project_brief.get("scopeSummary", {}).get("totalSqft", 200)
+        total_sqft = project_brief.get("scopeSummary", {}).get("totalSqft")
         
         logger.info(
             "timeline_agent_inputs",
@@ -187,25 +143,105 @@ class TimelineAgent(BaseA2AAgent):
         seasonal_adjustment = weather.get("seasonalAdjustment", 1.0)
         winter_impact = weather.get("winterImpact", "low")
         
-        # Calculate start date (2 weeks from now by default)
-        start_date = datetime.now() + timedelta(days=14)
-        
-        # Select task template based on project type
-        task_templates = self._get_task_templates(project_type)
-        
-        # Adjust durations based on project size
-        size_factor = self._calculate_size_factor(total_sqft, project_type)
-        
-        # Apply feedback adjustments if retry
-        if feedback:
-            task_templates = self._apply_feedback(task_templates, feedback)
-        
-        # Generate tasks with scheduling
-        tasks = self._generate_tasks(
-            task_templates=task_templates,
+        # Calculate start date (must come from clarification JSON; do NOT default to "2 weeks from now")
+        desired_start = project_brief.get("timeline", {}).get("desiredStart")
+        if not (isinstance(desired_start, str) and desired_start.strip()):
+            msg = "Timeline unavailable (missing required projectBrief.timeline.desiredStart)."
+            logger.warning(
+                "timeline_agent_missing_desired_start",
+                estimate_id=estimate_id,
+            )
+            output = {
+                "estimateId": estimate_id,
+                "error": {"code": "INSUFFICIENT_DATA", "message": msg},
+                "tasks": [],
+                "milestones": [],
+                "criticalPath": None,
+                "totalDuration": 0,
+                "totalCalendarDays": 0,
+                "durationRange": {"optimistic": 0, "pessimistic": 0},
+            }
+            await self.firestore.save_agent_output(
+                estimate_id=estimate_id,
+                agent_name=self.name,
+                output=output,
+                summary="Timeline unavailable (missing desiredStart)",
+                confidence=0.0,
+                tokens_used=self._tokens_used,
+                duration_ms=self.duration_ms,
+            )
+            return output
+
+        try:
+            # Accept ISO date or datetime strings (optionally "Z"-terminated)
+            start_date = datetime.fromisoformat(desired_start.strip().replace("Z", ""))
+        except Exception:
+            msg = "Timeline unavailable (invalid desiredStart; must be ISO date/datetime)."
+            logger.warning(
+                "timeline_agent_invalid_desired_start",
+                estimate_id=estimate_id,
+                desired_start=desired_start,
+            )
+            output = {
+                "estimateId": estimate_id,
+                "error": {"code": "INVALID_INPUT", "message": msg},
+                "tasks": [],
+                "milestones": [],
+                "criticalPath": None,
+                "totalDuration": 0,
+                "totalCalendarDays": 0,
+                "durationRange": {"optimistic": 0, "pessimistic": 0},
+            }
+            await self.firestore.save_agent_output(
+                estimate_id=estimate_id,
+                agent_name=self.name,
+                output=output,
+                summary="Timeline unavailable (invalid desiredStart)",
+                confidence=0.0,
+                tokens_used=self._tokens_used,
+                duration_ms=self.duration_ms,
+            )
+            return output
+
+        # Generate task plan via LLM (no hardcoded templates)
+        task_specs = await self._generate_task_specs_with_llm(
+            estimate_id=estimate_id,
+            project_type=project_type,
+            total_sqft=total_sqft,
+            scope_output=scope_output,
+            cost_output=cost_output,
+            location_output=location_output,
+            feedback=feedback,
+        )
+
+        # If LLM cannot provide durations, do not fabricate: return N/A.
+        if not task_specs:
+            msg = "Timeline unavailable (insufficient data to generate tasks)."
+            logger.warning("timeline_agent_insufficient_data", estimate_id=estimate_id)
+            output = {
+                "estimateId": estimate_id,
+                "error": {"code": "INSUFFICIENT_DATA", "message": msg},
+                "tasks": [],
+                "milestones": [],
+                "criticalPath": None,
+                "totalDuration": 0,
+                "totalCalendarDays": 0,
+                "durationRange": {"optimistic": 0, "pessimistic": 0},
+            }
+            await self.firestore.save_agent_output(
+                estimate_id=estimate_id,
+                agent_name=self.name,
+                output=output,
+                summary="Timeline unavailable (insufficient data)",
+                confidence=0.0,
+                tokens_used=self._tokens_used,
+                duration_ms=self.duration_ms,
+            )
+            return output
+
+        tasks = self._build_tasks_from_specs(
+            task_specs=task_specs,
             start_date=start_date,
-            size_factor=size_factor,
-            seasonal_adjustment=seasonal_adjustment
         )
         
         # Calculate critical path
@@ -283,149 +319,149 @@ class TimelineAgent(BaseA2AAgent):
         
         return output
     
-    def _get_task_templates(self, project_type: str) -> List[Dict[str, Any]]:
-        """Get task templates based on project type.
-        
-        Args:
-            project_type: Type of project.
-            
-        Returns:
-            List of task template dicts.
-        """
-        if "kitchen" in project_type:
-            return KITCHEN_REMODEL_TASKS.copy()
-        elif "bathroom" in project_type:
-            return BATHROOM_REMODEL_TASKS.copy()
-        else:
-            return DEFAULT_REMODEL_TASKS.copy()
-    
-    def _calculate_size_factor(self, sqft: float, project_type: str) -> float:
-        """Calculate duration adjustment factor based on project size.
-        
-        Args:
-            sqft: Project square footage.
-            project_type: Type of project.
-            
-        Returns:
-            Duration multiplier (0.8 - 1.5).
-        """
-        # Base sizes by project type
-        base_sizes = {
-            "kitchen": 150,
-            "bathroom": 75,
-            "renovation": 500,
-            "addition": 400,
-        }
-        
-        # Find matching base
-        base_sqft = 200
-        for key, size in base_sizes.items():
-            if key in project_type.lower():
-                base_sqft = size
-                break
-        
-        # Calculate factor (logarithmic scaling)
-        ratio = sqft / base_sqft
-        
-        if ratio <= 0.5:
-            return 0.85
-        elif ratio <= 1.0:
-            return 0.9 + (ratio - 0.5) * 0.2
-        elif ratio <= 2.0:
-            return 1.0 + (ratio - 1.0) * 0.25
-        else:
-            return min(1.5, 1.25 + (ratio - 2.0) * 0.1)
-    
-    def _apply_feedback(
+    async def _generate_task_specs_with_llm(
         self,
-        task_templates: List[Dict[str, Any]],
-        feedback: Dict[str, Any]
+        estimate_id: str,
+        project_type: str,
+        total_sqft: Any,
+        scope_output: Dict[str, Any],
+        cost_output: Dict[str, Any],
+        location_output: Dict[str, Any],
+        feedback: Optional[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """Apply critic feedback to task templates.
-        
-        Args:
-            task_templates: Original templates.
-            feedback: Critic feedback.
-            
-        Returns:
-            Adjusted templates.
-        """
-        issues = feedback.get("issues", [])
-        
-        for issue in issues:
-            issue_lower = issue.lower()
-            
-            # Adjust durations based on feedback
-            if "too short" in issue_lower or "insufficient" in issue_lower:
-                for template in task_templates:
-                    template["duration"] = int(template["duration"] * 1.2)
-            elif "too long" in issue_lower or "excessive" in issue_lower:
-                for template in task_templates:
-                    template["duration"] = max(1, int(template["duration"] * 0.85))
-        
-        return task_templates
-    
-    def _generate_tasks(
+        """Ask the LLM to generate a task plan (no hardcoded templates)."""
+        try:
+            user_message = json.dumps(
+                {
+                    "requestType": "TIMELINE_TASK_PLAN_REQUEST",
+                    "estimateId": estimate_id,
+                    "projectType": project_type,
+                    "totalSqft": total_sqft,
+                    "location": {
+                        "zipCode": location_output.get("zipCode"),
+                        "weatherFactors": location_output.get("weatherFactors"),
+                    },
+                    "scope": {
+                        "divisions": scope_output.get("divisions", []),
+                    },
+                    "cost": {
+                        "summary": cost_output.get("summary"),
+                        "subtotals": cost_output.get("subtotals"),
+                    },
+                    "criticFeedback": feedback,
+                },
+                default=str,
+            )
+
+            result = await self.llm.generate_json(
+                TIMELINE_TASK_PLANNER_PROMPT,
+                user_message,
+                max_tokens=1400,
+            )
+            self._tokens_used += result.get("tokens_used", 0)
+            content = result.get("content") or {}
+            tasks = content.get("tasks") if isinstance(content, dict) else None
+            if not isinstance(tasks, list):
+                return []
+
+            # Filter out tasks without numeric durations (do not invent).
+            cleaned: List[Dict[str, Any]] = []
+            for t in tasks:
+                if not isinstance(t, dict):
+                    continue
+                if t.get("duration_days") is None:
+                    continue
+                try:
+                    d = int(t.get("duration_days"))
+                except Exception:
+                    continue
+                if d < 1:
+                    continue
+                cleaned.append(t)
+            return cleaned
+
+        except Exception as e:
+            logger.warning("timeline_task_plan_llm_failed", estimate_id=estimate_id, error=str(e))
+            return []
+
+    def _build_tasks_from_specs(
         self,
-        task_templates: List[Dict[str, Any]],
+        task_specs: List[Dict[str, Any]],
         start_date: datetime,
-        size_factor: float,
-        seasonal_adjustment: float
     ) -> List[TimelineTask]:
-        """Generate timeline tasks from templates.
-        
-        Args:
-            task_templates: Task templates.
-            start_date: Project start date.
-            size_factor: Size-based duration multiplier.
-            seasonal_adjustment: Weather-based duration multiplier.
-            
-        Returns:
-            List of TimelineTask objects.
-        """
-        tasks = []
-        current_date = start_date
-        
-        for i, template in enumerate(task_templates):
+        """Convert LLM task specs into TimelineTask objects and schedule them."""
+        name_to_id: Dict[str, str] = {}
+        for i, spec in enumerate(task_specs):
+            name = str(spec.get("name", f"Task {i+1}")).strip()
+            name_to_id[name] = f"task-{i + 1:02d}"
+
+        tasks: List[TimelineTask] = []
+        # Simple scheduling: honor dependencies; otherwise schedule sequentially in given order.
+        scheduled_end: Dict[str, datetime] = {}
+
+        for i, spec in enumerate(task_specs):
             task_id = f"task-{i + 1:02d}"
-            
-            # Calculate adjusted duration
-            base_duration = template["duration"]
-            adjusted_duration = max(1, int(base_duration * size_factor * seasonal_adjustment))
-            
-            # Create dependencies (sequential by default)
-            dependencies = []
-            if i > 0:
-                dependencies.append(TaskDependency(
-                    predecessor_id=f"task-{i:02d}",
-                    dependency_type=DependencyType.FINISH_TO_START,
-                    lag_days=0
-                ))
-            
-            # Determine if weather-sensitive
-            weather_sensitive = template["phase"] in [
-                PhaseType.DEMOLITION,
-                PhaseType.SITE_PREP,
-                PhaseType.FOUNDATION,
-            ]
-            
+            name = str(spec.get("name", f"Task {i+1}")).strip()
+            phase_raw = str(spec.get("phase", "")).strip().lower()
+            try:
+                phase = PhaseType(phase_raw)
+            except Exception:
+                # Unknown phase -> skip (do not invent).
+                continue
+
+            duration_days = int(spec.get("duration_days"))
+            depends_on = spec.get("depends_on") or []
+            dep_ids: List[TaskDependency] = []
+            latest_pred_end = start_date
+
+            if isinstance(depends_on, list):
+                for dep_name in depends_on:
+                    dep_name_str = str(dep_name).strip()
+                    pred_id = name_to_id.get(dep_name_str)
+                    if pred_id:
+                        dep_ids.append(
+                            TaskDependency(
+                                predecessor_id=pred_id,
+                                dependency_type=DependencyType.FINISH_TO_START,
+                                lag_days=0,
+                            )
+                        )
+                        latest_pred_end = max(latest_pred_end, scheduled_end.get(pred_id, start_date))
+
+            # If no dependencies, chain to previous task end to keep ordering stable.
+            if not dep_ids and tasks:
+                prev_end = scheduled_end.get(tasks[-1].id, start_date)
+                latest_pred_end = max(latest_pred_end, prev_end)
+                dep_ids.append(
+                    TaskDependency(
+                        predecessor_id=tasks[-1].id,
+                        dependency_type=DependencyType.FINISH_TO_START,
+                        lag_days=0,
+                    )
+                )
+
+            task_start = latest_pred_end
+            task_end = task_start + timedelta(days=duration_days)
+
+            weather_sensitive = phase in {PhaseType.DEMOLITION, PhaseType.SITE_PREP, PhaseType.FOUNDATION}
+
             task = TimelineTask(
                 id=task_id,
-                name=template["name"],
-                phase=template["phase"],
-                primary_trade=template.get("trade", "general"),
-                duration_days=adjusted_duration,
-                start_date=current_date.isoformat(),
-                end_date=(current_date + timedelta(days=adjusted_duration)).isoformat(),
-                dependencies=dependencies,
-                is_milestone=template["phase"] == PhaseType.FINAL_INSPECTION,
+                name=name,
+                description=str(spec.get("notes")) if spec.get("notes") else None,
+                phase=phase,
+                primary_trade=str(spec.get("primary_trade")) if spec.get("primary_trade") else None,
+                duration_days=duration_days,
+                start_date=task_start.isoformat(),
+                end_date=task_end.isoformat(),
+                dependencies=dep_ids,
+                is_milestone=phase == PhaseType.FINAL_INSPECTION,
                 weather_sensitive=weather_sensitive,
-                labor_hours=adjusted_duration * 8,  # 8 hours per day
+                labor_hours=duration_days * 8,
             )
-            
             tasks.append(task)
-            current_date = current_date + timedelta(days=adjusted_duration)
-        
+            scheduled_end[task_id] = task_end
+
         return tasks
     
     def _calculate_critical_path(self, tasks: List[TimelineTask]) -> CriticalPath:

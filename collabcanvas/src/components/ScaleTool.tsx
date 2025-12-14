@@ -75,7 +75,7 @@ export function ScaleTool({ projectId, disabled = false }: ScaleToolProps) {
           <button
             onClick={handleEditScale}
             disabled={disabled}
-            className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 rounded-lg bg-truecost-bg-surface border border-truecost-glass-border px-3 py-2 text-sm font-medium text-truecost-text-primary shadow-sm transition-colors hover:bg-truecost-glass-bg hover:text-truecost-cyan focus:outline-none focus:ring-2 focus:ring-truecost-cyan focus:ring-offset-2 focus:ring-offset-truecost-bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
             title="Edit Scale"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,11 +83,11 @@ export function ScaleTool({ projectId, disabled = false }: ScaleToolProps) {
             </svg>
             Edit Scale
           </button>
-          
+
           <button
             onClick={handleDeleteScale}
             disabled={disabled}
-            className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 rounded-lg bg-truecost-bg-surface border border-truecost-glass-border px-3 py-2 text-sm font-medium text-truecost-text-primary shadow-sm transition-colors hover:bg-truecost-danger/20 hover:text-truecost-danger hover:border-truecost-danger/30 focus:outline-none focus:ring-2 focus:ring-truecost-danger focus:ring-offset-2 focus:ring-offset-truecost-bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
             title="Delete Scale"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -101,7 +101,7 @@ export function ScaleTool({ projectId, disabled = false }: ScaleToolProps) {
         <button
           onClick={handleActivate}
           disabled={disabled || !currentUser}
-          className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 rounded-lg bg-truecost-bg-surface border border-truecost-glass-border px-3 py-2 text-sm font-medium text-truecost-text-primary shadow-sm transition-colors hover:bg-truecost-glass-bg hover:text-truecost-cyan focus:outline-none focus:ring-2 focus:ring-truecost-cyan focus:ring-offset-2 focus:ring-offset-truecost-bg-primary disabled:opacity-50 disabled:cursor-not-allowed"
           title="Create Scale Line"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

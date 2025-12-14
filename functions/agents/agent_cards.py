@@ -29,6 +29,15 @@ PRIMARY_AGENT_CARDS: Dict[str, Dict[str, Any]] = {
         "output_modes": ["json"],
         "endpoint": "/a2a/scope"
     },
+    "code_compliance": {
+        "name": "TrueCost Code Compliance Agent",
+        "description": "Generates ICC (IBC/IRC/IECC family) code-related warnings for the project scope and location",
+        "version": "1.0.0",
+        "capabilities": ["icc-codes", "code-warnings", "compliance-considerations"],
+        "input_modes": ["json"],
+        "output_modes": ["json"],
+        "endpoint": "/a2a/code_compliance"
+    },
     "cost": {
         "name": "TrueCost Cost Agent",
         "description": "Calculates material, labor, and equipment costs with location adjustments",
@@ -88,6 +97,16 @@ SCORER_AGENT_CARDS: Dict[str, Dict[str, Any]] = {
         "output_modes": ["json"],
         "endpoint": "/a2a/scope_scorer",
         "scores": "scope"
+    },
+    "code_compliance_scorer": {
+        "name": "TrueCost Code Compliance Scorer",
+        "description": "Objectively scores code compliance warnings output for structure/completeness",
+        "version": "1.0.0",
+        "capabilities": ["scoring", "validation", "quality-assessment"],
+        "input_modes": ["json"],
+        "output_modes": ["json"],
+        "endpoint": "/a2a/code_compliance_scorer",
+        "scores": "code_compliance"
     },
     "cost_scorer": {
         "name": "TrueCost Cost Scorer",
@@ -152,6 +171,16 @@ CRITIC_AGENT_CARDS: Dict[str, Dict[str, Any]] = {
         "output_modes": ["json"],
         "endpoint": "/a2a/scope_critic",
         "critiques": "scope"
+    },
+    "code_compliance_critic": {
+        "name": "TrueCost Code Compliance Critic",
+        "description": "Provides qualitative feedback on ICC code warning quality and completeness",
+        "version": "1.0.0",
+        "capabilities": ["critique", "feedback", "compliance-improvement"],
+        "input_modes": ["json"],
+        "output_modes": ["json"],
+        "endpoint": "/a2a/code_compliance_critic",
+        "critiques": "code_compliance"
     },
     "cost_critic": {
         "name": "TrueCost Cost Critic",
@@ -220,7 +249,8 @@ AGENT_CARDS: Dict[str, Dict[str, Any]] = {
 }
 
 # Agent sequence for pipeline execution
-AGENT_SEQUENCE = ["location", "scope", "cost", "risk", "timeline", "final"]
+# NOTE: `code_compliance` runs after scope so it can use the structured scope output.
+AGENT_SEQUENCE = ["location", "scope", "code_compliance", "cost", "risk", "timeline", "final"]
 
 # Helper functions
 def get_agent_card(agent_name: str) -> Dict[str, Any]:

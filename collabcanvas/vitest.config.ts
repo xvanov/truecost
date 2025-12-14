@@ -6,6 +6,8 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    testTimeout: 30000, // 30s timeout for Firebase initialization
+    hookTimeout: 30000,
     exclude: [
       'node_modules/**',
       'dist/**',

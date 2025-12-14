@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 import type { Project } from '../types/project';
-import { getUserProjects, createProject, updateProjectStatus, deleteProject, shareProject } from '../services/projectService';
+import { getUserProjects, createProject, updateProjectStatus, deleteProject, shareProject, getProject, updateProjectScope, type ProjectScopeData } from '../services/projectService';
 
 interface ProjectState {
   // Project list
@@ -27,7 +27,9 @@ interface ProjectState {
   
   // Service methods
   loadUserProjects: (userId: string) => Promise<void>;
-  createNewProject: (name: string, description: string, userId: string) => Promise<Project>;
+  loadProject: (projectId: string) => Promise<Project | null>;
+  createNewProject: (name: string, description: string, userId: string, scopeData?: Partial<ProjectScopeData>) => Promise<Project>;
+  updateProjectScopeAction: (projectId: string, scopeData: Partial<ProjectScopeData>, userId: string) => Promise<void>;
   updateProjectStatusAction: (projectId: string, status: Project['status'], userId: string, actualCosts?: number, estimateTotal?: number) => Promise<void>;
   deleteProjectAction: (projectId: string, userId: string) => Promise<void>;
   shareProjectAction: (projectId: string, userId: string, role: 'editor' | 'viewer', currentUserId: string) => Promise<void>;
@@ -79,18 +81,55 @@ export const useProjectStore = create<ProjectState>((set) => ({
       throw error;
     }
   },
-  
-  createNewProject: async (name: string, description: string, userId: string) => {
+
+  loadProject: async (projectId: string) => {
     set({ loading: true, error: null });
     try {
-      const project = await createProject(name, description, userId);
-      set((state) => ({ 
+      const project = await getProject(projectId);
+      if (project) {
+        set({ currentProject: project, loading: false });
+      } else {
+        set({ loading: false });
+      }
+      return project;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load project';
+      set({ error: errorMessage, loading: false });
+      throw error;
+    }
+  },
+
+  createNewProject: async (name: string, description: string, userId: string, scopeData?: Partial<ProjectScopeData>) => {
+    set({ loading: true, error: null });
+    try {
+      const project = await createProject(name, description, userId, scopeData);
+      set((state) => ({
         projects: [...state.projects, project],
-        loading: false 
+        loading: false
       }));
       return project;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create project';
+      set({ error: errorMessage, loading: false });
+      throw error;
+    }
+  },
+
+  updateProjectScopeAction: async (projectId: string, scopeData: Partial<ProjectScopeData>, userId: string) => {
+    set({ loading: true, error: null });
+    try {
+      await updateProjectScope(projectId, scopeData, userId);
+      set((state) => ({
+        projects: state.projects.map(p =>
+          p.id === projectId ? { ...p, ...scopeData, updatedAt: Date.now(), updatedBy: userId } : p
+        ),
+        currentProject: state.currentProject?.id === projectId
+          ? { ...state.currentProject, ...scopeData, updatedAt: Date.now(), updatedBy: userId }
+          : state.currentProject,
+        loading: false
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update project scope';
       set({ error: errorMessage, loading: false });
       throw error;
     }

@@ -28,6 +28,8 @@ def mock_firestore():
     mock.update_estimate = AsyncMock()
     mock.save_agent_output = AsyncMock()
     mock.delete_estimate = AsyncMock()
+    # New: UI sync helper used by orchestrator; must be awaitable in tests.
+    mock.sync_to_project_pipeline = AsyncMock()
     return mock
 
 
@@ -180,9 +182,9 @@ class TestPipelineOrchestrator:
     
     @pytest.mark.asyncio
     async def test_agent_sequence_is_correct(self):
-        """Verify AGENT_SEQUENCE has all 6 agents in correct order."""
-        assert len(AGENT_SEQUENCE) == 6
-        assert AGENT_SEQUENCE == ["location", "scope", "cost", "risk", "timeline", "final"]
+        """Verify AGENT_SEQUENCE has all agents in correct order."""
+        assert len(AGENT_SEQUENCE) == 7
+        assert AGENT_SEQUENCE == ["location", "scope", "code_compliance", "cost", "risk", "timeline", "final"]
     
     @pytest.mark.asyncio
     async def test_orchestrator_initialization(self, mock_firestore, mock_a2a_client):
@@ -216,7 +218,7 @@ class TestPipelineOrchestrator:
         assert result.success is True
         assert result.estimate_id == "test-estimate"
         assert result.status == "completed"
-        assert len(result.completed_agents) == 6
+        assert len(result.completed_agents) == len(AGENT_SEQUENCE)
         assert result.failed_agent is None
     
     @pytest.mark.asyncio
@@ -258,8 +260,8 @@ class TestPipelineOrchestrator:
             clarification_output=sample_clarification_output
         )
         
-        # Should save output for all 6 agents
-        assert mock_firestore.save_agent_output.call_count == 6
+        # Should save output for all agents
+        assert mock_firestore.save_agent_output.call_count == len(AGENT_SEQUENCE)
 
 
 # ============================================================================
@@ -408,8 +410,8 @@ class TestProgressTracking:
             completed_agents=["location", "scope", "cost"]
         )
         
-        progress = status.get_progress_percentage(6)
-        assert progress == 50  # 3/6 = 50%
+        progress = status.get_progress_percentage(len(AGENT_SEQUENCE))
+        assert progress == int(3 / len(AGENT_SEQUENCE) * 100)
     
     @pytest.mark.asyncio
     async def test_is_complete_check(self):

@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { UnifiedAIChat } from '../UnifiedAIChat';
+import { FloatingChatPanel } from '../estimate/FloatingChatPanel';
 
 export const FloatingAIChat: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -27,7 +27,7 @@ export const FloatingAIChat: React.FC = () => {
       )}
 
       {/* AI Chat Panel */}
-      <UnifiedAIChat 
+      <FloatingChatPanel 
         isVisible={isOpen} 
         onClose={() => setIsOpen(false)} 
       />

@@ -258,30 +258,40 @@ Focus on:
             why_wrong.append("Duration is required for project planning")
             how_to_fix.append("Sum all task durations along critical path")
             return {"issues": issues, "why_wrong": why_wrong, "how_to_fix": how_to_fix}
-        
-        # Get scope for comparison
-        scope_output = input_data.get("scope_output", {})
-        total_items = scope_output.get("totalLineItems", 10)
-        clarification = input_data.get("clarification_output", {})
-        sqft = clarification.get("projectBrief", {}).get("scopeSummary", {}).get("totalSqft", 200)
-        
-        # Heuristic: small remodel ~20-30 days, large ~60-90 days
-        if sqft < 100 and total_duration > 45:
-            issues.append(f"Duration ({total_duration}d) seems long for {sqft} sqft project")
-            why_wrong.append("Small projects typically complete faster")
-            how_to_fix.append("Review task durations; consider reducing by 20-30%")
-        
-        if sqft > 500 and total_duration < 30:
-            issues.append(f"Duration ({total_duration}d) seems short for {sqft} sqft project")
-            why_wrong.append("Large projects typically require more time")
-            how_to_fix.append("Review task durations; consider increasing by 20-30%")
-        
+
+        # Do NOT enforce fixed remodel-duration heuristics (project timelines vary widely by scope,
+        # sequencing, lead times, trade availability, and owner preferences). Only validate structural
+        # completeness/consistency.
+
         # Check duration range exists
         duration_range = output.get("durationRange", {})
-        if not duration_range.get("optimistic") or not duration_range.get("pessimistic"):
+        optimistic = duration_range.get("optimistic")
+        pessimistic = duration_range.get("pessimistic")
+
+        if optimistic is None or pessimistic is None:
             issues.append("Missing optimistic/pessimistic duration range")
             why_wrong.append("Schedule risk requires duration range for planning")
             how_to_fix.append("Add optimistic (85% of base) and pessimistic (135% of base) durations")
+        else:
+            try:
+                optimistic_i = int(optimistic)
+                pessimistic_i = int(pessimistic)
+                if optimistic_i <= 0 or pessimistic_i <= 0:
+                    issues.append("Invalid optimistic/pessimistic duration range (must be > 0)")
+                    why_wrong.append("Non-positive duration ranges are not usable for planning")
+                    how_to_fix.append("Ensure optimistic and pessimistic durations are positive integers")
+                elif optimistic_i > pessimistic_i:
+                    issues.append("Invalid duration range (optimistic > pessimistic)")
+                    why_wrong.append("Optimistic duration should be less than pessimistic duration")
+                    how_to_fix.append("Swap/fix durationRange values so optimistic < pessimimistic")
+                elif not (optimistic_i <= int(total_duration) <= pessimistic_i):
+                    issues.append("Inconsistent duration range (totalDuration not within optimistic/pessimistic)")
+                    why_wrong.append("Duration range should bound the base schedule duration")
+                    how_to_fix.append("Adjust durationRange so it brackets totalDuration")
+            except Exception:
+                issues.append("Invalid duration range (optimistic/pessimistic must be numeric)")
+                why_wrong.append("Non-numeric duration ranges cannot be used for risk planning")
+                how_to_fix.append("Provide numeric optimistic/pessimistic values")
         
         return {"issues": issues, "why_wrong": why_wrong, "how_to_fix": how_to_fix} if issues else None
     

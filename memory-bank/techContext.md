@@ -53,7 +53,7 @@ truecost/
 ├── collabcanvas/              # Existing frontend + TypeScript Cloud Functions
 │   ├── src/                   # React frontend (extend for TrueCost UI)
 │   ├── functions/             # Existing TypeScript Cloud Functions
-│   │   └── src/               # aiCommand, pricing, etc.
+│   │   └── src/               # aiCommand, pricing, estimatePipelineOrchestrator, etc.
 │   ├── firebase.json
 │   └── firestore.rules
 │
@@ -92,6 +92,30 @@ truecost/
 └── docs/                      # Documentation
 ```
 
+## Post-Merge Integration (Epic 6) - Key Runtime Links
+
+### Pipeline Trigger + Progress
+
+- **Trigger (frontend → TS callable)**: `collabcanvas/src/services/pipelineService.ts` → callable `triggerEstimatePipeline`
+- **TS callable orchestrator**: `collabcanvas/functions/src/estimatePipelineOrchestrator.ts`
+  - Writes `/projects/{projectId}/pipeline/status` and `/projects/{projectId}/pipeline/context`
+  - Calls Python `start_deep_pipeline` and passes `projectId`
+- **Python pipeline UI sync**: `functions/services/firestore_service.py::sync_to_project_pipeline()`
+  - Writes progress back to `/projects/{projectId}/pipeline/status`
+
+### PDF Export (Epic 4)
+
+- Frontend wrapper: `collabcanvas/src/services/pdfService.ts` → callable `generate_pdf`
+
+### User-Selected Cost Defaults (Scope Definition → Pipeline Input)
+
+The UI can provide cost defaults in the ClarificationOutput JSON (used by Python pipeline):
+
+- `projectBrief.costPreferences.overheadPct`
+- `projectBrief.costPreferences.profitPct`
+- `projectBrief.costPreferences.contingencyPct`
+- `projectBrief.costPreferences.wasteFactor`
+
 ## Environment Variables
 
 ```bash
@@ -99,6 +123,10 @@ truecost/
 OPENAI_API_KEY=sk-...
 LLM_MODEL=gpt-4.1              # Configurable
 LLM_TEMPERATURE=0.1
+
+# Optional (recommended)
+# Monte Carlo iterations used by the Risk Agent. Higher = smoother percentiles but slower.
+MONTE_CARLO_ITERATIONS=10000
 
 # Optional
 LANGSMITH_API_KEY=ls-...       # For observability

@@ -8,17 +8,19 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
+import { HowItWorks } from './pages/HowItWorks';
+import { AboutUs } from './pages/AboutUs';
+import { ContactUs } from './pages/ContactUs';
 
 // Authenticated pages
 import { Dashboard } from './pages/Dashboard';
-import { Project } from './pages/Project';
 import { Account } from './pages/Account';
-import { NewEstimate } from './pages/estimate/NewEstimate';
-import { EstimateView } from './pages/estimate/EstimateView';
-import { PlanView } from './pages/estimate/PlanView';
-import { FinalView } from './pages/estimate/FinalView';
-import { Board } from './pages/Board';
 import { PriceComparisonPage } from './components/PriceComparisonPage';
+
+// Project flow pages
+import { ScopePage } from './pages/project/ScopePage';
+import { AnnotatePage } from './pages/project/AnnotatePage';
+import { EstimatePage } from './pages/project/EstimatePage';
 
 /**
  * Protected Route Component
@@ -29,10 +31,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen items-center justify-center bg-truecost-bg-primary">
         <div className="text-center">
-          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-          <p className="text-gray-600">Loading...</p>
+          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-truecost-cyan border-t-transparent"></div>
+          <p className="text-truecost-text-secondary">Loading...</p>
         </div>
       </div>
     );
@@ -73,6 +75,9 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/how-it-works" element={<HowItWorks />} />
+        <Route path="/about" element={<AboutUs />} />
+        <Route path="/contact" element={<ContactUs />} />
 
         {/* Authenticated app routes */}
         <Route
@@ -92,57 +97,47 @@ function App() {
           }
         />
 
-        {/* Estimate routes (placeholders for now) */}
+        {/* Project routes (new flow) */}
         <Route
-          path="/estimate/new"
+          path="/project/new"
           element={
             <ProtectedRoute>
-              <NewEstimate />
+              <ScopePage />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/estimate/:id"
+          path="/project/:id/scope"
           element={
             <ProtectedRoute>
-              <EstimateView />
+              <ScopePage />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/estimate/:id/plan"
+          path="/project/:id/annotate"
           element={
             <ProtectedRoute>
-              <PlanView />
+              <AnnotatePage />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/estimate/:id/canvas"
+          path="/project/:id/estimate"
           element={
             <ProtectedRoute>
-              <Board />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/estimate/:id/final"
-          element={
-            <ProtectedRoute>
-              <FinalView />
+              <EstimatePage />
             </ProtectedRoute>
           }
         />
 
-        {/* Legacy route preserved during transition */}
-        <Route
-          path="/projects/:projectId/*"
-          element={
-            <ProtectedRoute>
-              <Project />
-            </ProtectedRoute>
-          }
-        />
+        {/* Legacy routes - redirect to new project flow */}
+        <Route path="/estimate/new" element={<Navigate to="/project/new" replace />} />
+        <Route path="/estimate/:id" element={<Navigate to="/project/new" replace />} />
+        <Route path="/estimate/:id/plan" element={<Navigate to="/project/new" replace />} />
+        <Route path="/estimate/:id/canvas" element={<Navigate to="/project/new" replace />} />
+        <Route path="/estimate/:id/final" element={<Navigate to="/project/new" replace />} />
+        <Route path="/projects/:projectId/*" element={<Navigate to="/dashboard" replace />} />
         <Route
           path="/compare-prices"
           element={

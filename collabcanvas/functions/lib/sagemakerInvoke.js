@@ -42,6 +42,7 @@ async function invokeSageMakerEndpoint(imageData, attempt = 1, maxAttempts = 3) 
     }
     // Use AWS SDK for JavaScript (Node.js)
     // Note: aws-sdk v2 is used here. For v3, use @aws-sdk/client-sagemaker-runtime
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const AWS = require('aws-sdk');
     const sagemakerRuntime = new AWS.SageMakerRuntime({
         region: AWS_REGION,

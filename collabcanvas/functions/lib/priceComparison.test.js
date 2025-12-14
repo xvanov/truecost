@@ -99,24 +99,24 @@ vitest_1.vi.mock('openai', () => ({
         });
     });
     (0, vitest_1.describe)('returns fallback on invalid JSON', () => {
-        (0, vitest_1.it)('returns default values for completely invalid JSON', () => {
+        (0, vitest_1.it)('returns no-match values for completely invalid JSON', () => {
             const input = 'This is not JSON at all';
             const result = (0, priceComparison_1.parseMatchResult)(input);
-            (0, vitest_1.expect)(result.index).toBe(0);
-            (0, vitest_1.expect)(result.confidence).toBe(0.5);
+            (0, vitest_1.expect)(result.index).toBe(-1);
+            (0, vitest_1.expect)(result.confidence).toBe(0);
             (0, vitest_1.expect)(result.reasoning).toContain('Fallback');
         });
-        (0, vitest_1.it)('returns default values for partial JSON', () => {
+        (0, vitest_1.it)('returns no-match values for partial JSON', () => {
             const input = '{"index": 1, "confidence":';
             const result = (0, priceComparison_1.parseMatchResult)(input);
-            (0, vitest_1.expect)(result.index).toBe(0);
-            (0, vitest_1.expect)(result.confidence).toBe(0.5);
+            (0, vitest_1.expect)(result.index).toBe(-1);
+            (0, vitest_1.expect)(result.confidence).toBe(0);
         });
-        (0, vitest_1.it)('returns default values for empty string', () => {
+        (0, vitest_1.it)('returns no-match values for empty string', () => {
             const input = '';
             const result = (0, priceComparison_1.parseMatchResult)(input);
-            (0, vitest_1.expect)(result.index).toBe(0);
-            (0, vitest_1.expect)(result.confidence).toBe(0.5);
+            (0, vitest_1.expect)(result.index).toBe(-1);
+            (0, vitest_1.expect)(result.confidence).toBe(0);
         });
         (0, vitest_1.it)('returns default values for empty object', () => {
             const input = '{}';
@@ -159,7 +159,9 @@ vitest_1.vi.mock('openai', () => ({
         // This is the caching logic from the function
         const shouldReturnCached = !forceRefresh && existingDoc.exists && ((_a = existingDoc.data()) === null || _a === void 0 ? void 0 : _a.status) === 'complete';
         (0, vitest_1.expect)(shouldReturnCached).toBe(true);
-        (0, vitest_1.expect)({ cached: true }).toEqual({ cached: true });
+        // When shouldReturnCached is true, function returns { cached: true }
+        const expectedResponse = shouldReturnCached ? { cached: true } : { cached: false };
+        (0, vitest_1.expect)(expectedResponse).toEqual({ cached: true });
     });
     (0, vitest_1.it)('runs full comparison when forceRefresh is true', () => {
         var _a;
@@ -383,18 +385,11 @@ Return ONLY JSON: { "index": number, "confidence": number (0-1), "reasoning": "b
 });
 // ============ FUNCTION CONFIGURATION TESTS ============
 (0, vitest_1.describe)('Cloud Function configuration', () => {
-    (0, vitest_1.it)('has correct CORS origins configured', async () => {
+    (0, vitest_1.it)('has CORS enabled for all origins', async () => {
         // Import the actual function configuration to test it
         const { comparePricesConfig } = await Promise.resolve().then(() => require('./priceComparison'));
-        const corsOrigins = comparePricesConfig.cors;
-        // Should always include localhost origins for development
-        (0, vitest_1.expect)(corsOrigins).toBeDefined();
-        (0, vitest_1.expect)(corsOrigins).toContain('http://localhost:5173');
-        (0, vitest_1.expect)(corsOrigins).toContain('http://127.0.0.1:5173');
-        (0, vitest_1.expect)(corsOrigins).toContain('http://localhost:4173');
-        (0, vitest_1.expect)(corsOrigins).toContain('http://127.0.0.1:4173');
-        // Should have at least 4 origins (dev) + production if PRODUCTION_DOMAIN is set
-        (0, vitest_1.expect)(corsOrigins.length).toBeGreaterThanOrEqual(4);
+        // Should use cors: true to match other functions (aiCommand, materialEstimateCommand, sagemakerInvoke)
+        (0, vitest_1.expect)(comparePricesConfig.cors).toBe(true);
     });
     (0, vitest_1.it)('has correct timeout for 2nd gen functions', async () => {
         // Import the actual function configuration to test it

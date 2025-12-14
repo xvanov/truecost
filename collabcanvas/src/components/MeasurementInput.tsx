@@ -88,17 +88,17 @@ export function MeasurementInput({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">{title}</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-truecost-bg-surface border border-truecost-glass-border rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="px-6 py-4 border-b border-truecost-glass-border">
+          <h3 className="text-lg font-medium text-truecost-text-primary">{title}</h3>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="px-6 py-4">
           <div className="space-y-4">
             {/* Input field */}
             <div>
-              <label htmlFor="measurement" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="measurement" className="block text-sm font-medium text-truecost-text-secondary mb-2">
                 Measurement
               </label>
               <input
@@ -107,14 +107,14 @@ export function MeasurementInput({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="e.g., 5 feet 10 inches, 2.5m, 150cm"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-3 py-2 bg-truecost-bg-primary border border-truecost-glass-border rounded-md shadow-sm text-truecost-text-primary placeholder-truecost-text-muted focus:outline-none focus:ring-2 focus:ring-truecost-cyan focus:border-truecost-cyan"
                 autoFocus
               />
               {error && (
-                <p className="mt-1 text-sm text-red-600">{error}</p>
+                <p className="mt-1 text-sm text-truecost-danger">{error}</p>
               )}
               {parsedValue !== null && (
-                <p className="mt-1 text-sm text-green-600">
+                <p className="mt-1 text-sm text-truecost-teal">
                   Parsed as: {formatMeasurement(parsedValue, selectedUnit)}
                 </p>
               )}
@@ -122,17 +122,17 @@ export function MeasurementInput({
 
             {/* Unit selection */}
             <div>
-              <label htmlFor="unit" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="unit" className="block text-sm font-medium text-truecost-text-secondary mb-2">
                 Unit
               </label>
               <select
                 id="unit"
                 value={selectedUnit}
                 onChange={(e) => setSelectedUnit(e.target.value as UnitType)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-3 py-2 bg-truecost-bg-primary border border-truecost-glass-border rounded-md shadow-sm text-truecost-text-primary focus:outline-none focus:ring-2 focus:ring-truecost-cyan focus:border-truecost-cyan"
               >
                 {availableUnits.map((unit) => (
-                  <option key={unit} value={unit}>
+                  <option key={unit} value={unit} className="bg-truecost-bg-primary text-truecost-text-primary">
                     {UNIT_CONFIGS[unit].fullName} ({UNIT_CONFIGS[unit].abbreviation})
                   </option>
                 ))}
@@ -140,8 +140,8 @@ export function MeasurementInput({
             </div>
 
             {/* Examples */}
-            <div className="text-sm text-gray-600">
-              <p className="font-medium mb-1">Examples:</p>
+            <div className="text-sm text-truecost-text-muted">
+              <p className="font-medium mb-1 text-truecost-text-secondary">Examples:</p>
               <ul className="list-disc list-inside space-y-1">
                 {selectedUnit === 'feet' && (
                   <>
@@ -198,14 +198,14 @@ export function MeasurementInput({
             <button
               type="button"
               onClick={handleCancel}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+              className="px-4 py-2 text-sm font-medium text-truecost-text-primary bg-truecost-bg-primary border border-truecost-glass-border rounded-md hover:bg-truecost-glass-bg focus:outline-none focus:ring-2 focus:ring-truecost-glass-border focus:ring-offset-2 focus:ring-offset-truecost-bg-surface"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={parsedValue === null}
-              className="px-4 py-2 text-sm font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm font-medium text-truecost-bg-primary bg-gradient-to-r from-truecost-cyan to-truecost-teal border border-transparent rounded-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-truecost-cyan focus:ring-offset-2 focus:ring-offset-truecost-bg-surface disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Set Measurement
             </button>

@@ -18,6 +18,34 @@ export interface Collaborator {
   role: CollaboratorRole;
 }
 
+// Structured address for location-specific pricing
+export interface ProjectAddress {
+  streetAddress: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
+// Estimate configuration stored with project
+export interface EstimateConfig {
+  // Project details from Define Your Project Scope page
+  projectName?: string;
+  address?: ProjectAddress; // Structured address for accurate location pricing
+  projectType?: string;
+  approximateSize?: string;
+  useUnionLabor?: boolean;
+  
+  // Scope definition (user-provided description)
+  scopeText?: string;
+  
+  // Estimate configuration
+  overheadPercent: number;
+  profitPercent: number;
+  contingencyPercent: number;
+  wasteFactorPercent: number;
+  startDate: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -32,5 +60,16 @@ export interface Project {
   profitLoss?: number; // Calculated when status is completed-profitable or completed-unprofitable
   actualCosts?: number; // Actual costs entered by user (for profit/loss calculation)
   estimateTotal?: number; // Estimated total from BOM (for profit/loss calculation)
+
+  // Scope fields
+  address?: ProjectAddress; // Structured address
+  projectType?: string;
+  size?: string;
+  useUnionLabor?: boolean;
+  estimateConfig?: EstimateConfig;
+
+  // Plan image (from file upload)
+  planImageUrl?: string;
+  planImageFileName?: string;
 }
 

@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context id="6-2-estimate-page-tabs-pdf" generated="2025-12-12">
+  <!-- Story Core Information -->
+  <story>
+    <epic-id>6</epic-id>
+    <story-id>2</story-id>
+    <title>Estimate Page with Two-Phase UI, Tabs &amp; Dual PDF Export</title>
+    <user-story>
+      <as-a>contractor</as-a>
+      <i-want>to generate an estimate with a progress bar showing each pipeline stage, then view results in Materials, Labor, Time, Price Comparison, and Estimate vs Actual tabs, and download separate PDF versions for contractors and clients</i-want>
+      <so-that>I can track estimate generation, find the best material prices, and share appropriate information with each audience</so-that>
+    </user-story>
+  </story>
+
+  <!-- Acceptance Criteria (verbatim from story) -->
+  <acceptance-criteria>
+    <section name="Phase 1: Generation">
+      <ac id="2.1">Estimate page shows "Generate Estimate" button initially</ac>
+      <ac id="2.2">Clicking button triggers agent pipeline</ac>
+      <ac id="2.3">Progress bar shows current pipeline stage name</ac>
+      <ac id="2.4">Progress updates in real-time as pipeline progresses</ac>
+    </section>
+    <section name="Phase 2: Results">
+      <ac id="2.5">After generation, page shows five tabs: Materials, Labor, Time, Price Comparison, Estimate vs Actual</ac>
+      <ac id="2.6">Materials tab shows MoneyView with BOM and pricing</ac>
+      <ac id="2.7">Labor tab shows labor breakdown from MoneyView</ac>
+      <ac id="2.8">Time tab shows **full CPM graph with nodes/edges**</ac>
+      <ac id="2.9">Time tab shows **full Gantt chart with dependencies**</ac>
+      <ac id="2.10">Price Comparison tab shows Home Depot vs Lowe's prices</ac>
+      <ac id="2.11">Price comparison uses real BOM materials (not mock data)</ac>
+      <ac id="2.12">Best price is highlighted with green badge</ac>
+      <ac id="2.13">Estimate vs Actual tab shows variance tracking</ac>
+      <ac id="2.14">Materials tab has "Actual Cost" column with editable values</ac>
+      <ac id="2.15">Variance is color-coded: green (under), red (over estimate)</ac>
+    </section>
+    <section name="PDF Export">
+      <ac id="2.16">"Contractor Estimate" button generates full PDF</ac>
+      <ac id="2.17">"Client Estimate" button generates simplified PDF</ac>
+      <ac id="2.18">PDF generation shows loading state</ac>
+    </section>
+    <section name="Navigation">
+      <ac id="2.19">Visual stepper shows Estimate as current step</ac>
+      <ac id="2.20">Clicking "Scope" in stepper returns to Scope page with data</ac>
+      <ac id="2.21">Clicking "Annotate" in stepper returns to Annotate page</ac>
+    </section>
+  </acceptance-criteria>
+
+  <!-- Technical Tasks -->
+  <tasks>
+    <task id="1">
+      <title>Create EstimatePage.tsx with Two-Phase UI</title>
+      <description>New component with Phase 1 (Generate button + progress) and Phase 2 (tabbed results)</description>
+      <subtasks>
+        <subtask>Implement phase state management ('generate' | 'results')</subtask>
+        <subtask>Create progress bar component with stage name display</subtask>
+        <subtask>Subscribe to pipeline progress updates</subtask>
+        <subtask>Implement tab navigation for 5 tabs</subtask>
+        <subtask>Auto-detect if estimate exists to skip to Phase 2</subtask>
+      </subtasks>
+    </task>
+    <task id="2">
+      <title>Modify MoneyView to support mode prop</title>
+      <description>Add mode prop to control which view is shown</description>
+      <subtasks>
+        <subtask>Add mode prop: 'materials' | 'labor'</subtask>
+        <subtask>mode="materials" shows BOM Table + Customer/Contractor views</subtask>
+        <subtask>mode="labor" shows Labor Analysis view</subtask>
+      </subtasks>
+    </task>
+    <task id="3">
+      <title>Implement TimeView with FULL CPM + Gantt (REQUIRED)</title>
+      <description>Complete CPM network diagram and Gantt chart visualization</description>
+      <subtasks>
+        <subtask>Implement CPM Graph: nodes with ES/EF/LS/LF, edges as dependencies, critical path in red</subtask>
+        <subtask>Implement Gantt Chart: horizontal bars, color by trade, dependency arrows, milestones, today line</subtask>
+        <subtask>Use cpmService.ts for calculations (calculateCriticalPath exists)</subtask>
+        <subtask>Add interactive features: click task for details, scroll, zoom</subtask>
+        <subtask>Consider using recharts, vis.js, or d3 for visualization</subtask>
+      </subtasks>
+    </task>
+    <task id="4">
+      <title>Integrate PDF generation from Epic 4</title>
+      <description>Wire up dual PDF export buttons</description>
+      <subtasks>
+        <subtask>Create handleContractorPDF - calls generate_pdf with client_ready=false</subtask>
+        <subtask>Create handleClientPDF - calls generate_pdf with client_ready=true</subtask>
+        <subtask>Implement loading state during generation</subtask>
+        <subtask>Open PDF URL in new tab on completion</subtask>
+      </subtasks>
+    </task>
+    <task id="5">
+      <title>Update routes in App.tsx</title>
+      <description>Add /project/:id/estimate route pointing to EstimatePage</description>
+    </task>
+    <task id="6">
+      <title>Connect stepper navigation</title>
+      <description>Ensure EstimateStepper works with back navigation</description>
+      <subtasks>
+        <subtask>Pass correct props: currentStep="estimate", completedSteps</subtask>
+        <subtask>Verify step clicks navigate correctly</subtask>
+      </subtasks>
+    </task>
+    <task id="7">
+      <title>Create PriceComparisonPanel component</title>
+      <description>Refactor PriceComparisonPage into reusable panel</description>
+      <subtasks>
+        <subtask>Accept projectId as prop (remove MOCK_PROJECT_ID)</subtask>
+        <subtask>Extract product names from real BOM</subtask>
+        <subtask>Wire up Firestore subscription for progress</subtask>
+        <subtask>Reuse existing PriceComparisonTable component</subtask>
+      </subtasks>
+    </task>
+  </tasks>
+
+  <!-- Relevant Documentation -->
+  <documentation>
+    <doc path="docs/sprint-artifacts/tech-spec-post-merge-integration.md" relevance="primary">
+      <summary>Master tech spec for Epic 6 - defines EstimatePage architecture, two-phase UI, 5 tabs, PDF export</summary>
+      <key-sections>
+        <section>Story 2: Estimate Page with Two-Phase UI, Tabs &amp; Dual PDF Export (lines 269-475)</section>
+        <section>TimeView Implementation Details (lines 478-518)</section>
+        <section>Data Flow diagram</section>
+        <section>Route Changes table</section>
+      </key-sections>
+    </doc>
+    <doc path="docs/architecture.md" relevance="secondary">
+      <summary>System architecture overview - Firebase, React, Zustand patterns</summary>
+    </doc>
+    <doc path="docs/epics.md" relevance="secondary">
+      <summary>Epic definitions including Epic 6 post-merge integration scope</summary>
+    </doc>
+    <doc path="docs/prd.md" relevance="reference">
+      <summary>Product requirements - contractor workflows, estimate generation goals</summary>
+    </doc>
+  </documentation>
+
+  <!-- Existing Code References -->
+  <code-references>
+    <file path="src/components/estimate/EstimateStepper.tsx" status="EXISTS" action="USE">
+      <reason>Visual stepper already implemented - pass currentStep="estimate", projectId, completedSteps</reason>
+      <interface>
+        <![CDATA[
+interface EstimateStepperProps {
+  currentStep: 'scope' | 'annotate' | 'estimate';
+  projectId: string;
+  completedSteps: ('scope' | 'annotate' | 'estimate')[];
+}
+        ]]>
+      </interface>
+      <key-lines>1-127</key-lines>
+    </file>
+    <file path="src/components/money/MoneyView.tsx" status="EXISTS" action="MODIFY">
+      <reason>Add mode prop to support Materials/Labor tab filtering</reason>
+      <current-interface>No mode prop - always shows all views with internal toggle</current-interface>
+      <modification>Add mode?: 'materials' | 'labor' | 'full' prop</modification>
+      <key-lines>21-28 (view types), 155-294 (render)</key-lines>
+    </file>
+    <file path="src/components/money/ComparisonView.tsx" status="EXISTS" action="USE">
+      <reason>Already implements Estimate vs Actual comparison - use directly for that tab</reason>
+      <interface>
+        <![CDATA[
+interface ComparisonViewProps {
+  bom: BillOfMaterials;
+}
+        ]]>
+      </interface>
+      <features>Empty state handling, variance calculation, color-coded severity</features>
+      <key-lines>1-195</key-lines>
+    </file>
+    <file path="src/components/money/BOMTable.tsx" status="EXISTS" action="USE">
+      <reason>Already has Actual Cost column with inline editing (AC 2.14)</reason>
+      <key-lines>24-27 (editingField includes 'actualCost'), 253-289 (actualCost cell)</key-lines>
+    </file>
+    <file path="src/components/time/TimeView.tsx" status="EXISTS" action="REWRITE">
+      <reason>Currently just a placeholder - needs full CPM graph + Gantt implementation</reason>
+      <current-state>Placeholder text only, no visualization</current-state>
+      <key-lines>1-24</key-lines>
+    </file>
+    <file path="src/services/cpmService.ts" status="EXISTS" action="USE">
+      <reason>CPM calculation logic exists - use calculateCriticalPath function</reason>
+      <interface>
+        <![CDATA[
+function calculateCriticalPath(tasks: CPMTask[]): {
+  criticalPath: string[];
+  totalDuration: number;
+  taskEndDates: Map<string, number>;
+}
+        ]]>
+      </interface>
+      <functions>generateCPM, getCPM, saveCPM, calculateCriticalPath</functions>
+      <key-lines>100-197 (calculateCriticalPath implementation)</key-lines>
+    </file>
+    <file path="src/components/PriceComparisonTable.tsx" status="EXISTS" action="USE">
+      <reason>Table component already works - shows retailer columns with best price badge</reason>
+      <interface>
+        <![CDATA[
+interface Props {
+  results: ComparisonResult[]
+}
+        ]]>
+      </interface>
+      <key-lines>1-110</key-lines>
+    </file>
+    <file path="src/components/PriceComparisonPage.tsx" status="EXISTS" action="REFACTOR">
+      <reason>Refactor into PriceComparisonPanel - remove MOCK_PROJECT_ID, accept projectId prop</reason>
+    </file>
+    <file path="src/services/priceComparisonService.ts" status="EXISTS" action="USE">
+      <reason>Service functions already work - startComparison, subscribeToComparison</reason>
+      <interface>
+        <![CDATA[
+function startComparison(
+  projectId: string,
+  productNames: string[],
+  forceRefresh?: boolean,
+  zipCode?: string
+): Promise<{ cached: boolean }>
+
+function subscribeToComparison(
+  projectId: string,
+  onUpdate: (progress: ComparisonProgress) => void,
+  onError: (error: Error) => void
+): () => void
+        ]]>
+      </interface>
+      <key-lines>15-37 (startComparison), 43-62 (subscribeToComparison)</key-lines>
+    </file>
+    <file path="src/pages/estimate/FinalView.tsx" status="EXISTS" action="DELETE">
+      <reason>Replace with new EstimatePage - FinalView uses mock data, no tabs</reason>
+    </file>
+    <file path="src/pages/project/ScopePage.tsx" status="EXISTS" action="REFERENCE">
+      <reason>Created in Story 6-1 - understand how project data flows</reason>
+    </file>
+    <file path="src/pages/project/AnnotatePage.tsx" status="EXISTS" action="REFERENCE">
+      <reason>Created in Story 6-1 - understand page structure pattern</reason>
+    </file>
+    <file path="src/store/canvasStore.ts" status="EXISTS" action="USE">
+      <reason>billOfMaterials state stored here - use for tab data</reason>
+    </file>
+    <file path="src/services/varianceService.ts" status="EXISTS" action="USE">
+      <reason>calculateVarianceSummary, getVarianceSeverity - used by ComparisonView</reason>
+    </file>
+  </code-references>
+
+  <!-- Types/Interfaces -->
+  <interfaces>
+    <interface path="src/types/cpm.ts">
+      <![CDATA[
+interface CPMTask {
+  id: string;
+  name: string;
+  description?: string;
+  duration: number; // Duration in days
+  dependencies: string[]; // Array of task IDs
+  startDate?: number;
+  endDate?: number;
+  isCritical?: boolean;
+  slack?: number;
+  category?: string;
+}
+
+interface CPM {
+  id: string;
+  projectId: string;
+  tasks: CPMTask[];
+  criticalPath: string[];
+  totalDuration: number;
+  createdAt: number;
+  createdBy: string;
+  updatedAt: number;
+}
+      ]]>
+    </interface>
+    <interface path="src/types/priceComparison.ts">
+      <![CDATA[
+type Retailer = 'homeDepot' | 'lowes' | 'aceHardware';
+
+interface ComparisonResult {
+  originalProductName: string;
+  matches: Record<Retailer, MatchResult>;
+  bestPrice: { retailer: Retailer; product: RetailerProduct; savings: number } | null;
+  comparedAt: number;
+  cached: boolean;
+}
+
+interface ComparisonProgress {
+  status: 'idle' | 'processing' | 'complete' | 'error';
+  totalProducts: number;
+  completedProducts: number;
+  results: ComparisonResult[];
+  startedAt: number;
+  completedAt?: number;
+  error?: string;
+}
+      ]]>
+    </interface>
+    <interface path="src/types/material.ts" needed="true">
+      <note>BillOfMaterials type - used by BOMTable, ComparisonView, MoneyView</note>
+    </interface>
+  </interfaces>
+
+  <!-- Constraints and Patterns -->
+  <constraints>
+    <pattern name="Component Structure">Use AuthenticatedLayout wrapper for protected pages</pattern>
+    <pattern name="State Management">Zustand for global state (canvasStore), useState for local UI state</pattern>
+    <pattern name="Styling">TailwindCSS with glass-panel, btn-pill-primary design tokens</pattern>
+    <pattern name="Routing">React Router v7 - useParams for projectId, useNavigate for navigation</pattern>
+    <pattern name="Firebase">httpsCallable for Cloud Functions, onSnapshot for real-time subscriptions</pattern>
+    <rule name="TimeView Implementation">FULL CPM graph + Gantt chart required - not iterative/placeholder</rule>
+    <rule name="5 Tabs Required">Materials, Labor, Time, Price Comparison, Estimate vs Actual</rule>
+    <rule name="Dual PDF">Two separate buttons - Contractor (full) and Client (simplified)</rule>
+    <rule name="Real BOM Data">Price comparison must use actual BOM materials, not mock data</rule>
+  </constraints>
+
+  <!-- Dependencies -->
+  <dependencies>
+    <frontend>
+      <dep name="react" version="^19.2.0" />
+      <dep name="react-router-dom" version="^7.9.5" />
+      <dep name="zustand" version="^5.0.8" />
+      <dep name="firebase" version="^12.4.0" />
+      <dep name="jspdf" version="^3.0.3" note="existing PDF library, but Epic 4 uses Cloud Function" />
+      <dep name="tailwindcss" version="^3.4.18" />
+    </frontend>
+    <visualization-candidates note="Choose one for CPM/Gantt">
+      <option name="recharts" note="Already may be in use - good for charts" />
+      <option name="vis.js" note="Excellent for network graphs" />
+      <option name="d3" note="Most flexible, steeper learning curve" />
+      <option name="react-chartjs-2" note="Chart.js wrapper" />
+    </visualization-candidates>
+    <backend>
+      <dep name="Cloud Function: comparePrices" status="EXISTS" path="functions/src/priceComparison.ts" />
+      <dep name="Cloud Function: generate_pdf" status="EXISTS" path="functions/services/pdf_generator.py" />
+      <dep name="Cloud Function: generateCPM" status="TODO" note="Called by cpmService but may need creation" />
+    </backend>
+  </dependencies>
+
+  <!-- Testing Standards -->
+  <testing>
+    <framework>Vitest for unit tests, Playwright for E2E</framework>
+    <locations>
+      <unit-tests>src/**/*.test.tsx alongside components</unit-tests>
+      <e2e-tests>tests/e2e/**/*.spec.ts</e2e-tests>
+    </locations>
+    <commands>
+      <command name="npm run test">Run unit tests</command>
+      <command name="npm run test:ci">Run unit tests (CI mode, skip AI tests)</command>
+      <command name="npm run test:e2e">Run E2E tests</command>
+    </commands>
+    <test-ideas>
+      <test>EstimatePage renders Phase 1 UI when no BOM exists</test>
+      <test>EstimatePage switches to Phase 2 when BOM detected</test>
+      <test>Progress bar updates with stage name during generation</test>
+      <test>All 5 tabs render correct content</test>
+      <test>Tab switching works correctly</test>
+      <test>PDF buttons show loading state</test>
+      <test>Stepper navigation to previous steps works</test>
+      <test>TimeView renders CPM graph with critical path highlighted</test>
+      <test>TimeView renders Gantt chart with dependencies</test>
+      <test>PriceComparisonPanel extracts product names from BOM</test>
+      <test>Best price badge shown on correct retailer</test>
+    </test-ideas>
+  </testing>
+
+  <!-- Files to Create/Modify/Delete -->
+  <file-changes>
+    <create>
+      <file path="src/pages/project/EstimatePage.tsx">New two-phase estimate page with 5 tabs</file>
+      <file path="src/components/estimate/PriceComparisonPanel.tsx">Refactored price comparison for embedding</file>
+      <file path="src/services/pipelineService.ts">Pipeline trigger + progress subscription</file>
+      <file path="src/services/pdfService.ts">Frontend wrapper for PDF Cloud Function</file>
+    </create>
+    <modify>
+      <file path="src/components/money/MoneyView.tsx">Add mode prop</file>
+      <file path="src/components/time/TimeView.tsx">Full CPM graph + Gantt implementation</file>
+      <file path="src/App.tsx">Add /project/:id/estimate route</file>
+    </modify>
+    <delete>
+      <file path="src/pages/estimate/FinalView.tsx">Replaced by EstimatePage</file>
+      <file path="src/components/PriceComparisonPage.tsx">Replaced by PriceComparisonPanel</file>
+    </delete>
+  </file-changes>
+</story-context>

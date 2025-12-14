@@ -63,17 +63,14 @@ export function MobileMenu() {
           {/* Menu Panel */}
           <div className="fixed top-16 left-0 right-0 z-50 glass-panel mx-4 mt-2 rounded-glass">
             <nav className="flex flex-col p-4 space-y-4">
-              <NavLink to="/" onClick={closeMenu}>
-                Home
+              <NavLink to="/how-it-works" onClick={closeMenu}>
+                How It Works
               </NavLink>
-              <NavLink to="/#features" onClick={closeMenu}>
-                Features
+              <NavLink to="/about" onClick={closeMenu}>
+                About Us
               </NavLink>
-              <NavLink to="/#pricing" onClick={closeMenu}>
-                Pricing
-              </NavLink>
-              <NavLink to="/#contact" onClick={closeMenu}>
-                Contact
+              <NavLink to="/contact" onClick={closeMenu}>
+                Contact Us
               </NavLink>
               <Link
                 to="/login"

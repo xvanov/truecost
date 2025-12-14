@@ -261,6 +261,25 @@ class ScopeSummary(BaseModel):
 
 
 # =============================================================================
+# COST PREFERENCES (USER-SELECTED DEFAULTS)
+# =============================================================================
+
+
+class CostPreferences(BaseModel):
+    """User-selected costing assumptions passed into the deep pipeline.
+
+    Notes:
+    - All percentage values are decimals in [0, 1] (e.g., 0.10 == 10%).
+    - These are *inputs* chosen by the user during scope definition.
+    """
+
+    overheadPct: float = Field(0.10, ge=0, le=1, description="Overhead percent (decimal)")
+    profitPct: float = Field(0.10, ge=0, le=1, description="Profit percent (decimal)")
+    contingencyPct: float = Field(0.05, ge=0, le=1, description="Contingency percent (decimal)")
+    wasteFactor: float = Field(1.10, ge=1, le=2, description="Waste multiplier (e.g., 1.10 == +10%)")
+
+
+# =============================================================================
 # PROJECT BRIEF MODEL
 # =============================================================================
 
@@ -271,6 +290,13 @@ class ProjectBrief(BaseModel):
     projectType: ProjectType = Field(..., description="Type of project")
     location: Location = Field(..., description="Project location")
     scopeSummary: ScopeSummary = Field(..., description="High-level scope summary")
+    costPreferences: Optional[CostPreferences] = Field(
+        None,
+        description=(
+            "User-selected costing preferences/assumptions used by the pipeline "
+            "(percentages are decimals, e.g. 0.10 == 10%)."
+        ),
+    )
     specialRequirements: List[str] = Field(
         default_factory=list, description="Special requirements"
     )

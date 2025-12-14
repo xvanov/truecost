@@ -334,6 +334,54 @@ class TestCostAgent:
         # Check summary
         assert "summary" in result
         assert "headline" in result["summary"]
+
+    @pytest.mark.asyncio
+    async def test_cost_agent_uses_user_selected_defaults(self, mock_services):
+        """User-selected defaults in clarification_output should override CostAgent hardcoded defaults."""
+        firestore, llm, cost_data = mock_services
+
+        agent = CostAgent(
+            firestore_service=firestore,
+            llm_service=llm,
+            cost_data_service=cost_data
+        )
+
+        input_data = {
+            "clarification_output": {
+                "projectBrief": {
+                    "costPreferences": {
+                        "overheadPct": 0.20,
+                        "profitPct": 0.15,
+                        "contingencyPct": 0.07,
+                        "wasteFactor": 1.25,
+                    }
+                }
+            },
+            "location_output": get_mock_location_output(),
+            "scope_output": get_mock_scope_output(),
+        }
+
+        result = await agent.run(
+            estimate_id="test-001",
+            input_data=input_data
+        )
+
+        assert result["adjustments"]["overheadPercentage"] == pytest.approx(0.20)
+        assert result["adjustments"]["profitPercentage"] == pytest.approx(0.15)
+        assert result["adjustments"]["contingencyPercentage"] == pytest.approx(0.07)
+
+        # Waste factor should be used in granular takeoff conversions (planks heuristic).
+        found_planks = False
+        for call in firestore.save_cost_items.call_args_list:
+            args, _kwargs = call
+            # (estimate_id, items)
+            items = args[1] if len(args) > 1 else []
+            for it in items:
+                if isinstance(it, dict) and str(it.get("id", "")).endswith("__planks"):
+                    found_planks = True
+                    assumptions = it.get("assumptions", {})
+                    assert assumptions.get("waste_factor") == pytest.approx(1.25)
+        assert found_planks, "Expected at least one __planks granular item to validate wasteFactor usage"
     
     @pytest.mark.asyncio
     async def test_cost_agent_applies_location_factor(self, mock_services):

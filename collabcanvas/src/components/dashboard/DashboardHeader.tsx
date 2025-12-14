@@ -7,7 +7,7 @@ interface DashboardHeaderProps {
 }
 
 /**
- * DashboardHeader - Title + view toggle + New Estimate button.
+ * DashboardHeader - Title + view toggle + New Project button.
  */
 export function DashboardHeader({ viewMode, onViewModeChange }: DashboardHeaderProps) {
   return (
@@ -55,8 +55,8 @@ export function DashboardHeader({ viewMode, onViewModeChange }: DashboardHeaderP
           </button>
         </div>
 
-        <Link to="/estimate/new">
-          <Button variant="primary">New Estimate</Button>
+        <Link to="/project/new">
+          <Button variant="primary">New Project</Button>
         </Link>
       </div>
     </div>

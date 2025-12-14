@@ -9,8 +9,7 @@ import type { Shape, Lock, Presence, User, SelectionBox, TransformControls, Canv
 import type { ConnectionState } from '../services/offline';
 import { isHarnessEnabled, registerHarnessApi } from '../utils/harness';
 import { createHistoryService } from '../services/historyService';
-import { saveBackgroundImage, saveScaleLine, deleteScaleLineFromFirestore, deleteBackgroundImageFromFirestore, subscribeToBoardState, getBoardDoc, type FirestoreBoardState } from '../services/firestore';
-import { getDoc } from 'firebase/firestore';
+import { saveBackgroundImage, saveScaleLine, deleteScaleLineFromFirestore, deleteBackgroundImageFromFirestore, subscribeToBoardState, type FirestoreBoardState } from '../services/firestore';
 import { AIService } from '../services/aiService';
 import { AICommandExecutor } from '../services/aiCommandExecutor';
 
@@ -122,6 +121,9 @@ function getDefaultState(): CanvasState {
     billOfMaterials: null,
     userMaterialPreferences: null,
     isAccumulatingBOM: false,
+    // Viewport State (persisted across navigation)
+    viewportState: { x: 0, y: 0, scale: 1 },
+    setViewportState: () => {},
     // Methods - these won't be called when projectId is undefined
     createShape: () => {},
     updateShapePosition: () => {},
@@ -951,176 +953,108 @@ function createProjectCanvasStore(projectId: string): StoreApi<CanvasState> {
         console.log('🔧 initializeBoardStateSubscription called for project:', projectIdParam);
         return () => {
         console.log('🔧 Setting up board state subscription for project:', projectIdParam);
-        // Load initial state immediately before setting up subscription
-        // This ensures we get the data even if the subscription callback fires before React re-renders
-        let initialLoadComplete = false;
-        const loadInitialState = async () => {
-          try {
-            const boardDocRef = getBoardDoc(projectIdParam);
-            const doc = await getDoc(boardDocRef);
-            if (doc.exists()) {
-              const boardState = doc.data() as FirestoreBoardState;
-              console.log('📥 Initial board state loaded:', { 
-                projectId: projectIdParam, 
-                hasBoardState: !!boardState,
-                hasBackgroundImage: !!boardState?.backgroundImage,
-                hasScaleLine: !!boardState?.scaleLine
-              });
-              const state = get();
-              
-              if (boardState) {
-                // Update background image
-                if (boardState.backgroundImage) {
-                  const uploadedAt = typeof boardState.backgroundImage.uploadedAt === 'number' 
-                    ? boardState.backgroundImage.uploadedAt 
-                    : Date.now();
-                  const bgImage: BackgroundImage = {
-                    id: `bg-${uploadedAt}`,
-                    url: boardState.backgroundImage.url,
-                    fileName: 'construction-plan',
-                    fileSize: 0,
-                    width: boardState.backgroundImage.width,
-                    height: boardState.backgroundImage.height,
-                    aspectRatio: boardState.backgroundImage.width / boardState.backgroundImage.height,
-                    uploadedAt,
-                    uploadedBy: boardState.backgroundImage.uploadedBy || '',
-                  };
-                  console.log('📥 Initial load: Setting background image from Firestore:', { url: bgImage.url, width: bgImage.width, height: bgImage.height });
-                  state.setBackgroundImage(bgImage, true);
-                  console.log('✅ Initial load: Background image set in store after Firestore load');
-                }
-                
-                // Update scale line
-                if (boardState.scaleLine) {
-                  const createdAt = typeof boardState.scaleLine.createdAt === 'number' 
-                    ? boardState.scaleLine.createdAt 
-                    : Date.now();
-                  const updatedAt = typeof boardState.scaleLine.updatedAt === 'number' 
-                    ? boardState.scaleLine.updatedAt 
-                    : Date.now();
-                  const scaleLine: ScaleLine = {
-                    id: boardState.scaleLine.id,
-                    startX: boardState.scaleLine.startX,
-                    startY: boardState.scaleLine.startY,
-                    endX: boardState.scaleLine.endX,
-                    endY: boardState.scaleLine.endY,
-                    realWorldLength: boardState.scaleLine.realWorldLength,
-                    unit: boardState.scaleLine.unit as UnitType,
-                    isVisible: boardState.scaleLine.isVisible,
-                    createdAt,
-                    updatedAt,
-                    createdBy: boardState.scaleLine.createdBy || '',
-                    updatedBy: boardState.scaleLine.updatedBy || '',
-                  };
-                  console.log('📥 Initial load: Setting scale line from Firestore:', scaleLine);
-                  state.setScaleLine(scaleLine, true);
-                }
-              }
-            }
-            initialLoadComplete = true;
-            console.log('✅ Initial load complete');
-          } catch (error) {
-            console.error('❌ Failed to load initial board state:', error);
-            initialLoadComplete = true; // Mark as complete even on error to prevent blocking
+
+        // Track if we've received the first snapshot (which fires immediately)
+        let isFirstSnapshot = true;
+
+        // Helper to apply board state to the store
+        const applyBoardState = (boardState: FirestoreBoardState | null, source: string) => {
+          if (!boardState) {
+            console.log(`📥 [${source}] No board state to apply`);
+            return;
+          }
+
+          console.log(`📥 [${source}] Applying board state:`, {
+            projectId: projectIdParam,
+            hasBackgroundImage: !!boardState.backgroundImage,
+            hasScaleLine: !!boardState.scaleLine
+          });
+
+          // Update background image
+          if (boardState.backgroundImage) {
+            const uploadedAt = typeof boardState.backgroundImage.uploadedAt === 'number'
+              ? boardState.backgroundImage.uploadedAt
+              : Date.now();
+            const bgImage: BackgroundImage = {
+              id: `bg-${uploadedAt}`,
+              url: boardState.backgroundImage.url,
+              fileName: 'construction-plan',
+              fileSize: 0,
+              width: boardState.backgroundImage.width,
+              height: boardState.backgroundImage.height,
+              aspectRatio: boardState.backgroundImage.width / boardState.backgroundImage.height,
+              uploadedAt,
+              uploadedBy: boardState.backgroundImage.uploadedBy || '',
+            };
+            console.log(`📥 [${source}] Setting background image:`, { url: bgImage.url, width: bgImage.width, height: bgImage.height });
+            // Use set() directly to ensure synchronous state update
+            set((state: CanvasState) => ({
+              canvasScale: { ...state.canvasScale, backgroundImage: bgImage }
+            }));
+            console.log(`✅ [${source}] Background image set in store`);
+          }
+
+          // Update scale line
+          if (boardState.scaleLine) {
+            const createdAt = typeof boardState.scaleLine.createdAt === 'number'
+              ? boardState.scaleLine.createdAt
+              : Date.now();
+            const updatedAt = typeof boardState.scaleLine.updatedAt === 'number'
+              ? boardState.scaleLine.updatedAt
+              : Date.now();
+            const scaleLine: ScaleLine = {
+              id: boardState.scaleLine.id,
+              startX: boardState.scaleLine.startX,
+              startY: boardState.scaleLine.startY,
+              endX: boardState.scaleLine.endX,
+              endY: boardState.scaleLine.endY,
+              realWorldLength: boardState.scaleLine.realWorldLength,
+              unit: boardState.scaleLine.unit as UnitType,
+              isVisible: boardState.scaleLine.isVisible,
+              createdAt,
+              updatedAt,
+              createdBy: boardState.scaleLine.createdBy || '',
+              updatedBy: boardState.scaleLine.updatedBy || '',
+            };
+            console.log(`📥 [${source}] Setting scale line:`, scaleLine);
+            set((state: CanvasState) => ({
+              canvasScale: { ...state.canvasScale, scaleLine }
+            }));
           }
         };
-        
-        // Load initial state and wait for it before setting up subscription
-        // This prevents the subscription callback from clearing data before initial load completes
-        loadInitialState().then(() => {
-          console.log('✅ Initial load finished, setting up subscription');
-        });
-        
+
+        // Set up subscription - the first callback fires immediately with current data
         const unsubscribe = subscribeToBoardState(projectIdParam, (boardState) => {
-          // Skip subscription updates until initial load completes
-          if (!initialLoadComplete) {
-            console.log('⏸️ Skipping subscription callback - initial load not complete yet');
+          if (isFirstSnapshot) {
+            // Handle the first (immediate) snapshot - this contains the current state
+            isFirstSnapshot = false;
+            console.log('📥 First snapshot received (immediate):', {
+              projectId: projectIdParam,
+              hasBoardState: !!boardState,
+              hasBackgroundImage: !!boardState?.backgroundImage,
+              hasScaleLine: !!boardState?.scaleLine
+            });
+            applyBoardState(boardState, 'Initial snapshot');
             return;
           }
           
-          console.log('📥 Board state subscription callback triggered:', { 
-            projectId: projectIdParam, 
+          // Handle subsequent updates from Firestore (real-time changes)
+          console.log('📥 Subsequent board state update:', {
+            projectId: projectIdParam,
             hasBoardState: !!boardState,
             hasBackgroundImage: !!boardState?.backgroundImage,
             hasScaleLine: !!boardState?.scaleLine
           });
-          const state = get();
-          
+
           if (boardState) {
             // Update active layer
             const currentState = get();
             if (boardState.activeLayerId && boardState.activeLayerId !== currentState.activeLayerId) {
               set({ activeLayerId: boardState.activeLayerId });
             }
-            
-            // Update background image
-            if (boardState.backgroundImage) {
-              const uploadedAt = typeof boardState.backgroundImage.uploadedAt === 'number' 
-                ? boardState.backgroundImage.uploadedAt 
-                : Date.now();
-              const bgImage: BackgroundImage = {
-                id: `bg-${uploadedAt}`,
-                url: boardState.backgroundImage.url,
-                fileName: 'construction-plan',
-                fileSize: 0,
-                width: boardState.backgroundImage.width,
-                height: boardState.backgroundImage.height,
-                aspectRatio: boardState.backgroundImage.width / boardState.backgroundImage.height,
-                uploadedAt,
-                uploadedBy: boardState.backgroundImage.uploadedBy || '',
-              };
-              console.log('📥 Board state subscription: Setting background image from Firestore:', { url: bgImage.url, width: bgImage.width, height: bgImage.height });
-              // setBackgroundImage only takes (image, skipFirestoreSync) - projectId comes from closure
-              // Pass true to skipFirestoreSync since we're loading FROM Firestore
-              state.setBackgroundImage(bgImage, true);
-              console.log('✅ Background image set in store after Firestore load');
-            } else {
-              // Only clear if it doesn't exist in Firestore AND doesn't exist locally
-              // This prevents clearing a background image that was just uploaded but not yet saved
-              if (!state.canvasScale.backgroundImage) {
-                console.log('📥 Board state subscription: Clearing background image (no image in Firestore or locally)');
-                state.setBackgroundImage(null, true);
-              } else {
-                console.log('📥 Board state subscription: Keeping local background image (not in Firestore yet):', state.canvasScale.backgroundImage.url);
-              }
-            }
-            
-            // Update scale line
-            if (boardState.scaleLine) {
-              const createdAt = typeof boardState.scaleLine.createdAt === 'number' 
-                ? boardState.scaleLine.createdAt 
-                : Date.now();
-              const updatedAt = typeof boardState.scaleLine.updatedAt === 'number' 
-                ? boardState.scaleLine.updatedAt 
-                : Date.now();
-              const scaleLine: ScaleLine = {
-                id: boardState.scaleLine.id,
-                startX: boardState.scaleLine.startX,
-                startY: boardState.scaleLine.startY,
-                endX: boardState.scaleLine.endX,
-                endY: boardState.scaleLine.endY,
-                realWorldLength: boardState.scaleLine.realWorldLength,
-                unit: boardState.scaleLine.unit as UnitType,
-                isVisible: boardState.scaleLine.isVisible,
-                createdAt,
-                updatedAt,
-                createdBy: boardState.scaleLine.createdBy || '',
-                updatedBy: boardState.scaleLine.updatedBy || '',
-              };
-              console.log('📥 Board state subscription: Setting scale line from Firestore:', scaleLine);
-              // setScaleLine only takes (scaleLine, skipFirestoreSync) - projectId comes from closure
-              // Pass true to skipFirestoreSync since we're loading FROM Firestore
-              state.setScaleLine(scaleLine, true);
-            } else {
-              // Only clear scale line if it doesn't exist locally either
-              // This prevents clearing a scale line that was just created but not yet saved to Firestore
-              if (!state.canvasScale.scaleLine) {
-                console.log('📥 Board state subscription: Clearing scale line (no scale line in Firestore or locally)');
-                state.setScaleLine(null, true);
-              } else {
-                console.log('📥 Board state subscription: Keeping local scale line (not in Firestore yet):', state.canvasScale.scaleLine);
-              }
-            }
+
+            // Apply the board state updates
+            applyBoardState(boardState, 'Subscription update');
           }
         });
         
@@ -1165,6 +1099,11 @@ function createProjectCanvasStore(projectId: string): StoreApi<CanvasState> {
         set({ userMaterialPreferences: preferences }),
       setIsAccumulatingBOM: (isAccumulating: boolean) =>
         set({ isAccumulatingBOM: isAccumulating }),
+
+      // Viewport State (persisted across navigation)
+      viewportState: { x: 0, y: 0, scale: 1 },
+      setViewportState: (viewportState: { x: number; y: number; scale: number }) =>
+        set({ viewportState }),
     };
   }) as StoreApi<CanvasState>;
 

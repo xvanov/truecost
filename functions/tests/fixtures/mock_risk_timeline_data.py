@@ -132,7 +132,12 @@ def get_mock_clarification_output() -> Dict[str, Any]:
             "scopeSummary": {
                 "totalSqft": 196,
                 "finishLevel": "mid-range"
-            }
+            },
+            "timeline": {
+                # Required by TimelineAgent (no default "2 weeks from now" fallback)
+                "desiredStart": "2025-02-01",
+                "flexibilityDays": 14,
+            },
         }
     }
 

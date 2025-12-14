@@ -93,7 +93,7 @@ describe('Dashboard Component', () => {
     );
 
     expect(screen.getByText('Your Projects')).toBeInTheDocument();
-    expect(screen.getByText('New Estimate')).toBeInTheDocument();
+    expect(screen.getByText('New Project')).toBeInTheDocument();
   });
 
   it('should display projects when available', () => {

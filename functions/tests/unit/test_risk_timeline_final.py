@@ -14,6 +14,7 @@ import pytest
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from pydantic import ValidationError
+from config.settings import settings
 
 # Models
 from models.risk_analysis import (
@@ -262,8 +263,10 @@ class TestRiskAgent:
         return firestore, llm
     
     @pytest.mark.asyncio
-    async def test_risk_agent_run(self, mock_services):
+    async def test_risk_agent_run(self, mock_services, monkeypatch):
         """Test Risk Agent execution."""
+        # Keep unit test fast regardless of production default iterations.
+        monkeypatch.setattr(settings, "monte_carlo_iterations", 1000)
         firestore, llm = mock_services
         agent = RiskAgent(
             firestore_service=firestore,
@@ -289,6 +292,30 @@ class TestRiskAgent:
         
         # Check Firestore was called
         firestore.save_agent_output.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_risk_agent_missing_cost_does_not_invent_numbers(self, mock_services, monkeypatch):
+        """If cost totals/subtotals are missing, RiskAgent must not invent base_cost."""
+        monkeypatch.setattr(settings, "monte_carlo_iterations", 1000)
+        firestore, llm = mock_services
+
+        agent = RiskAgent(
+            firestore_service=firestore,
+            llm_service=llm
+        )
+
+        # Missing/empty cost output
+        input_data = {
+            "clarification_output": get_mock_clarification_output(),
+            "location_output": get_mock_location_output(),
+            "cost_output": {},
+        }
+
+        result = await agent.run("test-001", input_data)
+        assert result.get("riskLevel") == "n/a"
+        assert result.get("monteCarlo") is None
+        assert result.get("contingency") is None
+        assert result.get("error", {}).get("code") == "INSUFFICIENT_DATA"
 
 
 class TestRiskScorer:
@@ -453,6 +480,34 @@ class TestTimelineAgent:
     async def test_timeline_agent_run(self, mock_services):
         """Test Timeline Agent execution."""
         firestore, llm = mock_services
+        llm.generate_json.return_value = {
+            "content": {
+                "tasks": [
+                    {
+                        "name": "Permits & Planning",
+                        "phase": "preconstruction",
+                        "duration_days": 5,
+                        "primary_trade": "general",
+                        "depends_on": [],
+                    },
+                    {
+                        "name": "Demolition",
+                        "phase": "demolition",
+                        "duration_days": 2,
+                        "primary_trade": "demolition",
+                        "depends_on": ["Permits & Planning"],
+                    },
+                    {
+                        "name": "Final Inspection",
+                        "phase": "final_inspection",
+                        "duration_days": 1,
+                        "primary_trade": "general",
+                        "depends_on": ["Demolition"],
+                    },
+                ]
+            },
+            "tokens_used": 50,
+        }
         agent = TimelineAgent(
             firestore_service=firestore,
             llm_service=llm
@@ -542,6 +597,27 @@ class TestTimelineCritic:
         
         # Should identify missing tasks
         assert any("task" in issue.lower() for issue in result["issues"])
+
+    @pytest.mark.asyncio
+    async def test_critic_does_not_use_fixed_duration_heuristics(self, critic):
+        """TimelineCritic should not enforce arbitrary small/large remodel duration ranges."""
+        output = get_valid_timeline_output()
+        # Force a duration value that would have triggered the old heuristic when sqft is small
+        output["totalDuration"] = 50
+        output["durationRange"] = {"optimistic": 45, "expected": 50, "pessimistic": 65}
+
+        input_data = {
+            "clarification_output": {
+                "projectBrief": {"scopeSummary": {"totalSqft": 50}}
+            }
+        }
+
+        result = await critic.analyze_output(output, input_data, 90, "Good")
+
+        combined = " ".join(result.get("issues", []) + result.get("how_to_fix", []))
+        assert "seems long" not in combined.lower()
+        assert "seems short" not in combined.lower()
+        assert "20-30%" not in combined
 
 
 # =============================================================================
@@ -734,19 +810,63 @@ class TestPR7Integration:
         firestore.update_estimate = AsyncMock()
         firestore.list_cost_items = AsyncMock(return_value=[])
         llm = AsyncMock()
-        llm.generate_json.return_value = {
-            "content": {
-                "recommendations": [],
-                "key_assumptions": [],
-                "exclusions": []
-            },
-            "tokens_used": 50
-        }
+        async def _generate_json_side_effect(system_prompt: str, user_message: str, max_tokens=None):
+            # Timeline agent task-plan request (no hardcoded templates)
+            if "TIMELINE_TASK_PLAN_REQUEST" in (user_message or ""):
+                return {
+                    "content": {
+                        "tasks": [
+                            {
+                                "name": "Permits & Planning",
+                                "phase": "preconstruction",
+                                "duration_days": 5,
+                                "primary_trade": "general",
+                                "depends_on": [],
+                            },
+                            {
+                                "name": "Demolition",
+                                "phase": "demolition",
+                                "duration_days": 2,
+                                "primary_trade": "demolition",
+                                "depends_on": ["Permits & Planning"],
+                            },
+                            {
+                                "name": "Rough-In",
+                                "phase": "rough_in",
+                                "duration_days": 5,
+                                "primary_trade": "general",
+                                "depends_on": ["Demolition"],
+                            },
+                            {
+                                "name": "Final Inspection",
+                                "phase": "final_inspection",
+                                "duration_days": 1,
+                                "primary_trade": "general",
+                                "depends_on": ["Rough-In"],
+                            },
+                        ]
+                    },
+                    "tokens_used": 50,
+                }
+
+            # Default: risk/final analysis requests
+            return {
+                "content": {
+                    "recommendations": [],
+                    "key_assumptions": [],
+                    "exclusions": []
+                },
+                "tokens_used": 50
+            }
+
+        llm.generate_json.side_effect = _generate_json_side_effect
         return firestore, llm
     
     @pytest.mark.asyncio
-    async def test_risk_to_timeline_to_final_flow(self, mock_services):
+    async def test_risk_to_timeline_to_final_flow(self, mock_services, monkeypatch):
         """Test full agent flow from Risk → Timeline → Final."""
+        # Keep unit test fast regardless of production default iterations.
+        monkeypatch.setattr(settings, "monte_carlo_iterations", 1000)
         firestore, llm = mock_services
         
         # Prepare input data

@@ -1,12 +1,14 @@
 interface FilePreviewProps {
-  file: File;
+  file?: File | null;
+  existingUrl?: string | null;
+  existingFileName?: string | null;
   onRemove: () => void;
 }
 
 /**
- * FilePreview - Shows selected file with icon and metadata.
+ * FilePreview - Shows selected file or existing uploaded file with icon and metadata.
  */
-export function FilePreview({ file, onRemove }: FilePreviewProps) {
+export function FilePreview({ file, existingUrl, existingFileName, onRemove }: FilePreviewProps) {
   const getFileIcon = (fileName: string) => {
     const ext = fileName.split('.').pop()?.toLowerCase();
 
@@ -38,15 +40,27 @@ export function FilePreview({ file, onRemove }: FilePreviewProps) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  // Determine what to display - new file takes priority over existing
+  const displayName = file?.name || existingFileName || 'Uploaded file';
+  const displaySize = file?.size ? formatFileSize(file.size) : (existingUrl ? 'Uploaded' : 'Unknown size');
+  const isExisting = !file && !!existingUrl;
+
   return (
     <div className="glass-panel p-4 flex items-center gap-4">
       <div className="flex-shrink-0 w-16 h-16 bg-truecost-glass-bg rounded-lg flex items-center justify-center">
-        {getFileIcon(file.name)}
+        {getFileIcon(displayName)}
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="font-body text-body text-truecost-text-primary truncate mb-1">{file.name}</p>
-        <p className="font-body text-body-meta text-truecost-text-secondary">{formatFileSize(file.size)}</p>
+        <p className="font-body text-body text-truecost-text-primary truncate mb-1">{displayName}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-body text-body-meta text-truecost-text-secondary">{displaySize}</p>
+          {isExisting && (
+            <span className="text-xs px-2 py-0.5 bg-truecost-cyan/20 text-truecost-cyan rounded-full">
+              Saved
+            </span>
+          )}
+        </div>
       </div>
 
       <button
@@ -61,4 +75,3 @@ export function FilePreview({ file, onRemove }: FilePreviewProps) {
     </div>
   );
 }
-

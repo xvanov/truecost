@@ -79,26 +79,34 @@ class PipelineOrchestrator:
     async def run_pipeline(
         self,
         estimate_id: str,
-        clarification_output: Dict[str, Any]
+        clarification_output: Dict[str, Any],
+        project_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> PipelineResult:
         """Run the full deep agent pipeline.
-        
+
         Args:
             estimate_id: The estimate document ID.
             clarification_output: ClarificationOutput v3.0.0 data.
-            
+            project_id: Optional project ID for syncing to frontend UI.
+            user_id: Optional user ID who triggered the pipeline.
+
         Returns:
             PipelineResult with success/failure status.
-            
+
         Raises:
             PipelineError: If pipeline fails unrecoverably.
         """
         self._start_time = time.time()
         self._total_tokens = 0
-        
+        self._project_id = project_id
+        self._user_id = user_id
+        self._started_at = int(self._start_time * 1000)
+
         logger.info(
             "pipeline_started",
             estimate_id=estimate_id,
+            project_id=project_id,
             agent_count=len(AGENT_SEQUENCE)
         )
         
@@ -114,7 +122,20 @@ class PipelineOrchestrator:
         )
         
         await self._update_pipeline_status(estimate_id, pipeline_status)
-        
+
+        # Sync to project pipeline for frontend UI (only when invoked with a project_id)
+        if self._project_id:
+            await self.firestore.sync_to_project_pipeline(
+                project_id=self._project_id,
+                estimate_id=estimate_id,
+                current_agent=None,
+                completed_agents=[],
+                progress=0,
+                status="running",
+                user_id=self._user_id,
+                started_at=self._started_at,
+            )
+
         # Track accumulated context from previous agents
         accumulated_context: Dict[str, Any] = {
             "clarification_output": clarification_output
@@ -190,6 +211,19 @@ class PipelineOrchestrator:
                     score=pipeline_status.scores.get(agent_name),
                     progress=pipeline_status.progress
                 )
+
+                # Sync progress to project pipeline for frontend UI
+                if self._project_id:
+                    await self.firestore.sync_to_project_pipeline(
+                        project_id=self._project_id,
+                        estimate_id=estimate_id,
+                        current_agent=agent_name,
+                        completed_agents=completed_agents,
+                        progress=pipeline_status.progress,
+                        status="running",
+                        user_id=self._user_id,
+                        started_at=self._started_at,
+                    )
             
             # All agents completed successfully
             pipeline_status.completed_at = datetime.utcnow()
@@ -208,7 +242,20 @@ class PipelineOrchestrator:
                 duration_ms=self.elapsed_ms,
                 total_tokens=self._total_tokens
             )
-            
+
+            # Sync completion to project pipeline for frontend UI
+            if self._project_id:
+                await self.firestore.sync_to_project_pipeline(
+                    project_id=self._project_id,
+                    estimate_id=estimate_id,
+                    current_agent=None,
+                    completed_agents=completed_agents,
+                    progress=100,
+                    status="complete",
+                    user_id=self._user_id,
+                    started_at=self._started_at,
+                )
+
             return PipelineResult(
                 success=True,
                 estimate_id=estimate_id,
@@ -224,15 +271,29 @@ class PipelineOrchestrator:
                 estimate_id=estimate_id,
                 error=str(e)
             )
-            
+
             pipeline_status.error = str(e)
             await self._update_pipeline_status(estimate_id, pipeline_status)
-            
+
             await self.firestore.update_estimate(
                 estimate_id,
                 {"status": "failed", "error": str(e)}
             )
-            
+
+            # Sync failure to project pipeline for frontend UI
+            if self._project_id:
+                await self.firestore.sync_to_project_pipeline(
+                    project_id=self._project_id,
+                    estimate_id=estimate_id,
+                    current_agent=pipeline_status.current_agent,
+                    completed_agents=completed_agents,
+                    progress=pipeline_status.progress,
+                    status="error",
+                    error=str(e),
+                    user_id=self._user_id,
+                    started_at=self._started_at,
+                )
+
             raise PipelineError(
                 code=ErrorCode.PIPELINE_FAILED,
                 message=f"Pipeline failed: {str(e)}",

@@ -122,6 +122,7 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
     Request body:
     {
         "userId": "user-123",
+        "projectId": "proj-xxx",  // Optional: for UI progress sync
         "clarificationOutput": {...}  // ClarificationOutput v3.0.0
     }
     
@@ -140,8 +141,9 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
     try:
         data = get_request_json(req)
         user_id = data.get("userId")
+        project_id = data.get("projectId")  # Optional: for UI sync
         clarification_output = data.get("clarificationOutput")
-        
+
         # Validate required fields
         if not user_id:
             return _json_response(
@@ -179,13 +181,15 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
         logger.info(
             "pipeline_request_received",
             user_id=user_id,
+            project_id=project_id,
             estimate_id=estimate_id
         )
-        
+
         # Create estimate document and start pipeline
         result = asyncio.run(_start_pipeline_async(
             estimate_id=estimate_id,
             user_id=user_id,
+            project_id=project_id,
             clarification_output=clarification_output
         ))
         
@@ -216,31 +220,43 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
 async def _start_pipeline_async(
     estimate_id: str,
     user_id: str,
+    project_id: str | None,
     clarification_output: Dict[str, Any]
 ) -> Dict[str, Any]:
     """Start pipeline and run to completion.
-    
+
     Creates the estimate document and runs the full pipeline.
     Note: In production, long-running pipelines should use Cloud Tasks or Pub/Sub.
     For the emulator/testing, we run synchronously to completion.
+
+    Args:
+        estimate_id: Estimate document ID.
+        user_id: User who triggered the pipeline.
+        project_id: Optional project ID for UI progress sync.
+        clarification_output: ClarificationOutput v3.0.0 from clarification agent.
     """
     from services.firestore_service import FirestoreService
     from agents.orchestrator import PipelineOrchestrator
-    
+
     firestore_service = FirestoreService()
-    
+
     # Create estimate document
     await firestore_service.create_estimate(
         estimate_id=estimate_id,
         user_id=user_id,
         clarification_output=clarification_output
     )
-    
+
     # Run pipeline to completion
     orchestrator = PipelineOrchestrator(firestore_service=firestore_service)
-    
+
     try:
-        result = await orchestrator.run_pipeline(estimate_id, clarification_output)
+        result = await orchestrator.run_pipeline(
+            estimate_id=estimate_id,
+            clarification_output=clarification_output,
+            project_id=project_id,
+            user_id=user_id
+        )
         return {
             "estimateId": estimate_id,
             "status": result.status,
@@ -605,6 +621,13 @@ def a2a_scope(req: https_fn.Request) -> https_fn.Response:
 
 
 @https_fn.on_request(**AGENT_ENDPOINT_CONFIG)
+def a2a_code_compliance(req: https_fn.Request) -> https_fn.Response:
+    """A2A endpoint for Code Compliance Agent (ICC warnings)."""
+    from agents.primary.code_compliance_agent import CodeComplianceAgent
+    return _handle_a2a_request(req, CodeComplianceAgent, "code_compliance")
+
+
+@https_fn.on_request(**AGENT_ENDPOINT_CONFIG)
 def a2a_cost(req: https_fn.Request) -> https_fn.Response:
     """A2A endpoint for Cost Agent."""
     from agents.primary.cost_agent import CostAgent
@@ -648,6 +671,13 @@ def a2a_scope_scorer(req: https_fn.Request) -> https_fn.Response:
 
 
 @https_fn.on_request(**AGENT_ENDPOINT_CONFIG)
+def a2a_code_compliance_scorer(req: https_fn.Request) -> https_fn.Response:
+    """A2A endpoint for Code Compliance Scorer."""
+    from agents.scorers.code_compliance_scorer import CodeComplianceScorer
+    return _handle_a2a_request(req, CodeComplianceScorer, "code_compliance_scorer")
+
+
+@https_fn.on_request(**AGENT_ENDPOINT_CONFIG)
 def a2a_cost_scorer(req: https_fn.Request) -> https_fn.Response:
     """A2A endpoint for Cost Scorer."""
     from agents.scorers.cost_scorer import CostScorer
@@ -688,6 +718,13 @@ def a2a_scope_critic(req: https_fn.Request) -> https_fn.Response:
     """A2A endpoint for Scope Critic."""
     from agents.critics.scope_critic import ScopeCritic
     return _handle_a2a_request(req, ScopeCritic, "scope_critic")
+
+
+@https_fn.on_request(**AGENT_ENDPOINT_CONFIG)
+def a2a_code_compliance_critic(req: https_fn.Request) -> https_fn.Response:
+    """A2A endpoint for Code Compliance Critic."""
+    from agents.critics.code_compliance_critic import CodeComplianceCritic
+    return _handle_a2a_request(req, CodeComplianceCritic, "code_compliance_critic")
 
 
 @https_fn.on_request(**AGENT_ENDPOINT_CONFIG)

@@ -189,6 +189,9 @@ def sample_clarification_output():
                 "description": "Kitchen remodel with new cabinets and countertops"
             },
             "timeline": {
+                # TimelineAgent requires desiredStart (no default offset fallback)
+                "desiredStart": "2025-02-01",
+                # Back-compat: some older fixtures used preferredStart
                 "preferredStart": "2025-02-01",
                 "flexibilityDays": 14
             }

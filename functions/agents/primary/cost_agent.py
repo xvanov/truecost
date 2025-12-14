@@ -100,6 +100,69 @@ class CostAgent(BaseA2AAgent):
     # (These are intentionally simple defaults; refine with real product catalogs later.)
     DEFAULT_WASTE_FACTOR = 1.10
     DEFAULT_PLANK_SQFT = 1.667  # ~5" x 48" engineered hardwood plank
+
+    def _extract_user_cost_preferences(self, clarification: Dict[str, Any]) -> Dict[str, float]:
+        """Extract user-selected costing preferences from ClarificationOutput.
+
+        Expected to be provided by the UI during scope definition.
+
+        Supported locations (for backward/forward compatibility):
+        - clarification["projectBrief"]["costPreferences"]
+        - clarification["costPreferences"]
+
+        Supported keys (either camelCase or snake_case):
+        - overheadPct / overhead_pct  (decimal or percent)
+        - profitPct / profit_pct      (decimal or percent)
+        - contingencyPct / contingency_pct (decimal or percent)
+        - wasteFactor / waste_factor  (multiplier or percent)
+        """
+
+        prefs = {}
+        if isinstance(clarification.get("projectBrief"), dict):
+            prefs = clarification["projectBrief"].get("costPreferences") or {}
+        if not prefs:
+            prefs = clarification.get("costPreferences") or {}
+
+        def _pct(val: Any, default: float) -> float:
+            try:
+                f = float(val)
+            except Exception:
+                return default
+            # Accept percent inputs like 10 (meaning 10%) as well as decimals like 0.10.
+            if f > 1.0 and f <= 100.0:
+                return f / 100.0
+            # Clamp to sensible range.
+            if f < 0:
+                return default
+            if f > 1.0:
+                return min(f, 1.0)
+            return f
+
+        def _waste(val: Any, default: float) -> float:
+            try:
+                f = float(val)
+            except Exception:
+                return default
+            # Accept waste given as percent (0.10 or 10) meaning +10% waste.
+            if f > 0 and f < 1.0:
+                return 1.0 + f
+            if f >= 1.0 and f <= 2.0:
+                return f
+            if f > 2.0 and f <= 100.0:
+                return 1.0 + (f / 100.0)
+            return default
+
+        overhead_pct = _pct(prefs.get("overheadPct", prefs.get("overhead_pct")), self.DEFAULT_OVERHEAD_PCT)
+        profit_pct = _pct(prefs.get("profitPct", prefs.get("profit_pct")), self.DEFAULT_PROFIT_PCT)
+        contingency_pct = _pct(prefs.get("contingencyPct", prefs.get("contingency_pct")), self.DEFAULT_CONTINGENCY_PCT)
+        waste_factor = _waste(prefs.get("wasteFactor", prefs.get("waste_factor")), self.DEFAULT_WASTE_FACTOR)
+
+        return {
+            "overhead_pct": overhead_pct,
+            "profit_pct": profit_pct,
+            "contingency_pct": contingency_pct,
+            "waste_factor": waste_factor,
+        }
     
     def __init__(
         self,
@@ -147,6 +210,8 @@ class CostAgent(BaseA2AAgent):
         scope_output = input_data.get("scope_output", {})
         location_output = input_data.get("location_output", {})
         clarification = input_data.get("clarification_output", {})
+
+        user_prefs = self._extract_user_cost_preferences(clarification if isinstance(clarification, dict) else {})
         
         location_factor = location_output.get("locationFactor", 1.0)
         zip_code = location_output.get("zipCode", "00000")
@@ -163,7 +228,8 @@ class CostAgent(BaseA2AAgent):
         division_costs, total_items, exact_matches = await self._calculate_division_costs(
             estimate_id=estimate_id,
             scope_output=scope_output,
-            zip_code=zip_code
+            zip_code=zip_code,
+            waste_factor=user_prefs["waste_factor"],
         )
         
         # Step 3: Calculate subtotals
@@ -173,7 +239,10 @@ class CostAgent(BaseA2AAgent):
         adjustments = self._calculate_adjustments(
             subtotals=subtotals,
             location_factor=location_factor,
-            location_output=location_output
+            location_output=location_output,
+            overhead_pct=user_prefs["overhead_pct"],
+            profit_pct=user_prefs["profit_pct"],
+            contingency_pct=user_prefs["contingency_pct"],
         )
         
         # Step 5: Calculate grand total
@@ -249,7 +318,8 @@ class CostAgent(BaseA2AAgent):
         self,
         estimate_id: str,
         scope_output: Dict[str, Any],
-        zip_code: str
+        zip_code: str,
+        waste_factor: float,
     ) -> tuple[List[DivisionCost], int, int]:
         """Calculate costs for all divisions and line items.
         
@@ -289,7 +359,8 @@ class CostAgent(BaseA2AAgent):
                             estimate_id=estimate_id,
                             division_code=div_code,
                             division_name=div_name,
-                            item_cost=item_cost
+                            item_cost=item_cost,
+                            waste_factor=waste_factor,
                         )
                     )
 
@@ -323,7 +394,8 @@ class CostAgent(BaseA2AAgent):
         estimate_id: str,
         division_code: str,
         division_name: str,
-        item_cost: LineItemCost
+        item_cost: LineItemCost,
+        waste_factor: float,
     ) -> List[Dict[str, Any]]:
         """Build granular cost items (materials/labor/equipment + optional takeoff conversions).
 
@@ -404,7 +476,7 @@ class CostAgent(BaseA2AAgent):
         is_flooring = ("floor" in desc or "hardwood" in desc or "plank" in desc) and unit in {"sf", "sqft", "square feet", "square_feet"}
         if is_flooring and item_cost.quantity > 0:
             plank_sqft = self.DEFAULT_PLANK_SQFT
-            waste = self.DEFAULT_WASTE_FACTOR
+            waste = waste_factor or self.DEFAULT_WASTE_FACTOR
             planks = int(math.ceil((item_cost.quantity / plank_sqft) * waste))
             if planks > 0:
                 items.append({
@@ -532,7 +604,10 @@ class CostAgent(BaseA2AAgent):
         self,
         subtotals: CostSubtotals,
         location_factor: float,
-        location_output: Dict[str, Any]
+        location_output: Dict[str, Any],
+        overhead_pct: float,
+        profit_pct: float,
+        contingency_pct: float,
     ) -> CostAdjustments:
         """Calculate cost adjustments.
         
@@ -548,15 +623,15 @@ class CostAgent(BaseA2AAgent):
         location_adjusted = subtotals.subtotal * location_factor
         
         # Calculate overhead (on location-adjusted subtotal)
-        overhead_amount = location_adjusted * self.DEFAULT_OVERHEAD_PCT
+        overhead_amount = location_adjusted * overhead_pct
         
         # Calculate profit (on location-adjusted subtotal + overhead)
         pre_profit = location_adjusted + overhead_amount
-        profit_amount = pre_profit * self.DEFAULT_PROFIT_PCT
+        profit_amount = pre_profit * profit_pct
         
         # Calculate contingency (on total before contingency)
         pre_contingency = pre_profit + profit_amount
-        contingency_amount = pre_contingency * self.DEFAULT_CONTINGENCY_PCT
+        contingency_amount = pre_contingency * contingency_pct
         
         # Get permit costs from location output
         permit_data = location_output.get("permitCosts", {})
@@ -586,11 +661,11 @@ class CostAgent(BaseA2AAgent):
         return CostAdjustments(
             location_factor=location_factor,
             location_adjusted_subtotal=location_adjusted,
-            overhead_percentage=self.DEFAULT_OVERHEAD_PCT,
+            overhead_percentage=overhead_pct,
             overhead_amount=overhead_amount,
-            profit_percentage=self.DEFAULT_PROFIT_PCT,
+            profit_percentage=profit_pct,
             profit_amount=profit_amount,
-            contingency_percentage=self.DEFAULT_CONTINGENCY_PCT,
+            contingency_percentage=contingency_pct,
             contingency_amount=contingency_amount,
             permit_costs=permit_costs,
             tax_percentage=0.0,

@@ -61,9 +61,9 @@ export function PriceComparisonPage() {
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold">Price Comparison</h1>
+            <h1 className="text-2xl font-bold text-black">Price Comparison</h1>
             {progress && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-black">
                 {progress.results.length} products compared
               </p>
             )}
@@ -80,7 +80,7 @@ export function PriceComparisonPage() {
         {/* Progress bar (while processing) */}
         {isProcessing && progress && (
           <div className="mb-6">
-            <div className="flex justify-between text-sm text-gray-600 mb-2">
+            <div className="flex justify-between text-sm text-black mb-2">
               <span>Comparing prices...</span>
               <span>{progress.completedProducts} of {progress.totalProducts} products</span>
             </div>
@@ -106,11 +106,11 @@ export function PriceComparisonPage() {
 
         {/* Error state */}
         {error && (
-          <div className="text-red-600 p-4 bg-red-50 rounded mb-4">
+          <div className="text-black p-4 bg-red-50 rounded mb-4">
             {error}
             <button
               onClick={handleRefresh}
-              className="ml-4 text-blue-600 underline"
+              className="ml-4 text-black underline"
             >
               Try again
             </button>

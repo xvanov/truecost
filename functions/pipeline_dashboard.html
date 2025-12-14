@@ -1193,7 +1193,7 @@
             
             try {
                 // Call the Cloud Function
-                const response = await fetch('http://127.0.0.1:5001/collabcanvas-dev/us-central1/start_deep_pipeline', {
+                const response = await fetch('http://127.0.0.1:8000/collabcanvas-dev/us-central1/start_deep_pipeline', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1237,7 +1237,7 @@
             // Poll the get_pipeline_status function every 2 seconds
             const pollStatus = async () => {
                 try {
-                    const response = await fetch('http://127.0.0.1:5001/collabcanvas-dev/us-central1/get_pipeline_status', {
+                    const response = await fetch('http://127.0.0.1:8000/collabcanvas-dev/us-central1/get_pipeline_status', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ estimateId: estimateId })
@@ -1350,7 +1350,7 @@
         }
         
         // Initial log
-        addLog('🔌 Connected to Functions emulator at 127.0.0.1:5001', 'info');
+        addLog('🔌 Connected to Functions emulator at 127.0.0.1:8000', 'info');
         addLog('📤 Upload a ClarificationOutput JSON file to begin', 'info');
     </script>
 </body>

@@ -12,6 +12,7 @@ import { Board } from './Board';
 import { ScopeView } from '../components/scope/ScopeView';
 import { TimeView } from '../components/time/TimeView';
 import { MoneyView } from '../components/money/MoneyView';
+import { EstimationView } from '../components/estimation/EstimationView';
 import { ViewIndicator } from '../components/shared/ViewIndicator';
 import { PresenceIndicator } from '../components/shared/PresenceIndicator';
 import { getDoc, doc } from 'firebase/firestore';
@@ -243,13 +244,13 @@ export function Project() {
   // Show project not found
   if (projectNotFound) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen items-center justify-center bg-truecost-bg-primary">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Project Not Found</h2>
-          <p className="text-gray-600 mb-4">The project you're looking for doesn't exist or you don't have access to it.</p>
+          <h2 className="text-2xl font-bold text-truecost-text-primary mb-4">Project Not Found</h2>
+          <p className="text-truecost-text-secondary mb-4">The project you're looking for doesn't exist or you don't have access to it.</p>
           <button
             onClick={() => navigate('/')}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-4 py-2 bg-truecost-accent text-white rounded hover:bg-truecost-accent/80"
           >
             Back to Dashboard
           </button>
@@ -263,10 +264,10 @@ export function Project() {
   // Also, if we have a project available (from localProject), don't show loading
   if ((loadingProject || !project) && !hasEverLoadedRef.current && !projectNotFound && !localProject) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen items-center justify-center bg-truecost-bg-primary">
         <div className="text-center">
-          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent mx-auto"></div>
-          <p className="text-gray-600">Loading project...</p>
+          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-truecost-accent border-t-transparent mx-auto"></div>
+          <p className="text-truecost-text-secondary">Loading project...</p>
         </div>
       </div>
     );
@@ -278,16 +279,16 @@ export function Project() {
   if (!project && hasEverLoadedRef.current && !projectNotFound) {
     const basePath = `/projects/${projectId}`;
     return (
-      <div className="flex h-screen flex-col">
-        <div className="border-b border-gray-200 bg-white">
+      <div className="flex h-screen flex-col bg-truecost-bg-primary">
+        <div className="border-b border-truecost-border bg-truecost-bg-surface">
           <div className="flex">
             <NavLink
               to={`${basePath}/scope`}
               className={({ isActive }) =>
                 `px-6 py-4 font-medium transition-colors ${
                   isActive
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'border-b-2 border-truecost-accent text-truecost-accent'
+                    : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-bg-primary/50'
                 }`
               }
             >
@@ -298,20 +299,32 @@ export function Project() {
               className={({ isActive }) =>
                 `px-6 py-4 font-medium transition-colors ${
                   isActive
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'border-b-2 border-truecost-accent text-truecost-accent'
+                    : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-bg-primary/50'
                 }`
               }
             >
               Space
             </NavLink>
             <NavLink
+              to={`${basePath}/estimate`}
+              className={({ isActive }) =>
+                `px-6 py-4 font-medium transition-colors ${
+                  isActive
+                    ? 'border-b-2 border-green-600 text-green-600'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`
+              }
+            >
+              Estimate
+            </NavLink>
+            <NavLink
               to={`${basePath}/time`}
               className={({ isActive }) =>
                 `px-6 py-4 font-medium transition-colors ${
                   isActive
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'border-b-2 border-truecost-accent text-truecost-accent'
+                    : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-bg-primary/50'
                 }`
               }
             >
@@ -322,8 +335,8 @@ export function Project() {
               className={({ isActive }) =>
                 `px-6 py-4 font-medium transition-colors ${
                   isActive
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'border-b-2 border-truecost-accent text-truecost-accent'
+                    : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-bg-primary/50'
                 }`
               }
             >
@@ -332,7 +345,7 @@ export function Project() {
             <div className="ml-auto flex items-center px-6">
               <button
                 onClick={() => navigate('/')}
-                className="text-sm text-gray-600 hover:text-gray-900"
+                className="text-sm text-truecost-text-secondary hover:text-truecost-text-primary"
               >
                 ← Back to Projects
               </button>
@@ -342,8 +355,9 @@ export function Project() {
         <div className="flex-1 overflow-hidden">
           <Routes>
             <Route path="scope" element={<ScopeView />} />
-            <Route path="time" element={<TimeView />} />
             <Route path="space" element={<Board />} />
+            <Route path="estimate" element={<EstimationView />} />
+            <Route path="time" element={<TimeView projectId={projectId || ''} />} />
             <Route path="money" element={<MoneyView />} />
             <Route path="*" element={<ScopeView />} />
           </Routes>
@@ -355,17 +369,17 @@ export function Project() {
   const basePath = `/projects/${projectId}`;
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col bg-truecost-bg-primary">
       {/* Four-View Navigation Tabs */}
-      <div className="border-b border-gray-200 bg-white">
+      <div className="border-b border-truecost-border bg-truecost-bg-surface">
         <div className="flex">
           <NavLink
             to={`${basePath}/scope`}
             className={({ isActive }) =>
               `px-6 py-4 font-medium transition-colors ${
                 isActive
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'border-b-2 border-truecost-accent text-truecost-accent'
+                  : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-bg-primary/50'
               }`
             }
           >
@@ -378,8 +392,8 @@ export function Project() {
             className={({ isActive }) =>
               `px-6 py-4 font-medium transition-colors ${
                 isActive
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'border-b-2 border-truecost-accent text-truecost-accent'
+                  : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-bg-primary/50'
               }`
             }
           >
@@ -388,12 +402,29 @@ export function Project() {
             <PresenceIndicator view="space" />
           </NavLink>
           <NavLink
+            to={`${basePath}/estimate`}
+            className={({ isActive }) =>
+              `px-6 py-4 font-medium transition-colors ${
+                isActive
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`
+            }
+          >
+            <span className="flex items-center">
+              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              Estimate
+            </span>
+          </NavLink>
+          <NavLink
             to={`${basePath}/time`}
             className={({ isActive }) =>
               `px-6 py-4 font-medium transition-colors ${
                 isActive
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'border-b-2 border-truecost-accent text-truecost-accent'
+                  : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-bg-primary/50'
               }`
             }
           >
@@ -406,8 +437,8 @@ export function Project() {
             className={({ isActive }) =>
               `px-6 py-4 font-medium transition-colors ${
                 isActive
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'border-b-2 border-truecost-accent text-truecost-accent'
+                  : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-bg-primary/50'
               }`
             }
           >
@@ -418,7 +449,7 @@ export function Project() {
           <div className="ml-auto flex items-center px-6">
             <button
               onClick={() => navigate('/')}
-              className="text-sm text-gray-600 hover:text-gray-900"
+              className="text-sm text-truecost-text-secondary hover:text-truecost-text-primary"
             >
               ← Back to Projects
             </button>
@@ -430,8 +461,9 @@ export function Project() {
       <div className="flex-1 overflow-hidden">
         <Routes>
           <Route path="scope" element={<ScopeView />} />
-          <Route path="time" element={<TimeView />} />
           <Route path="space" element={<Board />} />
+          <Route path="estimate" element={<EstimationView />} />
+          <Route path="time" element={<TimeView projectId={projectId || ''} />} />
           <Route path="money" element={<MoneyView />} />
           <Route path="*" element={<ScopeView />} />
         </Routes>

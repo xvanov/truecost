@@ -41,11 +41,11 @@ export function EmptyState() {
 
       <h2 className="font-heading text-h3 text-truecost-text-primary mb-2">No projects yet</h2>
       <p className="font-body text-body text-truecost-text-secondary mb-8 text-center max-w-md">
-        Create your first estimate to get started with TrueCost
+        Create your first project to get started with TrueCost
       </p>
 
-      <Link to="/estimate/new" className="btn-pill-primary">
-        Create Your First Estimate
+      <Link to="/project/new" className="btn-pill-primary">
+        Create Your First Project
       </Link>
     </div>
   );

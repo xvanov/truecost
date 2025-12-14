@@ -20,7 +20,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { firestore } from './firebase';
-import type { Project, ProjectStatus, CollaboratorRole } from '../types/project';
+import type { Project, ProjectStatus, CollaboratorRole, EstimateConfig, ProjectAddress } from '../types/project';
 import { canEditProject, canDeleteProject, canShareProject } from '../utils/projectAccess';
 
 const projectsCollection = collection(firestore, 'projects');
@@ -43,6 +43,14 @@ function firestoreDocToProject(docId: string, data: DocumentData): Project {
     profitLoss: data.profitLoss,
     actualCosts: data.actualCosts,
     estimateTotal: data.estimateTotal,
+    // Scope fields
+    address: data.address,
+    projectType: data.projectType,
+    size: data.size,
+    useUnionLabor: data.useUnionLabor,
+    estimateConfig: data.estimateConfig,
+    planImageUrl: data.planImageUrl,
+    planImageFileName: data.planImageFileName,
   };
 }
 
@@ -77,19 +85,52 @@ export async function getUserProjects(userId: string): Promise<Project[]> {
   }
 }
 
+// Input for creating/updating project scope data
+export interface ProjectScopeData {
+  name: string;
+  description: string;
+  address?: ProjectAddress;
+  projectType?: string;
+  size?: string;
+  useUnionLabor?: boolean;
+  estimateConfig?: EstimateConfig;
+  planImageUrl?: string;
+  planImageFileName?: string;
+}
+
+/**
+ * Get a single project by ID
+ */
+export async function getProject(projectId: string): Promise<Project | null> {
+  try {
+    const projectRef = doc(projectsCollection, projectId);
+    const projectDoc = await getDoc(projectRef);
+
+    if (!projectDoc.exists()) {
+      return null;
+    }
+
+    return firestoreDocToProject(projectId, projectDoc.data());
+  } catch (error) {
+    console.error('Error fetching project:', error);
+    throw error;
+  }
+}
+
 /**
  * Create a new project
  */
 export async function createProject(
   name: string,
   description: string,
-  userId: string
+  userId: string,
+  scopeData?: Partial<ProjectScopeData>
 ): Promise<Project> {
   try {
     const projectRef = doc(projectsCollection);
     const now = Date.now();
-    
-    const projectData = {
+
+    const projectData: Record<string, unknown> = {
       name,
       description,
       status: 'estimating' as ProjectStatus,
@@ -100,9 +141,20 @@ export async function createProject(
       createdBy: userId,
       updatedBy: userId,
     };
-    
+
+    // Add optional scope fields if provided
+    if (scopeData) {
+      if (scopeData.address) projectData.address = scopeData.address;
+      if (scopeData.projectType) projectData.projectType = scopeData.projectType;
+      if (scopeData.size) projectData.size = scopeData.size;
+      if (scopeData.useUnionLabor !== undefined) projectData.useUnionLabor = scopeData.useUnionLabor;
+      if (scopeData.estimateConfig) projectData.estimateConfig = scopeData.estimateConfig;
+      if (scopeData.planImageUrl) projectData.planImageUrl = scopeData.planImageUrl;
+      if (scopeData.planImageFileName) projectData.planImageFileName = scopeData.planImageFileName;
+    }
+
     await setDoc(projectRef, projectData);
-    
+
     return {
       id: projectRef.id,
       name,
@@ -114,9 +166,63 @@ export async function createProject(
       updatedAt: now,
       createdBy: userId,
       updatedBy: userId,
+      address: scopeData?.address,
+      projectType: scopeData?.projectType,
+      size: scopeData?.size,
+      useUnionLabor: scopeData?.useUnionLabor,
+      estimateConfig: scopeData?.estimateConfig,
+      planImageUrl: scopeData?.planImageUrl,
+      planImageFileName: scopeData?.planImageFileName,
     };
   } catch (error) {
     console.error('Error creating project:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update project scope data
+ */
+export async function updateProjectScope(
+  projectId: string,
+  scopeData: Partial<ProjectScopeData>,
+  userId: string
+): Promise<void> {
+  try {
+    const projectRef = doc(projectsCollection, projectId);
+    const projectDoc = await getDoc(projectRef);
+
+    if (!projectDoc.exists()) {
+      throw new Error('Project not found');
+    }
+
+    const projectData = projectDoc.data();
+    const project: Project = firestoreDocToProject(projectId, projectData);
+
+    // Check access control - only owners and editors can update
+    if (!canEditProject(project, userId)) {
+      throw new Error('PERMISSION_DENIED: You do not have permission to modify this project.');
+    }
+
+    const updateData: Record<string, unknown> = {
+      updatedAt: serverTimestamp(),
+      updatedBy: userId,
+    };
+
+    // Add scope fields to update
+    if (scopeData.name !== undefined) updateData.name = scopeData.name;
+    if (scopeData.description !== undefined) updateData.description = scopeData.description;
+    if (scopeData.address !== undefined) updateData.address = scopeData.address;
+    if (scopeData.projectType !== undefined) updateData.projectType = scopeData.projectType;
+    if (scopeData.size !== undefined) updateData.size = scopeData.size;
+    if (scopeData.useUnionLabor !== undefined) updateData.useUnionLabor = scopeData.useUnionLabor;
+    if (scopeData.estimateConfig !== undefined) updateData.estimateConfig = scopeData.estimateConfig;
+    if (scopeData.planImageUrl !== undefined) updateData.planImageUrl = scopeData.planImageUrl;
+    if (scopeData.planImageFileName !== undefined) updateData.planImageFileName = scopeData.planImageFileName;
+
+    await updateDoc(projectRef, updateData);
+  } catch (error) {
+    console.error('Error updating project scope:', error);
     throw error;
   }
 }

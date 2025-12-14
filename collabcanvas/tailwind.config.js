@@ -10,6 +10,7 @@ export default {
         truecost: {
           // Backgrounds
           'bg-primary': '#050A14',
+          'bg-secondary': '#0A1020',
           'bg-surface': '#0F1629',
           // Accents
           cyan: '#3BE3F5',
@@ -23,6 +24,8 @@ export default {
           'text-muted': 'rgba(255, 255, 255, 0.55)',
           // Status
           danger: '#FF4A4A',
+          warning: '#F5A623',
+          success: '#4ADE80',
         },
       },
       fontFamily: {

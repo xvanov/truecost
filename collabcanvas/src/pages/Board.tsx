@@ -13,6 +13,7 @@ import { useOffline } from '../hooks/useOffline';
 import { DiagnosticsHud } from '../components/DiagnosticsHud';
 import { FloatingAIChat } from '../components/shared/FloatingAIChat';
 import type { BackgroundImage, Shape, ShapeType } from '../types';
+import type { EstimateConfig } from './project/ScopePage';
 import { perfMetrics } from '../utils/harness';
 import { AuthenticatedLayout } from '../components/layouts/AuthenticatedLayout';
 // Konva types imported via Canvas component
@@ -27,8 +28,12 @@ export function Board() {
   const { projectId: routeProjectId, id } = useParams<{ projectId?: string; id?: string }>();
   const projectId = routeProjectId || id;
   const location = useLocation();
-  const locationState = location.state as { backgroundImage?: BackgroundImage } | null;
+  const locationState = location.state as { 
+    backgroundImage?: BackgroundImage;
+    estimateConfig?: EstimateConfig;
+  } | null;
   const pendingBackgroundImage = locationState?.backgroundImage;
+  const estimateConfig = locationState?.estimateConfig;
   const [fps, setFps] = useState<number>(60);
   const [zoom, setZoom] = useState<number>(1);
   const [showLayersPanel, setShowLayersPanel] = useState(false);
@@ -71,11 +76,16 @@ export function Board() {
   }, [user, setCurrentUser, projectId]);
 
   // If a background image was passed from the Plan page via navigation state, apply it to the canvas store.
+  // Must wait for user to be set in project store before syncing to Firestore
   useEffect(() => {
-    if (projectId && pendingBackgroundImage && setBackgroundImage) {
-      setBackgroundImage(pendingBackgroundImage, true); // skip Firestore sync for local preview
+    if (projectId && pendingBackgroundImage && setBackgroundImage && user) {
+      // Ensure user is set in project store before saving background image
+      const projectStore = getProjectCanvasStoreApi(projectId);
+      projectStore.getState().setCurrentUser(user);
+      // Now save with Firestore sync enabled
+      setBackgroundImage(pendingBackgroundImage, false);
     }
-  }, [projectId, pendingBackgroundImage, setBackgroundImage]);
+  }, [projectId, pendingBackgroundImage, setBackgroundImage, user]);
 
   // Initialize board state subscription (background image, scale line) when projectId is available.
   // Note: This should NOT depend on `user` being loaded; board state is project-scoped and can be
@@ -265,17 +275,19 @@ export function Board() {
             <div className="flex flex-wrap gap-3">
               <button
                 className="btn-pill-secondary"
-                onClick={() => projectId && navigate(`/estimate/${projectId}/plan`)}
+                onClick={() => projectId && navigate(`/project/${projectId}/scope`)}
                 disabled={!projectId}
               >
-                Back to Plan
+                Back to Scope
               </button>
               <button
                 className="btn-pill-primary"
-                onClick={() => projectId && navigate(`/estimate/${projectId}/final`)}
+                onClick={() => projectId && navigate(`/estimate/${projectId}/final`, { 
+                  state: { estimateConfig } 
+                })}
                 disabled={!projectId}
               >
-                Continue to Final
+                Continue to Estimate
               </button>
             </div>
           </div>

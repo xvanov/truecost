@@ -148,6 +148,10 @@ interface CanvasState {
   addMaterialCalculation: (calculation: MaterialCalculation, forceAccumulate?: boolean) => void;
   setUserMaterialPreferences: (preferences: UserMaterialPreferences) => void;
   setIsAccumulatingBOM: (isAccumulating: boolean) => void;
+
+  // Viewport State (persisted across navigation)
+  viewportState: { x: number; y: number; scale: number };
+  setViewportState: (state: { x: number; y: number; scale: number }) => void;
 }
 
 export type { CanvasState };
@@ -1862,6 +1866,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => {
   setIsAccumulatingBOM: (isAccumulating: boolean) =>
     set(() => ({
       isAccumulatingBOM: isAccumulating,
+    })),
+
+  // Viewport State (persisted across navigation)
+  viewportState: { x: 0, y: 0, scale: 1 },
+  setViewportState: (viewportState: { x: number; y: number; scale: number }) =>
+    set(() => ({
+      viewportState,
     })),
   };
 });

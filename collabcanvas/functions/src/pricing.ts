@@ -1,38 +1,55 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Firestore } from 'firebase-admin/firestore';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 // Using cors: true to match other functions (aiCommand, materialEstimateCommand, sagemakerInvoke)
 
-// Load environment variables - try multiple locations
-dotenv.config(); // Default: .env in functions directory
-dotenv.config({ path: path.resolve(__dirname, '../.env') }); // Explicit path
-dotenv.config({ path: path.resolve(process.cwd(), '.env') }); // Current working directory
+// Lazy initialization to avoid timeout during module load
+let _initialized = false;
+let _db: Firestore | null = null;
 
-// Log environment variable loading status
-if (process.env.NODE_ENV !== 'production') {
-  console.log('[PRICING] Environment check:');
-  console.log('[PRICING] - SERP_API_KEY:', process.env.SERP_API_KEY ? 'SET' : 'NOT SET');
-  console.log('[PRICING] - NODE_ENV:', process.env.NODE_ENV);
-  console.log('[PRICING] - CWD:', process.cwd());
+function initializeEnv(): void {
+  if (_initialized) return;
+  _initialized = true;
+
+  // Load environment variables - try multiple locations
+  dotenv.config();
+  dotenv.config({ path: path.resolve(__dirname, '../.env') });
+  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
+  // Log environment variable loading status
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[PRICING] Environment check:');
+    console.log('[PRICING] - SERP_API_KEY:', process.env.SERP_API_KEY ? 'SET' : 'NOT SET');
+    console.log('[PRICING] - NODE_ENV:', process.env.NODE_ENV);
+    console.log('[PRICING] - CWD:', process.cwd());
+  }
+
+  // Configure Firestore to use emulator if running locally
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    console.log('[PRICING] Using Firestore emulator:', process.env.FIRESTORE_EMULATOR_HOST);
+  } else if (process.env.NODE_ENV !== 'production' && !process.env.FUNCTIONS_EMULATOR) {
+    process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
+    console.log('[PRICING] Setting FIRESTORE_EMULATOR_HOST to 127.0.0.1:8081');
+  }
 }
 
-// Initialize admin if not already
-try {
-  admin.app();
-} catch {
-  admin.initializeApp();
+function initFirebaseAdmin(): void {
+  try {
+    admin.app();
+  } catch {
+    admin.initializeApp();
+  }
 }
 
-// Configure Firestore to use emulator if running locally
-// Firebase emulator automatically sets FIRESTORE_EMULATOR_HOST, but we need to ensure it's used
-if (process.env.FIRESTORE_EMULATOR_HOST) {
-  console.log('[PRICING] Using Firestore emulator:', process.env.FIRESTORE_EMULATOR_HOST);
-} else if (process.env.NODE_ENV !== 'production' && !process.env.FUNCTIONS_EMULATOR) {
-  // If running in emulator but env var not set, set it manually
-  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-  console.log('[PRICING] Setting FIRESTORE_EMULATOR_HOST to 127.0.0.1:8081');
+function getDb(): Firestore {
+  if (!_db) {
+    initializeEnv();
+    initFirebaseAdmin();
+    _db = getFirestore();
+  }
+  return _db;
 }
 
 interface PriceRequest {
@@ -85,13 +102,14 @@ function sleep(ms: number): Promise<void> {
  * Fetch price from SerpAPI with retry logic and exponential backoff
  */
 async function fetchFromSerpApi(
-  query: string, 
-  storeId?: string, 
+  query: string,
+  storeId?: string,
   deliveryZip?: string,
   attempt = 1
 ): Promise<{ priceUSD: number | null; link: string | null; error?: string }> {
+  initializeEnv();
   console.log(`[PRICING] fetchFromSerpApi called: query="${query}", store_id="${storeId || 'none'}", delivery_zip="${deliveryZip || 'none'}", attempt=${attempt}`);
-  
+
   const apiKey = (process.env.SERP_API_KEY || '').trim();
   if (!apiKey) {
     const error = 'SERP_API_KEY not configured';
@@ -267,7 +285,7 @@ export const getHomeDepotPrice = onCall<{ request: PriceRequest }>({
     // For now, we'll use storeNumber as store_id if no explicit mapping exists
     const storeId = storeNumber; // TODO: Create proper mapping from storeNumber to store_id
     
-    const db = getFirestore();
+    const db = getDb();
     const docRef = db.collection('pricing').doc(store).collection('items').doc(key);
     console.log(`[PRICING] Checking cache in Firestore...`);
 

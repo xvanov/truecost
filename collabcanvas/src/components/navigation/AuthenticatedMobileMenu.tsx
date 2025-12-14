@@ -79,8 +79,8 @@ export function AuthenticatedMobileMenu() {
               <NavLink to="/dashboard" onClick={closeMenu}>
                 Dashboard
               </NavLink>
-              <NavLink to="/estimate/new" onClick={closeMenu}>
-                New Estimate
+              <NavLink to="/project/new" onClick={closeMenu}>
+                New Project
               </NavLink>
               <NavLink to="/account" onClick={closeMenu}>
                 Account

@@ -9,6 +9,11 @@ service firebase.storage {
       allow read, write: if request.auth != null;
     }
     
+    // Allow authenticated users to upload/read project plan images
+    match /projects/{projectId}/plans/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    
     // Deny all other access
     match /{allPaths=**} {
       allow read, write: if false;

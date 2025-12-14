@@ -29,9 +29,9 @@ export function PresenceIndicator({ view, className = '' }: PresenceIndicatorPro
   return (
     <div className={`ml-2 flex items-center gap-1 ${className}`}>
       <div className="flex -space-x-1">
-        {usersInView.slice(0, 3).map((user: Presence) => (
+        {usersInView.slice(0, 3).map((user: Presence, index: number) => (
           <div
-            key={user.userId}
+            key={user.userId || `presence-${index}`}
             className="h-5 w-5 rounded-full border-2 border-white"
             style={{ backgroundColor: user.color }}
             title={user.name}

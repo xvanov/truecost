@@ -1,4 +1,5 @@
 # generated: 2025-12-09
+# last_updated: 2025-12-12
 # project: TrueCost
 # project_key: truecost
 # tracking_system: file-system
@@ -9,6 +10,7 @@
 # Epic Status:
 #   - backlog: Epic exists in epic file but not contexted
 #   - contexted: Next epic tech context created by *epic-tech-context (required)
+#   - done: All stories in epic are done and merged to main
 #
 # Story Status:
 #   - backlog: Story only exists in epic file
@@ -30,6 +32,7 @@
 # - TrueCost is designed for 5 parallel developers - each epic can progress independently
 
 generated: 2025-12-09
+last_updated: 2025-12-12
 project: TrueCost
 project_key: truecost
 tracking_system: file-system
@@ -37,23 +40,28 @@ story_location: docs/sprint_artifacts
 
 development_status:
   # Epic 1: Frontend Experience (Dev 1) - 4 stories
-  epic-1: backlog
-  1-1-input-section-dashboard: backlog
-  1-2-plan-section: backlog
-  1-3-final-estimate-section: backlog
-  1-4-pipeline-visibility-feedback: backlog
+  # MERGED: PR #16 - Finalize UI Redesign Updates (2025-12-11)
+  # Note: Epic 1 was implemented as a unified UI redesign rather than individual stories
+  epic-1: done
+  1-1-input-section-dashboard: done  # Implemented in Dashboard.tsx, NewEstimate.tsx
+  1-2-plan-section: done  # Implemented in PlanView.tsx
+  1-3-final-estimate-section: done  # Implemented in FinalView.tsx
+  1-4-pipeline-visibility-feedback: done  # UI prepared (stub backend)
   epic-1-retrospective: optional
 
-  # Epic 2: Agent Pipeline (Dev 2) - 8 stories (1 per agent + orchestrator)
-  epic-2: backlog
-  2-1-pipeline-foundation-orchestrator: backlog
-  2-2-clarification-agent: backlog
-  2-3-cad-analysis-agent: backlog
-  2-4-location-intelligence-agent: backlog
-  2-5-construction-scope-agent: backlog
-  2-6-cost-estimation-agent: backlog
-  2-7-risk-analysis-agent: backlog
-  2-8-final-estimator-agent: backlog
+  # Epic 2: Agent Pipeline (Dev 2) - Deep Agent Pipeline
+  # MERGED: PR #17 - True Agent Pipeline (2025-12-11)
+  # All 8 PRs completed with full test coverage (205 tests pass)
+  # 19 agents total: 6 primary + 6 scorer + 6 critic + 1 orchestrator
+  epic-2: done
+  2-1-pipeline-foundation-orchestrator: done  # PRs #1-3: Foundation, models, orchestrator (80 tests)
+  2-2-clarification-agent: done  # ClarificationOutput v3.0.0 validation
+  2-3-cad-analysis-agent: done  # Integrated in pipeline foundation
+  2-4-location-intelligence-agent: done  # PR #4: Location Agent with 7-criteria scorer (26 tests)
+  2-5-construction-scope-agent: done  # PR #5: Scope Agent with CSI enrichment (29 tests)
+  2-6-cost-estimation-agent: done  # PR #6: Cost Agent with P50/P80/P90 ranges (36 tests)
+  2-7-risk-analysis-agent: done  # PR #7: Risk, Timeline, Final agents (33 tests)
+  2-8-final-estimator-agent: done  # PR #8: Firestore rules, integration mapping
   epic-2-retrospective: optional
 
   # Epic 3: CAD & Voice Processing (Dev 3) - 3 stories
@@ -64,19 +72,47 @@ development_status:
   epic-3-retrospective: optional
 
   # Epic 4: Data Services & PDF Output (Dev 4) - 5 stories
-  epic-4: contexted
+  # MERGED: PR #14 - Epic 4: Data Services & PDF Report Generation (2025-12-11)
+  # All 5 stories completed with full test coverage (90 tests pass)
+  epic-4: done
   4-1-location-intelligence-service: done
   4-2-cost-data-monte-carlo-simulation: done
-  4-3-pdf-report-generation: review  # REWORK COMPLETE: client-ready mode fully implemented
+  4-3-pdf-report-generation: done  # REWORK COMPLETE: client-ready mode fully implemented
   4-4-cost-data-seeding: done
-  4-5-real-data-integration: done  # APPROVED: Senior code review passed 2025-12-10. All 16 ACs implemented, 90 tests pass.
+  4-5-real-data-integration: done  # APPROVED: Senior code review passed 2025-12-10. All 16 ACs implemented.
   epic-4-retrospective: optional
 
-  # Epic 5: Multi-Retailer Price Optimization (Dev 5) - 5 stories
-  epic-5: backlog
-  5-1-unrawngle-api-integration: backlog
-  5-2-fuzzy-product-matching: backlog
-  5-3-price-comparison-engine: backlog
-  5-4-price-comparison-ui: backlog
-  5-5-shopping-list-generator: backlog
+  # Epic 5: Multi-Retailer Price Comparison (Dev 5) - 5 stories
+  # MERGED: PR #13 - Epic 5 Compare Price (2025-12-11)
+  # Note: Story numbering differs from original epics.md (pc-1 through pc-5)
+  epic-5: done
+  5-1-types-mock-data: done  # Types and mock product data
+  5-2-cloud-function: done  # Unwrangle API + LLM matching Cloud Function
+  5-3-frontend-service: done  # Price comparison service orchestration
+  5-4-ui-components: done  # PriceComparisonTable and PriceComparisonPage
+  5-5-product-cache: done  # Firestore caching with TTL
   epic-5-retrospective: optional
+
+  # Epic 6: Post-Merge Integration (Epics 1, 4, 5 Consolidation) - 2 stories
+  # Tech spec: docs/sprint-artifacts/tech-spec-post-merge-integration.md
+  # Addresses integration gaps after merging Epics 1, 4, 5
+  epic-6: contexted
+  6-1-project-persistence-scope-restructure: done  # Project persistence & Scope page restructure - APPROVED 2025-12-11
+  6-2-estimate-page-tabs-pdf: review  # Estimate page with two-phase UI, tabs & dual PDF - Ready for review 2025-12-12
+  epic-6-retrospective: optional
+
+# MERGE LOG:
+# ==========
+# 2025-12-11: PR #17 merged - Epic 2 (Deep Agent Pipeline) - 205 tests, 19 agents
+# 2025-12-11: PR #16 merged - Epic 1 (UI Redesign)
+# 2025-12-11: PR #14 merged - Epic 4 (Data Services & PDF)
+# 2025-12-11: PR #13 merged - Epic 5 (Price Comparison)
+#
+# POST-MERGE INTEGRATION REQUIRED:
+# See docs/sprint-artifacts/tech-spec-post-merge-integration.md for details:
+# - Project persistence to Firestore
+# - Visual stepper component
+# - Scope page restructure (chatbot hidden until "Generate Estimate")
+# - Dual PDF export (Contractor vs Client)
+# - TimeView with CPM + Gantt chart
+# - Price comparison integration with real BOM data
