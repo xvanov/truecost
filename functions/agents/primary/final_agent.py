@@ -124,6 +124,8 @@ class FinalAgent(BaseA2AAgent):
             Final estimate with executive summary.
         """
         self._start_time = time.time()
+        # Persist estimate_id for helper methods that need it (Deep Agents backend scope).
+        self._estimate_id_for_llm = estimate_id
         
         logger.info(
             "final_agent_running",
@@ -617,9 +619,14 @@ class FinalAgent(BaseA2AAgent):
                 project_brief, cost_breakdown, risk_output, timeline_output
             )
             
-            response = await self.llm.generate_json(
-                prompt=prompt,
-                system_prompt=FINAL_AGENT_SYSTEM_PROMPT
+            from services.deep_agent_factory import deep_agent_generate_json
+
+            response = await deep_agent_generate_json(
+                estimate_id=getattr(self, "_estimate_id_for_llm", None) or "unknown",
+                agent_name=self.name,
+                system_prompt=FINAL_AGENT_SYSTEM_PROMPT,
+                user_message=prompt,
+                firestore_service=self.firestore,
             )
             
             self._tokens_used += response.get("tokens_used", 0)

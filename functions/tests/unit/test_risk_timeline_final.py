@@ -55,6 +55,67 @@ from tests.fixtures.mock_risk_timeline_data import (
     get_valid_final_output, get_incomplete_final_output
 )
 
+@pytest.fixture(autouse=True)
+def mock_deep_agent_generate_json():
+    """Patch Deep Agents JSON helper so unit tests don't hit real OpenAI/deepagents runtime."""
+
+    async def _default_side_effect(**kwargs):  # noqa: ANN001
+        agent_name = kwargs.get("agent_name")
+        if agent_name == "risk":
+            return {
+                "content": {
+                    "risk_level_assessment": "Medium risk",
+                    "key_insights": ["Monte Carlo completed"],
+                    "mitigation_priorities": [{"risk": "Test", "action": "Monitor"}],
+                },
+                "tokens_used": 100,
+            }
+        if agent_name == "timeline":
+            return {
+                "content": {
+                    "tasks": [
+                        {
+                            "name": "Permits & Planning",
+                            "phase": "preconstruction",
+                            "duration_days": 5,
+                            "primary_trade": "general",
+                            "depends_on": [],
+                        },
+                        {
+                            "name": "Demolition",
+                            "phase": "demolition",
+                            "duration_days": 2,
+                            "primary_trade": "demolition",
+                            "depends_on": ["Permits & Planning"],
+                        },
+                        {
+                            "name": "Final Inspection",
+                            "phase": "final_inspection",
+                            "duration_days": 1,
+                            "primary_trade": "general",
+                            "depends_on": ["Demolition"],
+                        },
+                    ]
+                },
+                "tokens_used": 50,
+            }
+        if agent_name == "final":
+            return {
+                "content": {
+                    "recommendations": ["Rec 1", "Rec 2"],
+                    "next_steps": ["Step 1"],
+                    "key_assumptions": ["Assumption 1"],
+                },
+                "tokens_used": 10,
+            }
+        return {"content": {}, "tokens_used": 10}
+
+    with patch(
+        "services.deep_agent_factory.deep_agent_generate_json",
+        new=AsyncMock(side_effect=_default_side_effect),
+    ) as mocked:
+        yield mocked
+
 
 # =============================================================================
 # RISK ANALYSIS MODEL TESTS
@@ -803,7 +864,7 @@ class TestPR7Integration:
     """Integration tests for Risk → Timeline → Final flow."""
     
     @pytest.fixture
-    def mock_services(self):
+    def mock_services(self, mock_deep_agent_generate_json):
         """Create mock services for all agents."""
         firestore = AsyncMock()
         firestore.save_agent_output = AsyncMock()
@@ -859,7 +920,14 @@ class TestPR7Integration:
                 "tokens_used": 50
             }
 
-        llm.generate_json.side_effect = _generate_json_side_effect
+        async def _deep_side_effect(**kwargs):  # noqa: ANN001
+            return await _generate_json_side_effect(
+                kwargs.get("system_prompt"),
+                kwargs.get("user_message"),
+                kwargs.get("max_tokens"),
+            )
+
+        mock_deep_agent_generate_json.side_effect = _deep_side_effect
         return firestore, llm
     
     @pytest.mark.asyncio

@@ -118,6 +118,8 @@ class RiskAgent(BaseA2AAgent):
             Risk analysis with Monte Carlo results and contingency.
         """
         self._start_time = time.time()
+        # Persist estimate_id for helper methods that need it (Deep Agents backend scope).
+        self._estimate_id_for_llm = estimate_id
         
         logger.info(
             "risk_agent_running",
@@ -548,9 +550,14 @@ class RiskAgent(BaseA2AAgent):
                 risk_level=risk_level
             )
             
-            response = await self.llm.generate_json(
-                prompt=user_message,
-                system_prompt=RISK_AGENT_SYSTEM_PROMPT
+            from services.deep_agent_factory import deep_agent_generate_json
+
+            response = await deep_agent_generate_json(
+                estimate_id=getattr(self, "_estimate_id_for_llm", None) or "unknown",
+                agent_name=self.name,
+                system_prompt=RISK_AGENT_SYSTEM_PROMPT,
+                user_message=user_message,
+                firestore_service=self.firestore,
             )
             
             self._tokens_used += response.get("tokens_used", 0)

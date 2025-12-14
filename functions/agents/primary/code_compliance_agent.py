@@ -115,13 +115,19 @@ class CodeComplianceAgent(BaseA2AAgent):
             has_feedback=feedback is not None,
         )
 
-        llm = await self.llm.generate_json(
+        from services.deep_agent_factory import deep_agent_generate_json
+
+        llm = await deep_agent_generate_json(
+            estimate_id=estimate_id,
+            agent_name=self.name,
             system_prompt=ICC_CODE_COMPLIANCE_PROMPT,
             user_message=(
                 "CODE_COMPLIANCE_REQUEST\n\n"
                 "Generate ICC code compliance warnings for this project context:\n"
                 f"{context}"
             ),
+            firestore_service=self.firestore,
+            max_tokens=1200,
         )
 
         content = llm.get("content", {}) or {}

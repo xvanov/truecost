@@ -826,9 +826,14 @@ class CostAgent(BaseA2AAgent):
 Please analyze this estimate and provide insights in the required JSON format."""
         
         try:
-            result = await self.llm.generate_json(
+            from services.deep_agent_factory import deep_agent_generate_json
+
+            result = await deep_agent_generate_json(
+                estimate_id=estimate_id,
+                agent_name=self.name,
                 system_prompt=system_prompt,
-                user_message=user_message
+                user_message=user_message,
+                firestore_service=self.firestore,
             )
             
             self._tokens_used = result.get("tokens_used", 0)

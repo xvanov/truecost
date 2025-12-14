@@ -16,9 +16,12 @@
 
 **Implementation**:
 - Install: `pip install deepagents>=0.2.0`
-- Import: `from deepagents import create_deep_agent`
-- Each agent (Location, Scope, Cost, Risk, Final) uses Deep Agents pattern
-- See `docs/setup/deep-agents-integration.md` for details
+- Primary agents invoke Deep Agents via a shared helper (hybrid integration):
+  - `functions/services/deep_agent_factory.py::deep_agent_generate_json(...)`
+  - Deep Agents backend persists an agent filesystem in Firestore:
+    - `functions/services/deep_agents_backend.py::FirestoreAgentFsBackend`
+    - Storage: `/estimates/{estimateId}/agentFs/{agentName}/files/{sha1(path)}`
+- Orchestrator + A2A + scorers/critics remain as the outer control flow (non-linear scoring/retry loop).
 
 **Consequence**: Mixed language codebase (TypeScript frontend, Python backend)
 
@@ -66,8 +69,10 @@
 DEEP_AGENT_SEQUENCE = [
     ("location", LocationAgent),      # Zip-code based data
     ("scope", ScopeAgent),            # BoQ in CSI MasterFormat
+    ("code_compliance", CodeComplianceAgent),  # Informational ICC warnings
     ("cost", CostAgent),              # Material/labor/equipment costs
     ("risk", RiskAgent),              # Monte Carlo simulation
+    ("timeline", TimelineAgent),      # Schedule tasks + critical path
     ("final", FinalAgent),            # Synthesis + report
 ]
 ```

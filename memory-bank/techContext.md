@@ -19,7 +19,7 @@
 |------------|---------|---------|
 | Python | 3.11+ | Cloud Functions runtime (local dev validated on Python 3.12 as well) |
 | LangChain | 1.x | LLM integration & tool framework |
-| Deep Agents | 0.2.0+ | Agent orchestration with planning, file system, subagents |
+| Deep Agents | 0.2.0+ | Primary-agent orchestration (planning, filesystem, subagents) via a hybrid integration |
 | LangGraph | 0.2.0+ | Graph execution (used by Deep Agents) |
 | **A2A Protocol** | - | Inter-agent communication (JSON-RPC 2.0) |
 | httpx | 0.25.0+ | Async HTTP client for A2A |
@@ -250,4 +250,17 @@ pytest-asyncio>=0.21.0
 3. **Python 2nd Gen Functions**: For agent orchestration (longer timeouts)
 4. **Firestore Real-time**: Use onSnapshot for UI updates
 5. **API Keys in Functions**: Never expose to client
+
+## Deep Agents Implementation Notes (Current Reality)
+
+- **Hybrid architecture**: A2A + Orchestrator + Scorer/Critic loop remains the outer pipeline control flow.
+- **Primary agents** call Deep Agents via:
+  - `functions/services/deep_agent_factory.py::deep_agent_generate_json(...)`
+- **Persistent agent filesystem**:
+  - `functions/services/deep_agents_backend.py::FirestoreAgentFsBackend`
+  - Stores agent “files” in Firestore under `/estimates/{estimateId}/agentFs/{agentName}/files/*`
+
+## Windows Notes: WeasyPrint
+
+On Windows, `weasyprint` may fail to import without GTK/Pango native libs. The unit tests skip PDF generator tests if WeasyPrint (or native deps) cannot be imported.
 

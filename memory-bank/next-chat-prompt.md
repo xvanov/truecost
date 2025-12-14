@@ -29,7 +29,7 @@ I'm Dev 2 for the TrueCost project, working on post-merge integration (Epic 6) a
   - Python orchestrator syncs progress back via `FirestoreService.sync_to_project_pipeline()`
 
 **Tests (last known)**:
-- Python unit tests (functions): 469 passing, 1 skipped (latest run)
+- Python unit tests (functions): 488 passed, 7 skipped (latest run on Windows; WeasyPrint skipped if native deps missing)
 
 Note:
 - RiskAgent Monte Carlo iterations are controlled by `MONTE_CARLO_ITERATIONS` (default: 10000). Unit tests override to 1000 for speed.
@@ -42,6 +42,11 @@ Note:
   - TS callable: `collabcanvas/functions/src/priceComparison.ts`
   - Python wrapper: `functions/services/price_comparison_service.py`
   - Integration: `functions/services/cost_data_service.py` + `functions/agents/primary/cost_agent.py` (batching + fallback)
+
+- New: Primary agents now run via **LangChain Deep Agents** (hybrid integration):
+  - Helper: `functions/services/deep_agent_factory.py::deep_agent_generate_json(...)`
+  - Firestore-backed agent filesystem: `functions/services/deep_agents_backend.py::FirestoreAgentFsBackend`
+  - Scorers/critics unchanged (still existing LangChain wrapper patterns)
 
 ## What I Need Help With Next
 

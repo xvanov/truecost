@@ -9,7 +9,7 @@
 **Primary Tracking**: `docs/sprint-artifacts/sprint-status.yaml`
 **Local Dev**: ✅ Running (Firebase emulators + Vite dev server)
 **Test Status**:
-- Python unit tests (functions): **469 passing**, **1 skipped** (latest run)
+- Python unit tests (functions): **488 passed**, **7 skipped** (latest run on Windows; WeasyPrint skipped if native deps missing)
 
 Recent pipeline change:
 - User-selected cost defaults are now supported via `projectBrief.costPreferences` (overhead/profit/contingency/wasteFactor),
@@ -21,6 +21,15 @@ Recent pipeline change:
 - TimelineCritic no longer enforces fixed remodel duration heuristics (e.g., “small 20–30 / large 60–90 days”); critique is structural/consistency-based.
 - Added `code_compliance` agent (ICC: IBC/IRC/IECC family) to generate code-related warnings; Final output now includes `codeCompliance.warnings`.
 - Pipeline agent sequence is now 7 steps: `location → scope → code_compliance → cost → risk → timeline → final`.
+
+Deep Agents migration (hybrid):
+- Primary agents now use **LangChain Deep Agents** (`deepagents`) via `functions/services/deep_agent_factory.py::deep_agent_generate_json(...)`.
+- Added Firestore-backed Deep Agents filesystem backend: `functions/services/deep_agents_backend.py::FirestoreAgentFsBackend`.
+  - Stored at `/estimates/{estimateId}/agentFs/{agentName}/files/*`.
+- Scorers/critics and orchestrator remain unchanged (still A2A + scorer/critic retry loop).
+
+Windows test fix:
+- `functions/tests/unit/test_pdf_generator.py` now skips cleanly if WeasyPrint cannot import due to missing native libs (e.g., `gobject-2.0-0`).
 
 New material pricing change:
 - **CostAgent now pulls live retail material prices** via Epic 5 price comparison:
@@ -359,4 +368,4 @@ Key doc: `docs/sprint-artifacts/tech-spec-post-merge-integration.md`
 
 ---
 
-_Last Updated: December 12, 2025 (Post-merge integration branch; Epic 6 tracked in sprint artifacts)_
+_Last Updated: December 14, 2025 (Deep Agents hybrid migration implemented; tests green on Windows with WeasyPrint skip)_

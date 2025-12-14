@@ -36,6 +36,26 @@ from tests.fixtures.mock_cost_estimate_data import (
     get_cost_critic_a2a_request,
 )
 
+@pytest.fixture(autouse=True)
+def mock_deep_agent_generate_json():
+    """Patch Deep Agents JSON helper so unit tests don't hit real OpenAI/deepagents runtime."""
+    with patch(
+        "services.deep_agent_factory.deep_agent_generate_json",
+        new=AsyncMock(
+            return_value={
+                "content": {
+                    "key_cost_drivers": ["Cabinets", "Countertops"],
+                    "cost_saving_opportunities": ["Consider alternatives"],
+                    "assumptions": ["Standard hours"],
+                    "range_explanation": "P50/P80/P90 ranges",
+                    "confidence_notes": "Good confidence",
+                },
+                "tokens_used": 500,
+            }
+        ),
+    ) as mocked:
+        yield mocked
+
 
 # =============================================================================
 # COST RANGE MODEL TESTS

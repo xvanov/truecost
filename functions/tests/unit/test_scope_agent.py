@@ -47,6 +47,29 @@ from tests.fixtures.mock_boq_data import (
     get_scope_critic_a2a_request,
 )
 
+@pytest.fixture(autouse=True)
+def mock_deep_agent_generate_json():
+    """Patch Deep Agents JSON helper so unit tests don't hit real OpenAI/deepagents runtime."""
+    with patch(
+        "services.deep_agent_factory.deep_agent_generate_json",
+        new=AsyncMock(
+            return_value={
+                "content": {
+                    "summary": "Kitchen remodel scope analysis",
+                    "key_observations": ["Obs 1", "Obs 2", "Obs 3"],
+                    "material_highlights": ["Material 1"],
+                    "complexity_factors": ["Factor 1"],
+                    "finish_level_assessment": "Appropriate for mid-range",
+                    "recommendations": ["Rec 1", "Rec 2"],
+                    "missing_items": [],
+                    "suggested_additions": [],
+                },
+                "tokens_used": 500,
+            }
+        ),
+    ) as mocked:
+        yield mocked
+
 
 # =============================================================================
 # BILL OF QUANTITIES MODEL TESTS

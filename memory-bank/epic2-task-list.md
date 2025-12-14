@@ -112,8 +112,9 @@ This epic uses **LangChain Deep Agents** (`deepagents` library) for agent logic 
 - **Task States**: Submitted → Working → Completed/Failed
 - **Thread Context**: Conversation continuity across agent calls
 
-**Implementation Pattern:**
-- All 19 agents use `create_deep_agent()` from `deepagents` library
+**Implementation Pattern (Current Reality):**
+- Primary agents use Deep Agents via `functions/services/deep_agent_factory.py::deep_agent_generate_json(...)`
+- Scorers/critics are unchanged and continue using the existing LangChain wrapper patterns
 - Agents communicate via A2A protocol (JSON-RPC 2.0)
 - Each agent exposes A2A endpoint:
   - Primary: `a2a_{agent_name}` (e.g., `a2a_location`)
@@ -124,6 +125,14 @@ This epic uses **LangChain Deep Agents** (`deepagents` library) for agent logic 
   - Primary → Scorer → (if score < 80) → Critic → Retry Primary with feedback
   - Max 2 retries per agent
 - See `docs/setup/agent-communication.md` for A2A implementation details
+
+### Deep Agents Firestore-backed Filesystem (Added Post-Merge)
+
+To enable persistent agent “files” across retries/runs, we added:
+- `functions/services/deep_agents_backend.py::FirestoreAgentFsBackend`
+  - Storage: `/estimates/{estimateId}/agentFs/{agentName}/files/{sha1(path)}`
+- `functions/services/deep_agent_factory.py`
+  - Wrapper to keep agent code changes minimal and tests patchable
 
 ---
 

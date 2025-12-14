@@ -40,6 +40,26 @@ from tests.fixtures.mock_cost_data import (
     get_invalid_location_output,
 )
 
+@pytest.fixture(autouse=True)
+def mock_deep_agent_generate_json():
+    """Patch Deep Agents JSON helper so unit tests don't hit real OpenAI/deepagents runtime."""
+    with patch(
+        "services.deep_agent_factory.deep_agent_generate_json",
+        new=AsyncMock(
+            return_value={
+                "content": {
+                    "analysis": "Test analysis of Denver location factors.",
+                    "key_findings": ["Finding 1", "Finding 2", "Finding 3"],
+                    "recommendations": ["Recommendation 1", "Recommendation 2"],
+                    "risk_factors": ["Risk 1"],
+                    "confidence_assessment": "High confidence",
+                },
+                "tokens_used": 150,
+            }
+        ),
+    ) as mocked:
+        yield mocked
+
 
 # =============================================================================
 # LOCATION FACTORS MODEL TESTS
@@ -223,23 +243,6 @@ class TestLocationAgent:
     def mock_llm(self):
         """Create mock LLM service."""
         llm = MagicMock()
-        llm.generate_json = AsyncMock(return_value={
-            "content": {
-                "analysis": "Test analysis of Denver location factors.",
-                "key_findings": [
-                    "Finding 1",
-                    "Finding 2",
-                    "Finding 3"
-                ],
-                "recommendations": [
-                    "Recommendation 1",
-                    "Recommendation 2"
-                ],
-                "risk_factors": ["Risk 1"],
-                "confidence_assessment": "High confidence"
-            },
-            "tokens_used": 150
-        })
         return llm
     
     @pytest.fixture
@@ -318,12 +321,13 @@ class TestLocationAgent:
     async def test_llm_fallback_on_error(
         self,
         mock_firestore,
-        mock_cost_service
+        mock_cost_service,
+        mock_deep_agent_generate_json
     ):
         """Test fallback analysis when LLM fails."""
-        # Create LLM that raises an error
+        # Force Deep Agents helper to fail so agent uses fallback analysis
+        mock_deep_agent_generate_json.side_effect = Exception("LLM Error")
         mock_llm = MagicMock()
-        mock_llm.generate_json = AsyncMock(side_effect=Exception("LLM Error"))
         
         agent = LocationAgent(
             firestore_service=mock_firestore,

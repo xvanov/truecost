@@ -250,9 +250,14 @@ class LocationAgent(BaseA2AAgent):
         )
         
         try:
-            result = await self.llm.generate_json(
+            from services.deep_agent_factory import deep_agent_generate_json
+
+            result = await deep_agent_generate_json(
+                estimate_id=estimate_id,
+                agent_name=self.name,
                 system_prompt=system_prompt,
-                user_message=user_message
+                user_message=user_message,
+                firestore_service=self.firestore,
             )
             
             # Track tokens

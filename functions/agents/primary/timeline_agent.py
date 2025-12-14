@@ -353,9 +353,14 @@ class TimelineAgent(BaseA2AAgent):
                 default=str,
             )
 
-            result = await self.llm.generate_json(
-                TIMELINE_TASK_PLANNER_PROMPT,
-                user_message,
+            from services.deep_agent_factory import deep_agent_generate_json
+
+            result = await deep_agent_generate_json(
+                estimate_id=estimate_id,
+                agent_name=self.name,
+                system_prompt=TIMELINE_TASK_PLANNER_PROMPT,
+                user_message=user_message,
+                firestore_service=self.firestore,
                 max_tokens=1400,
             )
             self._tokens_used += result.get("tokens_used", 0)

@@ -18,7 +18,12 @@ from pathlib import Path
 from typing import Dict, Any
 
 # These tests require WeasyPrint (and its native deps). Skip cleanly if not installed.
-pytest.importorskip("weasyprint")
+# Note: On Windows, WeasyPrint can be installed but fail to import due to missing
+# native libraries (Pango/GTK), raising OSError. Treat that as a skip as well.
+try:
+    import weasyprint  # noqa: F401
+except Exception:  # pragma: no cover
+    pytest.skip("WeasyPrint (or its native deps) not available on this system", allow_module_level=True)
 
 from services.pdf_generator import (
     PDFGenerationRequest,

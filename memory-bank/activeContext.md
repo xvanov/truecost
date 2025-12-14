@@ -80,6 +80,34 @@ Integration into the Python pipeline:
 - Removed SciPy dependency from `functions/services/monte_carlo.py` (uses `numpy.linalg` + an `erf`-based normal CDF)
 - Fixed flaky schedule Monte Carlo test by allowing ties: `p50_days <= p80_days <= p90_days` (integer day percentiles can tie)
 
+### New: Primary Agents Now Use LangChain Deep Agents (Hybrid Migration)
+
+We have converted **primary agents** to run their LLM reasoning through **LangChain Deep Agents** (`deepagents`) while keeping the existing **A2A + Orchestrator + Scorer/Critic** framework intact.
+
+- **Deep Agents dependency**: added `deepagents>=0.2.0` to `functions/requirements.txt`
+- **Deep Agents helper**: `functions/services/deep_agent_factory.py`
+  - `deep_agent_generate_json(...)` is the drop-in replacement for `LLMService.generate_json(...)`
+  - Handles strict JSON parsing and token counting (best effort)
+- **Firestore-backed Deep Agents filesystem**: `functions/services/deep_agents_backend.py`
+  - Persists agent “files” per `(estimateId, agentName)` so retries/debug can reuse artifacts
+  - Stored under: `/estimates/{estimateId}/agentFs/{agentName}/files/{sha1(path)}`
+
+Converted to Deep Agents (LLM step only):
+- `functions/agents/primary/location_agent.py`
+- `functions/agents/primary/scope_agent.py`
+- `functions/agents/primary/cost_agent.py`
+- `functions/agents/primary/risk_agent.py`
+- `functions/agents/primary/timeline_agent.py`
+- `functions/agents/primary/final_agent.py`
+- `functions/agents/primary/code_compliance_agent.py`
+
+Note: scorers/critics are intentionally unchanged (still use the existing LangChain wrapper patterns).
+
+### Windows Test Reliability: WeasyPrint Native Dependencies
+
+On Windows, `weasyprint` can be installed but fail to import due to missing GTK/Pango native libs (`gobject-2.0-0`).
+We updated `functions/tests/unit/test_pdf_generator.py` to **skip cleanly** if WeasyPrint (or its native deps) cannot be imported.
+
 ### New: User-Selected Cost Defaults (Input JSON)
 
 The pipeline now supports user-selected costing defaults supplied in the incoming JSON:
