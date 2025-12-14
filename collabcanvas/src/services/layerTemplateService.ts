@@ -582,7 +582,7 @@ function escapeRegex(str: string): string {
 /**
  * Get layer templates - simplified version that only uses scope
  */
-export function getLayerTemplates(projectType: string): LayerTemplate[] {
+export function getLayerTemplates(_projectType: string): LayerTemplate[] {
   // Return empty - we only generate from scope text now
   return [];
 }
@@ -648,8 +648,8 @@ export function getLayerCompletionStatus(
  * Legacy function for backwards compatibility
  */
 export function checkRequiredLayerCoverage(
-  templates: LayerTemplate[],
-  annotatedLayerIds: string[]
+  _templates: LayerTemplate[],
+  _annotatedLayerIds: string[]
 ): { complete: boolean; missing: LayerTemplate[] } {
   // No layers are required anymore - always complete
   return {

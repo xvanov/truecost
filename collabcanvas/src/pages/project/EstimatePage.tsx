@@ -2015,8 +2015,8 @@ export function EstimatePage() {
               {/* Modal Footer */}
               <div className="px-6 py-3 border-t border-truecost-glass-border bg-truecost-bg-primary/50 flex justify-between items-center">
                 <p className="text-xs text-truecost-text-muted">
-                  Schema Version: {(jsonOutput as Record<string, unknown>)?.schemaVersion || 'N/A'} • 
-                  Estimate ID: {(jsonOutput as Record<string, unknown>)?.estimateId || 'N/A'}
+                  Schema Version: {String((jsonOutput as Record<string, unknown>)?.schemaVersion ?? 'N/A')} •
+                  Estimate ID: {String((jsonOutput as Record<string, unknown>)?.estimateId ?? 'N/A')}
                 </p>
                 <button
                   onClick={() => setShowJSONViewer(false)}
