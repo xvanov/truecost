@@ -7,33 +7,48 @@ const firestore_1 = require("firebase-admin/firestore");
 const dotenv = require("dotenv");
 const path = require("path");
 // Using cors: true to match other functions (aiCommand, materialEstimateCommand, sagemakerInvoke)
-// Load environment variables - try multiple locations
-dotenv.config(); // Default: .env in functions directory
-dotenv.config({ path: path.resolve(__dirname, '../.env') }); // Explicit path
-dotenv.config({ path: path.resolve(process.cwd(), '.env') }); // Current working directory
-// Log environment variable loading status
-if (process.env.NODE_ENV !== 'production') {
-    console.log('[PRICING] Environment check:');
-    console.log('[PRICING] - SERP_API_KEY:', process.env.SERP_API_KEY ? 'SET' : 'NOT SET');
-    console.log('[PRICING] - NODE_ENV:', process.env.NODE_ENV);
-    console.log('[PRICING] - CWD:', process.cwd());
+// Lazy initialization to avoid timeout during module load
+let _initialized = false;
+let _db = null;
+function initializeEnv() {
+    if (_initialized)
+        return;
+    _initialized = true;
+    // Load environment variables - try multiple locations
+    dotenv.config();
+    dotenv.config({ path: path.resolve(__dirname, '../.env') });
+    dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+    // Log environment variable loading status
+    if (process.env.NODE_ENV !== 'production') {
+        console.log('[PRICING] Environment check:');
+        console.log('[PRICING] - SERP_API_KEY:', process.env.SERP_API_KEY ? 'SET' : 'NOT SET');
+        console.log('[PRICING] - NODE_ENV:', process.env.NODE_ENV);
+        console.log('[PRICING] - CWD:', process.cwd());
+    }
+    // Configure Firestore to use emulator if running locally
+    if (process.env.FIRESTORE_EMULATOR_HOST) {
+        console.log('[PRICING] Using Firestore emulator:', process.env.FIRESTORE_EMULATOR_HOST);
+    }
+    else if (process.env.NODE_ENV !== 'production' && !process.env.FUNCTIONS_EMULATOR) {
+        process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
+        console.log('[PRICING] Setting FIRESTORE_EMULATOR_HOST to 127.0.0.1:8081');
+    }
 }
-// Initialize admin if not already
-try {
-    admin.app();
+function initFirebaseAdmin() {
+    try {
+        admin.app();
+    }
+    catch (_a) {
+        admin.initializeApp();
+    }
 }
-catch (_a) {
-    admin.initializeApp();
-}
-// Configure Firestore to use emulator if running locally
-// Firebase emulator automatically sets FIRESTORE_EMULATOR_HOST, but we need to ensure it's used
-if (process.env.FIRESTORE_EMULATOR_HOST) {
-    console.log('[PRICING] Using Firestore emulator:', process.env.FIRESTORE_EMULATOR_HOST);
-}
-else if (process.env.NODE_ENV !== 'production' && !process.env.FUNCTIONS_EMULATOR) {
-    // If running in emulator but env var not set, set it manually
-    process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-    console.log('[PRICING] Setting FIRESTORE_EMULATOR_HOST to 127.0.0.1:8081');
+function getDb() {
+    if (!_db) {
+        initializeEnv();
+        initFirebaseAdmin();
+        _db = (0, firestore_1.getFirestore)();
+    }
+    return _db;
 }
 // Retry configuration
 const MAX_RETRIES = 3;
@@ -59,6 +74,7 @@ function sleep(ms) {
  */
 async function fetchFromSerpApi(query, storeId, deliveryZip, attempt = 1) {
     var _a;
+    initializeEnv();
     console.log(`[PRICING] fetchFromSerpApi called: query="${query}", store_id="${storeId || 'none'}", delivery_zip="${deliveryZip || 'none'}", attempt=${attempt}`);
     const apiKey = (process.env.SERP_API_KEY || '').trim();
     if (!apiKey) {
@@ -207,7 +223,7 @@ exports.getHomeDepotPrice = (0, https_1.onCall)({
         // Based on user's successful calls: store_id 2414 corresponds to zip 04401
         // For now, we'll use storeNumber as store_id if no explicit mapping exists
         const storeId = storeNumber; // TODO: Create proper mapping from storeNumber to store_id
-        const db = (0, firestore_1.getFirestore)();
+        const db = getDb();
         const docRef = db.collection('pricing').doc(store).collection('items').doc(key);
         console.log(`[PRICING] Checking cache in Firestore...`);
         // Cache lookup with TTL check

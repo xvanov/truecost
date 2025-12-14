@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AuthenticatedLayout } from '../../components/layouts/AuthenticatedLayout';
-import { Button, GlassPanel, Input, Select, Textarea } from '../../components/ui';
+import { Button, GlassPanel, Input, Select, Textarea, AddressAutocomplete } from '../../components/ui';
+import type { ParsedAddress } from '../../components/ui';
 import { FileUploadZone } from '../../components/estimate/FileUploadZone';
 import { FilePreview } from '../../components/estimate/FilePreview';
 import { EstimateStepper } from '../../components/estimate/EstimateStepper';
@@ -43,15 +44,14 @@ export function ScopePage() {
 
   const [formData, setFormData] = useState({
     name: '',
-    streetAddress: '',
-    city: '',
-    state: '',
-    zipCode: '',
+    address: '', // Full formatted address from autocomplete
     type: '',
-    size: '',
     scopeDefinition: '',
     useUnionLabor: false,
   });
+
+  // Parsed address components (extracted from autocomplete selection)
+  const [parsedAddress, setParsedAddress] = useState<ParsedAddress | null>(null);
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [preparedBackground, setPreparedBackground] = useState<BackgroundImage | null>(null);
@@ -79,17 +79,30 @@ export function ScopePage() {
       // First try to load from project document
       loadProject(projectId).then((project) => {
         if (project) {
+          // Build formatted address from components if not available
+          const addr = project.address;
+          const formattedAddr = addr?.formattedAddress ||
+            (addr ? `${addr.streetAddress}, ${addr.city}, ${addr.state} ${addr.zipCode}`.trim() : '');
+
           setFormData({
             name: project.name || '',
-            streetAddress: project.address?.streetAddress || '',
-            city: project.address?.city || '',
-            state: project.address?.state || '',
-            zipCode: project.address?.zipCode || '',
+            address: formattedAddr,
             type: project.projectType || '',
-            size: project.size || '',
             scopeDefinition: project.description || '',
             useUnionLabor: project.useUnionLabor || false,
           });
+
+          // Restore parsed address components if available
+          if (addr) {
+            setParsedAddress({
+              formattedAddress: formattedAddr,
+              streetAddress: addr.streetAddress || '',
+              city: addr.city || '',
+              state: addr.state || '',
+              zipCode: addr.zipCode || '',
+              country: 'US',
+            });
+          }
 
           // Load estimate config if exists
           if (project.estimateConfig) {
@@ -115,24 +128,37 @@ export function ScopePage() {
       // Also try to load from scope config (for additional fields)
       loadScopeConfig(projectId).then((config) => {
         if (config) {
+          // Build formatted address from components if not available
+          const addr = config.address;
+          const formattedAddr = addr?.formattedAddress ||
+            (addr ? `${addr.streetAddress}, ${addr.city}, ${addr.state} ${addr.zipCode}`.trim() : '');
+
           // Merge with existing form data, preferring project data
           setFormData((prev) => ({
             name: prev.name || config.projectName || '',
-            streetAddress: prev.streetAddress || config.address?.streetAddress || '',
-            city: prev.city || config.address?.city || '',
-            state: prev.state || config.address?.state || '',
-            zipCode: prev.zipCode || config.address?.zipCode || '',
+            address: prev.address || formattedAddr,
             type: prev.type || config.projectType || '',
-            size: prev.size || config.approximateSize || '',
             scopeDefinition: prev.scopeDefinition || config.scopeText || '',
             useUnionLabor: prev.useUnionLabor || config.useUnionLabor || false,
           }));
+
+          // Merge parsed address if available
+          if (addr && !parsedAddress) {
+            setParsedAddress({
+              formattedAddress: formattedAddr,
+              streetAddress: addr.streetAddress || '',
+              city: addr.city || '',
+              state: addr.state || '',
+              zipCode: addr.zipCode || '',
+              country: 'US',
+            });
+          }
         }
       }).catch((err) => {
         console.error('Failed to load scope config:', err);
       });
     }
-  }, [isEditMode, projectId, isDataLoaded, loadProject, defaultStartDate]);
+  }, [isEditMode, projectId, isDataLoaded, loadProject, defaultStartDate, parsedAddress]);
 
   const prepareBackgroundImage = (file: File): Promise<BackgroundImage> => {
     return new Promise((resolve, reject) => {
@@ -213,14 +239,14 @@ export function ScopePage() {
       const estimateConfig: EstimateConfig = {
         // Project details from scope page
         projectName: formData.name,
-        address: {
-          streetAddress: formData.streetAddress,
-          city: formData.city,
-          state: formData.state,
-          zipCode: formData.zipCode,
-        },
+        address: parsedAddress ? {
+          formattedAddress: parsedAddress.formattedAddress,
+          streetAddress: parsedAddress.streetAddress,
+          city: parsedAddress.city,
+          state: parsedAddress.state,
+          zipCode: parsedAddress.zipCode,
+        } : undefined,
         projectType: formData.type,
-        approximateSize: formData.size,
         useUnionLabor: formData.useUnionLabor,
         scopeText: formData.scopeDefinition,
         // Estimate configuration
@@ -247,14 +273,14 @@ export function ScopePage() {
         await updateProjectScopeAction(projectId, {
           name: formData.name,
           description: formData.scopeDefinition,
-          address: {
-            streetAddress: formData.streetAddress,
-            city: formData.city,
-            state: formData.state,
-            zipCode: formData.zipCode,
-          },
+          address: parsedAddress ? {
+            formattedAddress: parsedAddress.formattedAddress,
+            streetAddress: parsedAddress.streetAddress,
+            city: parsedAddress.city,
+            state: parsedAddress.state,
+            zipCode: parsedAddress.zipCode,
+          } : undefined,
           projectType: formData.type,
-          size: formData.size,
           useUnionLabor: formData.useUnionLabor,
           estimateConfig,
           planImageUrl: planImageUrl || undefined,
@@ -270,14 +296,14 @@ export function ScopePage() {
           formData.scopeDefinition,
           user.uid,
           {
-            address: {
-              streetAddress: formData.streetAddress,
-              city: formData.city,
-              state: formData.state,
-              zipCode: formData.zipCode,
-            },
+            address: parsedAddress ? {
+              formattedAddress: parsedAddress.formattedAddress,
+              streetAddress: parsedAddress.streetAddress,
+              city: parsedAddress.city,
+              state: parsedAddress.state,
+              zipCode: parsedAddress.zipCode,
+            } : undefined,
             projectType: formData.type,
-            size: formData.size,
             useUnionLabor: formData.useUnionLabor,
             estimateConfig,
           }
@@ -316,11 +342,11 @@ export function ScopePage() {
     }
   };
 
-  const isFormValid = formData.name.trim() && 
-    formData.streetAddress.trim() && 
-    formData.city.trim() && 
-    formData.state.trim() && 
-    formData.zipCode.trim().length >= 5 &&
+  // Form is valid if we have a name, a valid parsed address with ZIP code, scope definition, and a plan file
+  const isFormValid = formData.name.trim() &&
+    parsedAddress &&
+    parsedAddress.zipCode.trim().length >= 5 &&
+    formData.scopeDefinition.trim() &&
     (uploadedFile || existingPlanUrl);
 
   // Get actual completion state from hook
@@ -376,62 +402,18 @@ export function ScopePage() {
                 />
 
                 {/* Project Address */}
-                <div className="space-y-4">
-                  <label className="block font-body text-body font-medium text-truecost-text-primary">
-                    Project Address *
-                  </label>
-                  <Input
-                    label="Street Address"
-                    id="streetAddress"
-                    name="streetAddress"
-                    type="text"
-                    placeholder="e.g., 123 Main Street"
-                    value={formData.streetAddress}
-                    onChange={handleInputChange}
-                    required
-                  />
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                    <div className="md:col-span-3">
-                      <Input
-                        label="City"
-                        id="city"
-                        name="city"
-                        type="text"
-                        placeholder="e.g., San Francisco"
-                        value={formData.city}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div className="md:col-span-1">
-                      <Input
-                        label="State"
-                        id="state"
-                        name="state"
-                        type="text"
-                        placeholder="CA"
-                        value={formData.state}
-                        onChange={handleInputChange}
-                        required
-                        maxLength={2}
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Input
-                        label="ZIP Code"
-                        id="zipCode"
-                        name="zipCode"
-                        type="text"
-                        placeholder="94102"
-                        value={formData.zipCode}
-                        onChange={handleInputChange}
-                        required
-                        maxLength={10}
-                        helperText="Required for location-specific pricing"
-                      />
-                    </div>
-                  </div>
-                </div>
+                <AddressAutocomplete
+                  label="Project Address *"
+                  id="address"
+                  name="address"
+                  value={formData.address}
+                  onChange={(address, parsed) => {
+                    setFormData((prev) => ({ ...prev, address }));
+                    setParsedAddress(parsed);
+                  }}
+                  placeholder="Start typing an address..."
+                  required
+                />
 
                 {/* Project Type */}
                 <Select
@@ -449,18 +431,6 @@ export function ScopePage() {
                   <option value="commercial-renovation">Commercial - Renovation</option>
                   <option value="other">Other</option>
                 </Select>
-
-                {/* Approximate Size */}
-                <Input
-                  label="Approximate Size"
-                  id="size"
-                  name="size"
-                  type="text"
-                  placeholder="e.g., 2,500 sq ft"
-                  value={formData.size}
-                  onChange={handleInputChange}
-                  helperText="Square footage or other relevant measurement"
-                />
 
                 {/* File Upload */}
                 <div className="space-y-2">
@@ -481,12 +451,13 @@ export function ScopePage() {
 
                 {/* Scope Definition */}
                 <Textarea
-                  label="Scope Definition"
+                  label="Scope Definition *"
                   id="scopeDefinition"
                   name="scopeDefinition"
                   value={formData.scopeDefinition}
                   onChange={handleInputChange}
                   placeholder="Describe the project scope, specific requirements, constraints, or preferences..."
+                  required
                   rows={4}
                   helperText="Provide any additional details that will help generate an accurate estimate"
                 />
@@ -518,8 +489,16 @@ export function ScopePage() {
                   
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div className="space-y-2">
-                      <label className="block font-body text-body-meta font-medium text-truecost-text-secondary">
+                      <label className="flex items-center gap-1 font-body text-body-meta font-medium text-truecost-text-secondary">
                         Overhead %
+                        <span className="relative group cursor-help">
+                          <svg className="w-4 h-4 text-truecost-text-muted group-hover:text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 bg-slate-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
+                            Indirect costs: office, utilities, insurance, admin
+                          </span>
+                        </span>
                       </label>
                       <input
                         type="number"
@@ -532,8 +511,16 @@ export function ScopePage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="block font-body text-body-meta font-medium text-truecost-text-secondary">
+                      <label className="flex items-center gap-1 font-body text-body-meta font-medium text-truecost-text-secondary">
                         Profit %
+                        <span className="relative group cursor-help">
+                          <svg className="w-4 h-4 text-truecost-text-muted group-hover:text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 bg-slate-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
+                            Your profit margin on top of all costs
+                          </span>
+                        </span>
                       </label>
                       <input
                         type="number"
@@ -546,8 +533,16 @@ export function ScopePage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="block font-body text-body-meta font-medium text-truecost-text-secondary">
+                      <label className="flex items-center gap-1 font-body text-body-meta font-medium text-truecost-text-secondary">
                         Contingency %
+                        <span className="relative group cursor-help">
+                          <svg className="w-4 h-4 text-truecost-text-muted group-hover:text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 bg-slate-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
+                            Buffer for unexpected costs or changes
+                          </span>
+                        </span>
                       </label>
                       <input
                         type="number"
@@ -560,8 +555,16 @@ export function ScopePage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="block font-body text-body-meta font-medium text-truecost-text-secondary">
+                      <label className="flex items-center gap-1 font-body text-body-meta font-medium text-truecost-text-secondary">
                         Waste Factor %
+                        <span className="relative group cursor-help">
+                          <svg className="w-4 h-4 text-truecost-text-muted group-hover:text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 bg-slate-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
+                            Extra materials for cuts, damage, waste
+                          </span>
+                        </span>
                       </label>
                       <input
                         type="number"

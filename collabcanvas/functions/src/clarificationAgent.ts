@@ -77,7 +77,6 @@ interface ProjectContext {
   projectName: string;
   location: string; // Note: location and address are the same thing
   projectType: string;
-  approximateSize: string;
   useUnionLabor: boolean;
   zipCodeOverride: string;
 }
@@ -123,7 +122,6 @@ export const clarificationAgent = onCall({
       if (projectContext.projectName) known.push(`Project Name: ${projectContext.projectName}`);
       if (projectContext.location) known.push(`Location/Address: ${projectContext.location} (REMEMBER: location = address, do NOT ask for address)`);
       if (projectContext.projectType) known.push(`Project Type: ${projectContext.projectType}`);
-      if (projectContext.approximateSize) known.push(`Size: ${projectContext.approximateSize}`);
       if (projectContext.useUnionLabor) known.push(`Labor: Union rates`);
       if (projectContext.zipCodeOverride) known.push(`ZIP: ${projectContext.zipCodeOverride}`);
       

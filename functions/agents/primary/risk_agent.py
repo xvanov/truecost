@@ -2,6 +2,7 @@
 
 Performs Monte Carlo simulation for cost risk analysis,
 identifies top risk factors, and recommends contingency.
+Includes labor cost simulation and schedule simulation.
 """
 
 from typing import Any, Dict, List, Optional
@@ -18,6 +19,14 @@ from models.risk_analysis import (
     RiskAnalysis,
     RiskAnalysisSummary,
     RiskFactor,
+)
+# Import new Monte Carlo simulation functions for labor and schedule
+from services.monte_carlo import (
+    LaborLineItemInput,
+    ScheduleTaskInput,
+    run_labor_simulation,
+    run_schedule_simulation,
+    TRADE_VARIANCE_FACTORS,
 )
 
 logger = structlog.get_logger()
@@ -62,9 +71,11 @@ Provide analysis in this JSON format:
 
 class RiskAgent(BaseA2AAgent):
     """Risk Agent - performs Monte Carlo simulation for risk analysis.
-    
+
     Uses Monte Carlo simulation to:
-    - Calculate P50/P80/P90 cost percentiles
+    - Calculate P50/P80/P90 cost percentiles for materials
+    - Simulate labor costs with trade-specific variance
+    - Simulate schedule duration with critical path analysis
     - Identify top risk factors by variance contribution
     - Calculate recommended contingency percentage
     - Generate risk mitigation recommendations
@@ -185,7 +196,7 @@ class RiskAgent(BaseA2AAgent):
         if feedback:
             risk_factors = self._apply_feedback(risk_factors, feedback)
         
-        # Run Monte Carlo simulation
+        # Run Monte Carlo simulation (material costs)
         mc_result = await self.monte_carlo.run_simulation(
             base_cost=base_cost,
             risk_factors=risk_factors,
@@ -193,7 +204,65 @@ class RiskAgent(BaseA2AAgent):
             cost_variance_low=0.92,
             cost_variance_high=1.08
         )
-        
+
+        # Run Labor Monte Carlo simulation
+        timeline_output = input_data.get("timeline_output", {})
+        is_union = location_output.get("isUnion", False)
+        labor_mc_result = None
+        labor_items = self._extract_labor_items(cost_output, location_output)
+
+        if labor_items:
+            try:
+                labor_mc_result = run_labor_simulation(
+                    labor_items=labor_items,
+                    iterations=settings.monte_carlo_iterations,
+                    location_factor=location_output.get("locationFactor", 1.0),
+                    is_union=is_union
+                )
+                logger.info(
+                    "labor_simulation_completed",
+                    estimate_id=estimate_id,
+                    p50=labor_mc_result.p50,
+                    p80=labor_mc_result.p80,
+                    p90=labor_mc_result.p90,
+                    trade_count=len(labor_mc_result.by_trade)
+                )
+            except Exception as e:
+                logger.warning(
+                    "labor_simulation_failed",
+                    estimate_id=estimate_id,
+                    error=str(e)
+                )
+
+        # Run Schedule Monte Carlo simulation
+        schedule_mc_result = None
+        schedule_tasks = self._extract_schedule_tasks(timeline_output, location_output)
+
+        if schedule_tasks:
+            try:
+                weather_factors = location_output.get("weatherFactors", {})
+                weather_impact = weather_factors.get("seasonalAdjustment", 1.0)
+
+                schedule_mc_result = run_schedule_simulation(
+                    tasks=schedule_tasks,
+                    iterations=settings.monte_carlo_iterations,
+                    weather_impact_factor=weather_impact
+                )
+                logger.info(
+                    "schedule_simulation_completed",
+                    estimate_id=estimate_id,
+                    p50_days=schedule_mc_result.p50_days,
+                    p80_days=schedule_mc_result.p80_days,
+                    p90_days=schedule_mc_result.p90_days,
+                    risk_index=schedule_mc_result.schedule_risk_index
+                )
+            except Exception as e:
+                logger.warning(
+                    "schedule_simulation_failed",
+                    estimate_id=estimate_id,
+                    error=str(e)
+                )
+
         # Calculate contingency recommendation
         contingency = self.monte_carlo.calculate_contingency(
             base_cost=base_cost,
@@ -266,7 +335,79 @@ class RiskAgent(BaseA2AAgent):
         
         # Add LLM insights
         output["llmAnalysis"] = llm_analysis
-        
+
+        # Add labor Monte Carlo results if available
+        if labor_mc_result:
+            output["laborMonteCarlo"] = {
+                "iterations": labor_mc_result.iterations,
+                "p50": labor_mc_result.p50,
+                "p80": labor_mc_result.p80,
+                "p90": labor_mc_result.p90,
+                "mean": labor_mc_result.mean,
+                "stdDev": labor_mc_result.std_dev,
+                "minValue": labor_mc_result.min_value,
+                "maxValue": labor_mc_result.max_value,
+                "recommendedContingency": labor_mc_result.recommended_contingency,
+                "byTrade": {
+                    trade: {"p50": vals["p50"], "p80": vals["p80"], "p90": vals["p90"]}
+                    for trade, vals in labor_mc_result.by_trade.items()
+                },
+                "topLaborRisks": [
+                    {
+                        "trade": r.trade,
+                        "impact": r.impact,
+                        "varianceContribution": r.variance_contribution,
+                    }
+                    for r in labor_mc_result.top_labor_risks
+                ],
+                "histogram": [
+                    {"binStart": b.bin_start, "binEnd": b.bin_end, "count": b.count}
+                    for b in labor_mc_result.histogram
+                ],
+            }
+
+        # Add schedule Monte Carlo results if available
+        if schedule_mc_result:
+            output["scheduleMonteCarlo"] = {
+                "iterations": schedule_mc_result.iterations,
+                "p50Days": schedule_mc_result.p50_days,
+                "p80Days": schedule_mc_result.p80_days,
+                "p90Days": schedule_mc_result.p90_days,
+                "meanDays": schedule_mc_result.mean_days,
+                "stdDevDays": schedule_mc_result.std_dev_days,
+                "minDays": schedule_mc_result.min_days,
+                "maxDays": schedule_mc_result.max_days,
+                "criticalPathVariance": schedule_mc_result.critical_path_variance,
+                "scheduleRiskIndex": schedule_mc_result.schedule_risk_index,
+                "taskSensitivities": [
+                    {
+                        "taskId": t.task_id,
+                        "taskName": t.task_name,
+                        "varianceContribution": t.variance_contribution,
+                        "isCritical": t.is_critical,
+                    }
+                    for t in schedule_mc_result.task_sensitivities
+                ],
+                "histogram": [
+                    {"binStart": b.bin_start, "binEnd": b.bin_end, "count": b.count}
+                    for b in schedule_mc_result.histogram
+                ],
+            }
+
+        # Add combined totals if we have all simulations
+        material_p50 = mc_result.percentiles.p50
+        material_p80 = mc_result.percentiles.p80
+        material_p90 = mc_result.percentiles.p90
+        labor_p50 = labor_mc_result.p50 if labor_mc_result else 0
+        labor_p80 = labor_mc_result.p80 if labor_mc_result else 0
+        labor_p90 = labor_mc_result.p90 if labor_mc_result else 0
+
+        output["totalCostMonteCarlo"] = {
+            "p50": material_p50 + labor_p50,
+            "p80": material_p80 + labor_p80,
+            "p90": material_p90 + labor_p90,
+        }
+
         # Calculate confidence based on data quality
         confidence = self._calculate_confidence(
             risk_factors=risk_factors,
@@ -287,14 +428,18 @@ class RiskAgent(BaseA2AAgent):
         logger.info(
             "risk_agent_completed",
             estimate_id=estimate_id,
-            p50=mc_result.percentiles.p50,
-            p80=mc_result.percentiles.p80,
-            p90=mc_result.percentiles.p90,
+            material_p50=mc_result.percentiles.p50,
+            material_p80=mc_result.percentiles.p80,
+            material_p90=mc_result.percentiles.p90,
+            labor_p50=labor_mc_result.p50 if labor_mc_result else None,
+            labor_p80=labor_mc_result.p80 if labor_mc_result else None,
+            schedule_p50_days=schedule_mc_result.p50_days if schedule_mc_result else None,
+            schedule_risk_index=schedule_mc_result.schedule_risk_index if schedule_mc_result else None,
             contingency_pct=contingency.recommended_percentage,
             risk_level=risk_level,
             duration_ms=self.duration_ms
         )
-        
+
         return output
     
     def _assess_location_risk(self, location_output: Dict[str, Any]) -> str:
@@ -507,27 +652,172 @@ Please provide your analysis in the required JSON format."""
         mc_result: Any
     ) -> float:
         """Calculate confidence in risk analysis.
-        
+
         Args:
             risk_factors: Analyzed risk factors.
             mc_result: Monte Carlo results.
-            
+
         Returns:
             Confidence score (0-1).
         """
         confidence = 0.75  # Base confidence
-        
+
         # More iterations = higher confidence
         if mc_result.iterations >= 1000:
             confidence += 0.05
-        
+
         # Good distribution of risk factors = higher confidence
         if len(risk_factors) >= 5:
             confidence += 0.05
-        
+
         # Reasonable CV = higher confidence
         cv = mc_result.get_coefficient_of_variation()
         if 0.05 <= cv <= 0.20:
             confidence += 0.05
-        
+
         return min(0.95, confidence)
+
+    def _extract_labor_items(
+        self, cost_output: Dict[str, Any], location_output: Dict[str, Any]
+    ) -> List[LaborLineItemInput]:
+        """Extract labor data from cost agent output.
+
+        Args:
+            cost_output: Cost agent output with divisions and line items.
+            location_output: Location agent output with labor rates.
+
+        Returns:
+            List of LaborLineItemInput for simulation.
+        """
+        labor_items = []
+
+        # Get location factor for rate adjustments
+        location_factor = location_output.get("locationFactor", 1.0)
+        base_rates = location_output.get("laborRates", {})
+
+        divisions = cost_output.get("divisions", [])
+        for division in divisions:
+            line_items = division.get("lineItems", [])
+            for item in line_items:
+                labor_hours = item.get("laborHours", 0)
+                if labor_hours <= 0:
+                    continue
+
+                # Get trade from item or default to general
+                trade = item.get("primaryTrade", "general_labor")
+                trade_key = trade.lower().replace(" ", "_").replace("-", "_")
+
+                # Get variance factors for trade
+                variance = TRADE_VARIANCE_FACTORS.get(
+                    trade_key,
+                    TRADE_VARIANCE_FACTORS.get("general_labor", {"rate_cv": 0.12, "productivity_cv": 0.15})
+                )
+                rate_cv = variance.get("rate_cv", 0.12)
+                productivity_cv = variance.get("productivity_cv", 0.15)
+
+                # Get labor rate from location output or estimate from item
+                labor_cost_range = item.get("laborCost", {})
+                if isinstance(labor_cost_range, dict):
+                    labor_cost_medium = labor_cost_range.get("medium", 0)
+                else:
+                    labor_cost_medium = float(labor_cost_range) if labor_cost_range else 0
+
+                # Calculate hourly rate
+                if labor_hours > 0 and labor_cost_medium > 0:
+                    base_rate = labor_cost_medium / labor_hours
+                else:
+                    # Use location rates or default
+                    base_rate = base_rates.get(trade_key, base_rates.get("general", 45.0))
+
+                # Apply location factor
+                adjusted_rate = base_rate * location_factor
+
+                # Create rate ranges based on variance
+                rate_low = adjusted_rate * (1 - rate_cv)
+                rate_high = adjusted_rate * (1 + rate_cv * 1.5)
+
+                labor_items.append(LaborLineItemInput(
+                    id=item.get("lineItemId", f"labor-{len(labor_items)}"),
+                    description=item.get("description", "Labor item"),
+                    trade=trade,
+                    labor_hours=labor_hours,
+                    labor_rate_low=rate_low,
+                    labor_rate_likely=adjusted_rate,
+                    labor_rate_high=rate_high,
+                    productivity_factor_low=1 - productivity_cv,
+                    productivity_factor_likely=1.0,
+                    productivity_factor_high=1 + productivity_cv * 1.5,
+                ))
+
+        logger.info(
+            "extracted_labor_items",
+            count=len(labor_items),
+            total_hours=sum(item.labor_hours for item in labor_items)
+        )
+
+        return labor_items
+
+    def _extract_schedule_tasks(
+        self, timeline_output: Dict[str, Any], location_output: Dict[str, Any]
+    ) -> List[ScheduleTaskInput]:
+        """Extract schedule data from timeline agent output.
+
+        Args:
+            timeline_output: Timeline agent output with tasks.
+            location_output: Location agent output with weather factors.
+
+        Returns:
+            List of ScheduleTaskInput for simulation.
+        """
+        schedule_tasks = []
+
+        # Get weather sensitivity from location
+        weather_factors = location_output.get("weatherFactors", {})
+        has_weather_risk = weather_factors.get("seasonalAdjustment", 1.0) > 1.05
+
+        tasks = timeline_output.get("tasks", [])
+        for task in tasks:
+            duration = task.get("duration", 0)
+            if duration <= 0:
+                continue
+
+            # Get duration range if available
+            duration_range_low = task.get("durationRangeLow", task.get("duration_range_low"))
+            duration_range_high = task.get("durationRangeHigh", task.get("duration_range_high"))
+
+            # If no range provided, estimate based on task type
+            if not duration_range_low:
+                # Minimum is 80% of expected duration
+                duration_range_low = max(1, int(duration * 0.8))
+            if not duration_range_high:
+                # Maximum is 150% of expected duration
+                duration_range_high = int(duration * 1.5)
+
+            # Determine if weather sensitive based on task name/type
+            task_name = task.get("name", "").lower()
+            weather_sensitive = any(
+                keyword in task_name
+                for keyword in ["exterior", "roof", "foundation", "concrete", "site", "demo", "excavat"]
+            ) or task.get("weatherSensitive", False)
+
+            # Determine if on critical path
+            is_critical = task.get("isCritical", task.get("is_critical", False))
+
+            schedule_tasks.append(ScheduleTaskInput(
+                id=task.get("id", f"task-{len(schedule_tasks)}"),
+                name=task.get("name", f"Task {len(schedule_tasks) + 1}"),
+                duration_days=duration,
+                duration_range_low=duration_range_low,
+                duration_range_high=duration_range_high,
+                is_critical=is_critical,
+                weather_sensitive=weather_sensitive,
+            ))
+
+        logger.info(
+            "extracted_schedule_tasks",
+            count=len(schedule_tasks),
+            total_days=sum(task.duration_days for task in schedule_tasks),
+            critical_count=sum(1 for task in schedule_tasks if task.is_critical)
+        )
+
+        return schedule_tasks

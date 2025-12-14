@@ -9,16 +9,23 @@ const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const dotenv = require("dotenv");
 const path = require("path");
-// Load environment variables
-dotenv.config();
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-// Initialize admin if not already
-try {
-    admin.app();
-}
-catch (_a) {
-    admin.initializeApp();
+// Lazy initialization to avoid timeout during module load
+let _initialized = false;
+function initializeEnv() {
+    if (_initialized)
+        return;
+    _initialized = true;
+    // Load environment variables
+    dotenv.config();
+    dotenv.config({ path: path.resolve(__dirname, '../.env') });
+    dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+    // Initialize admin if not already
+    try {
+        admin.app();
+    }
+    catch (_a) {
+        admin.initializeApp();
+    }
 }
 // Configuration from environment variables
 const ENDPOINT_NAME = process.env.SAGEMAKER_ENDPOINT_NAME || 'locatrix-blueprint-endpoint';
@@ -34,6 +41,7 @@ function sleep(ms) {
  * Invoke SageMaker endpoint with retry logic and exponential backoff
  */
 async function invokeSageMakerEndpoint(imageData, attempt = 1, maxAttempts = 3) {
+    initializeEnv();
     // Check if AWS credentials are configured
     const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
     const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;

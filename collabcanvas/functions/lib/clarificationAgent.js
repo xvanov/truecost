@@ -3,23 +3,35 @@
  * Clarification Agent Cloud Function
  * Handles the clarification chat for scope understanding
  */
-var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.clarificationAgent = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const openai_1 = require("openai");
 const dotenv = require("dotenv");
 const path = require("path");
-// Load environment variables
-const envPath = path.resolve(process.cwd(), '.env');
-const envResult = dotenv.config({ path: envPath, override: true });
-const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-const apiKeyFromEnv = (_a = envResult.parsed) === null || _a === void 0 ? void 0 : _a.OPENAI_API_KEY;
-const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-const apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-const openai = new openai_1.OpenAI({ apiKey });
-if (!apiKey) {
-    console.warn('⚠️ OPENAI_API_KEY not found. Clarification agent will not work.');
+// Lazy initialization to avoid timeout during module load
+let _openai = null;
+let _apiKey = null;
+function getApiKey() {
+    var _a;
+    if (_apiKey === null) {
+        const envPath = path.resolve(process.cwd(), '.env');
+        const envResult = dotenv.config({ path: envPath, override: true });
+        const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
+        const apiKeyFromEnv = (_a = envResult.parsed) === null || _a === void 0 ? void 0 : _a.OPENAI_API_KEY;
+        const apiKeyFromProcess = process.env.OPENAI_API_KEY;
+        _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
+        if (!_apiKey) {
+            console.warn('⚠️ OPENAI_API_KEY not found. Clarification agent will not work.');
+        }
+    }
+    return _apiKey;
+}
+function getOpenAI() {
+    if (!_openai) {
+        _openai = new openai_1.OpenAI({ apiKey: getApiKey() });
+    }
+    return _openai;
 }
 // System prompt for the clarification agent
 const CLARIFICATION_SYSTEM_PROMPT = `You are a construction estimation assistant helping to clarify project scope.
@@ -80,8 +92,6 @@ exports.clarificationAgent = (0, https_1.onCall)({
                 known.push(`Location/Address: ${projectContext.location} (REMEMBER: location = address, do NOT ask for address)`);
             if (projectContext.projectType)
                 known.push(`Project Type: ${projectContext.projectType}`);
-            if (projectContext.approximateSize)
-                known.push(`Size: ${projectContext.approximateSize}`);
             if (projectContext.useUnionLabor)
                 known.push(`Labor: Union rates`);
             if (projectContext.zipCodeOverride)
@@ -106,7 +116,7 @@ exports.clarificationAgent = (0, https_1.onCall)({
         if (userMessage) {
             messages.push({ role: 'user', content: userMessage });
         }
-        const completion = await openai.chat.completions.create({
+        const completion = await getOpenAI().chat.completions.create({
             model: 'gpt-4o',
             messages,
             temperature: 0.7,

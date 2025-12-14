@@ -486,12 +486,11 @@ export function ChatPanel({
       : '';
     const projectContext = {
       projectName: estimateConfig?.projectName || '',
-      address: fullAddress,
+      address: estimateConfig?.address?.formattedAddress || fullAddress,
       city: estimateConfig?.address?.city || '',
       state: estimateConfig?.address?.state || '',
       zipCode: estimateConfig?.address?.zipCode || '',
       projectType: estimateConfig?.projectType || '',
-      approximateSize: estimateConfig?.approximateSize || '',
       useUnionLabor: estimateConfig?.useUnionLabor || false,
     };
 
@@ -503,7 +502,6 @@ export function ChatPanel({
     if (projectContext.projectName) knownDetails.push(`Project Name: ${projectContext.projectName}`);
     if (projectContext.address) knownDetails.push(`Address: ${projectContext.address}`);
     if (projectContext.projectType) knownDetails.push(`Project Type: ${projectContext.projectType}`);
-    if (projectContext.approximateSize) knownDetails.push(`Approximate Size: ${projectContext.approximateSize}`);
     if (projectContext.useUnionLabor) knownDetails.push(`Labor Type: Union Labor`);
     
     if (knownDetails.length > 0) {

@@ -228,7 +228,12 @@ export function CanvasNavbar({
                 <svg className="w-4 h-4 text-truecost-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-                <span className="text-sm text-truecost-text-muted">Estimate</span>
+                <button
+                  onClick={onGenerateEstimate}
+                  className="text-sm text-truecost-text-muted hover:text-truecost-cyan transition-colors"
+                >
+                  Estimate
+                </button>
               </div>
 
               {/* Divider */}

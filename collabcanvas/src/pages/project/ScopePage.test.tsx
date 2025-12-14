@@ -88,9 +88,8 @@ describe('ScopePage Component', () => {
     expect(screen.getByText('Define Your Project Scope')).toBeInTheDocument();
     expect(screen.getByLabelText(/Project Name/i)).toBeInTheDocument();
     expect(screen.getByText(/Project Address/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/ZIP Code/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Project Type/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Approximate Size/i)).toBeInTheDocument();
+    // Note: Approximate Size has been removed - size now comes from annotations
   });
 
   it('should render "Scope Definition" label (not "Additional Details")', () => {
@@ -154,24 +153,12 @@ describe('ScopePage Component', () => {
       </BrowserRouter>
     );
 
-    // Fill in required text fields
+    // Fill in project name (address requires autocomplete selection which is complex to test)
     fireEvent.change(screen.getByLabelText(/Project Name/i), {
       target: { value: 'Test Project', name: 'name' },
     });
-    fireEvent.change(screen.getByLabelText(/Street Address/i), {
-      target: { value: '123 Main St', name: 'streetAddress' },
-    });
-    fireEvent.change(screen.getByLabelText(/City/i), {
-      target: { value: 'Denver', name: 'city' },
-    });
-    fireEvent.change(screen.getByLabelText(/State/i), {
-      target: { value: 'CO', name: 'state' },
-    });
-    fireEvent.change(screen.getByLabelText(/ZIP Code/i), {
-      target: { value: '80202', name: 'zipCode' },
-    });
 
-    // Button should still be disabled because no file uploaded
+    // Button should still be disabled because no address selected and no file uploaded
     const submitButton = screen.getByRole('button', { name: /Continue to Annotate/i });
     expect(submitButton).toBeDisabled();
   });
@@ -187,14 +174,15 @@ describe('ScopePage Component', () => {
     expect(screen.getByText(/Drag and drop your files here/i)).toBeInTheDocument();
   });
 
-  it('should have ZIP code field', () => {
+  it('should have address autocomplete field', () => {
     render(
       <BrowserRouter>
         <ScopePage />
       </BrowserRouter>
     );
 
-    expect(screen.getByLabelText(/ZIP Code/i)).toBeInTheDocument();
+    // Address input is rendered as an autocomplete component
+    expect(screen.getByPlaceholderText(/Start typing an address/i)).toBeInTheDocument();
   });
 
   it('should have labor type toggle', () => {
@@ -230,27 +218,16 @@ describe('ScopePage Component', () => {
       </BrowserRouter>
     );
 
-    // Fill in required fields
+    // Fill in project name
     fireEvent.change(screen.getByLabelText(/Project Name/i), {
       target: { value: 'Test Project', name: 'name' },
     });
-    fireEvent.change(screen.getByLabelText(/Street Address/i), {
-      target: { value: '123 Main St', name: 'streetAddress' },
-    });
-    fireEvent.change(screen.getByLabelText(/City/i), {
-      target: { value: 'Denver', name: 'city' },
-    });
-    fireEvent.change(screen.getByLabelText(/State/i), {
-      target: { value: 'CO', name: 'state' },
-    });
-    fireEvent.change(screen.getByLabelText(/ZIP Code/i), {
-      target: { value: '80202', name: 'zipCode' },
-    });
 
-    // Simulate file upload by clicking the upload zone and triggering a file selection
-    // For this test, we'll verify the form structure is correct
+    // Note: Address autocomplete requires Google Maps API to be loaded
+    // and user to select a suggestion, which is complex to test in unit tests.
+    // Full form submission testing requires integration/e2e tests with API mocking.
 
-    // Note: Full file upload testing requires more complex mocking
-    // This test verifies the form fields are correct
+    // Verify the form structure is correct
+    expect(screen.getByPlaceholderText(/Start typing an address/i)).toBeInTheDocument();
   });
 });

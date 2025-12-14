@@ -19,3 +19,5 @@ export type { CardProps } from './Card';
 export { TableRow } from './TableRow';
 export type { TableRowProps } from './TableRow';
 
+export { AddressAutocomplete } from './AddressAutocomplete';
+export type { AddressAutocompleteProps, ParsedAddress } from './AddressAutocomplete';
