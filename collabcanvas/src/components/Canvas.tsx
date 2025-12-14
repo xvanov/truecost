@@ -403,9 +403,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ projectId, onFpsUpdate, 
       // Save to localStorage (for persistence across page refreshes)
       saveViewportToStorage(viewportState);
     };
-  // Only run cleanup on unmount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Re-register cleanup when project-scoped functions change (e.g., projectId changes)
+  }, [setViewportState, saveViewportToStorage]);
 
   // Handle wheel zoom - imperative updates for performance
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {

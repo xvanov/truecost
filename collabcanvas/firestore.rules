@@ -218,21 +218,23 @@ service cloud.firestore {
         
         // Helper function to check if user is owner or collaborator
         function isOwnerOrCollaborator() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Helper function to check if user is owner or editor
         function isOwnerOrEditor() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Read: Owner or collaborator (viewer/editor)
         allow read: if isOwnerOrCollaborator();
-        
+
         // Create: Owner or editor collaborator
         // Temporarily allow any authenticated user to create layers for debugging
         allow create: if request.auth != null
@@ -253,36 +255,39 @@ service cloud.firestore {
         function projectExists() {
           return exists(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to get project document safely
         function getProject() {
           return get(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to check if user is owner or collaborator
         function isOwnerOrCollaborator() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Helper function to check if user is owner or editor
         function isOwnerOrEditor() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Read: Owner or collaborator (viewer/editor)
         allow read: if isOwnerOrCollaborator();
-        
+
         // Create/Update: Owner or editor collaborator
         allow create, update: if isOwnerOrEditor()
           && request.resource.data.updatedBy == request.auth.uid;
-        
+
         // Delete: Only owner
-        allow delete: if request.auth != null 
-          && (!projectExists() || getProject().data.ownerId == request.auth.uid);
+        allow delete: if projectExists()
+          && request.auth != null
+          && getProject().data.ownerId == request.auth.uid;
       }
       
       // Scope subcollection - scope of work document
@@ -291,37 +296,40 @@ service cloud.firestore {
         function projectExists() {
           return exists(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to get project document safely
         function getProject() {
           return get(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to check if user is owner or collaborator
         function isOwnerOrCollaborator() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Helper function to check if user is owner or editor
         function isOwnerOrEditor() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Read: Owner or collaborator (viewer/editor)
         allow read: if isOwnerOrCollaborator();
-        
+
         // Create/Update: Owner or editor collaborator
         allow create, update: if isOwnerOrEditor()
           && request.resource.data.items is list
           && request.resource.data.uploadedBy is string;
-        
+
         // Delete: Only owner
-        allow delete: if request.auth != null 
-          && (!projectExists() || getProject().data.ownerId == request.auth.uid);
+        allow delete: if projectExists()
+          && request.auth != null
+          && getProject().data.ownerId == request.auth.uid;
       }
       
       // BOM subcollection - Bill of Materials document
@@ -331,29 +339,31 @@ service cloud.firestore {
         function projectExists() {
           return exists(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to get project document safely
         function getProject() {
           return get(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to check if user is owner or collaborator
         function isOwnerOrCollaborator() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Helper function to check if user is owner or editor
         function isOwnerOrEditor() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Read: Owner or collaborator (viewer/editor)
         allow read: if isOwnerOrCollaborator();
-        
+
         // Create/Update: Owner or editor collaborator
         // Validate BOM structure
         allow create: if isOwnerOrEditor()
@@ -362,16 +372,17 @@ service cloud.firestore {
           && request.resource.data.createdBy is string
           && request.resource.data.updatedBy == request.auth.uid
           && request.resource.data.createdAt is number;
-        
+
         allow update: if isOwnerOrEditor()
           && request.resource.data.totalMaterials is list
           && request.resource.data.calculations is list
           && request.resource.data.updatedBy == request.auth.uid
           && (request.resource.data.updatedAt is timestamp || request.resource.data.updatedAt is number);
-        
+
         // Delete: Only owner
-        allow delete: if request.auth != null 
-          && (!projectExists() || getProject().data.ownerId == request.auth.uid);
+        allow delete: if projectExists()
+          && request.auth != null
+          && getProject().data.ownerId == request.auth.uid;
       }
       
       // CPM subcollection - Critical Path Method document
@@ -380,7 +391,7 @@ service cloud.firestore {
         function projectExists() {
           return exists(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to get project document safely
         function getProject() {
           return get(/databases/$(database)/documents/projects/$(projectId));
@@ -388,16 +399,18 @@ service cloud.firestore {
 
         // Helper function to check if user is owner or collaborator
         function isOwnerOrCollaborator() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
 
         // Helper function to check if user is owner or editor
         function isOwnerOrEditor() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
 
         // Read: Owner or collaborator (viewer/editor)
@@ -412,8 +425,9 @@ service cloud.firestore {
           && request.resource.data.updatedAt is number;
 
         // Delete: Only owner
-        allow delete: if request.auth != null
-          && (!projectExists() || getProject().data.ownerId == request.auth.uid);
+        allow delete: if projectExists()
+          && request.auth != null
+          && getProject().data.ownerId == request.auth.uid;
       }
       
       // Estimations subcollection - estimation sessions for TrueCost workflow
@@ -422,29 +436,31 @@ service cloud.firestore {
         function projectExists() {
           return exists(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to get project document safely
         function getProject() {
           return get(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to check if user is owner or collaborator
         function isOwnerOrCollaborator() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Helper function to check if user is owner or editor
         function isOwnerOrEditor() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Read/List: Owner or collaborator (viewer/editor)
         allow read, list: if isOwnerOrCollaborator();
-        
+
         // Create: Owner or editor collaborator
         allow create: if isOwnerOrEditor()
           && request.resource.data.projectId == projectId
@@ -452,16 +468,17 @@ service cloud.firestore {
           && request.resource.data.planImageUrl is string
           && request.resource.data.createdBy == request.auth.uid
           && request.resource.data.updatedBy == request.auth.uid;
-        
+
         // Update: Owner or editor collaborator
         allow update: if isOwnerOrEditor()
           && request.resource.data.updatedBy == request.auth.uid
           && request.resource.data.projectId == resource.data.projectId
           && request.resource.data.createdBy == resource.data.createdBy;
-        
+
         // Delete: Only owner
-        allow delete: if request.auth != null 
-          && (!projectExists() || getProject().data.ownerId == request.auth.uid);
+        allow delete: if projectExists()
+          && request.auth != null
+          && getProject().data.ownerId == request.auth.uid;
       }
 
       // Price Comparison subcollection - multi-retailer price comparison results
@@ -486,18 +503,17 @@ service cloud.firestore {
                 || getProject().data.collaborators != null);
         }
 
-        // Read: Allow authenticated users to read price comparison results
-        // If project exists, check ownership. If not, allow read for dev/testing.
-        allow read: if request.auth != null
-          && (!projectExists() || isOwnerOrCollaborator());
+        // Read: Allow owner or collaborator to read price comparison results
+        allow read: if isOwnerOrCollaborator();
 
         // Create/Update: Cloud Functions use Admin SDK (bypasses rules)
-        // Allow authenticated users for testing/development
-        allow create, update: if request.auth != null;
+        // Allow owner or collaborator for testing/development
+        allow create, update: if isOwnerOrCollaborator();
 
-        // Delete: Only owner (if project exists)
-        allow delete: if request.auth != null
-          && (!projectExists() || getProject().data.ownerId == request.auth.uid);
+        // Delete: Only owner
+        allow delete: if projectExists()
+          && request.auth != null
+          && getProject().data.ownerId == request.auth.uid;
       }
 
       // Config subcollection - project configuration (scope, estimate settings)
@@ -506,29 +522,31 @@ service cloud.firestore {
         function projectExists() {
           return exists(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to get project document safely
         function getProject() {
           return get(/databases/$(database)/documents/projects/$(projectId));
         }
-        
+
         // Helper function to check if user is owner or collaborator
         function isOwnerOrCollaborator() {
-          return request.auth != null
-            && (!projectExists() || (getProject().data.ownerId == request.auth.uid
-                || getProject().data.collaborators != null));
+          return projectExists()
+            && request.auth != null
+            && (getProject().data.ownerId == request.auth.uid
+                || getProject().data.collaborators != null);
         }
-        
+
         // Read: Owner or collaborator
         allow read: if isOwnerOrCollaborator();
-        
+
         // Create/Update: Owner or collaborator
         allow create, update: if isOwnerOrCollaborator()
           && request.resource.data.updatedBy == request.auth.uid;
-        
+
         // Delete: Only owner
-        allow delete: if request.auth != null 
-          && (!projectExists() || getProject().data.ownerId == request.auth.uid);
+        allow delete: if projectExists()
+          && request.auth != null
+          && getProject().data.ownerId == request.auth.uid;
       }
 
       // Chats subcollection - per-user chat history for AI assistant
@@ -574,19 +592,18 @@ service cloud.firestore {
                 || getProject().data.collaborators != null);
         }
 
-        // Read: Allow authenticated users to read pipeline status
+        // Read: Allow owner or collaborator to read pipeline status
         // Needed for real-time progress tracking in the UI
-        allow read: if request.auth != null
-          && (!projectExists() || isOwnerOrCollaborator());
+        allow read: if isOwnerOrCollaborator();
 
         // Create/Update: Cloud Functions use Admin SDK (bypasses rules)
-        // Allow authenticated project members for triggering pipelines
-        allow create, update: if request.auth != null
-          && (!projectExists() || isOwnerOrCollaborator());
+        // Allow owner or collaborator for triggering pipelines
+        allow create, update: if isOwnerOrCollaborator();
 
-        // Delete: Only owner (if project exists)
-        allow delete: if request.auth != null
-          && (!projectExists() || getProject().data.ownerId == request.auth.uid);
+        // Delete: Only owner
+        allow delete: if projectExists()
+          && request.auth != null
+          && getProject().data.ownerId == request.auth.uid;
       }
     }
 

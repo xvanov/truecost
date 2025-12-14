@@ -2,7 +2,7 @@
   "indexes": [
     {
       "collectionGroup": "globalMaterials",
-      "queryScope": "COLLECTION",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "zipCode", "order": "ASCENDING" },
         { "fieldPath": "aliases", "arrayConfig": "CONTAINS" }
@@ -10,7 +10,7 @@
     },
     {
       "collectionGroup": "globalMaterials",
-      "queryScope": "COLLECTION",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "zipCode", "order": "ASCENDING" },
         { "fieldPath": "normalizedName", "order": "ASCENDING" }

@@ -27,10 +27,15 @@ function initializeEnv() {
         admin.initializeApp();
     }
 }
-// Configuration from environment variables
-const ENDPOINT_NAME = process.env.SAGEMAKER_ENDPOINT_NAME || 'locatrix-blueprint-endpoint';
-const AWS_REGION = process.env.AWS_REGION || 'us-east-2';
+// Configuration - static values only (env vars are read lazily after initializeEnv)
 const TIMEOUT_SECONDS = 60;
+// Lazy getters for environment-dependent config (must be called after initializeEnv)
+function getEndpointName() {
+    return process.env.SAGEMAKER_ENDPOINT_NAME || 'locatrix-blueprint-endpoint';
+}
+function getAwsRegion() {
+    return process.env.AWS_REGION || 'us-east-2';
+}
 /**
  * Sleep utility for retry delays
  */
@@ -52,8 +57,10 @@ async function invokeSageMakerEndpoint(imageData, attempt = 1, maxAttempts = 3) 
     // Note: aws-sdk v2 is used here. For v3, use @aws-sdk/client-sagemaker-runtime
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const AWS = require('aws-sdk');
+    const endpointName = getEndpointName();
+    const awsRegion = getAwsRegion();
     const sagemakerRuntime = new AWS.SageMakerRuntime({
-        region: AWS_REGION,
+        region: awsRegion,
         accessKeyId: awsAccessKeyId,
         secretAccessKey: awsSecretAccessKey,
         httpOptions: {
@@ -64,10 +71,10 @@ async function invokeSageMakerEndpoint(imageData, attempt = 1, maxAttempts = 3) 
         image_data: imageData,
     };
     try {
-        console.log(`[SAGEMAKER] Invoking endpoint: ${ENDPOINT_NAME} (attempt ${attempt}/${maxAttempts})`);
-        console.log(`[SAGEMAKER] Region: ${AWS_REGION}, Image data length: ${imageData.length} chars`);
+        console.log(`[SAGEMAKER] Invoking endpoint: ${endpointName} (attempt ${attempt}/${maxAttempts})`);
+        console.log(`[SAGEMAKER] Region: ${awsRegion}, Image data length: ${imageData.length} chars`);
         const response = await sagemakerRuntime.invokeEndpoint({
-            EndpointName: ENDPOINT_NAME,
+            EndpointName: endpointName,
             ContentType: 'application/json',
             Body: JSON.stringify(inputData),
         }).promise();
@@ -97,7 +104,7 @@ async function invokeSageMakerEndpoint(imageData, attempt = 1, maxAttempts = 3) 
         const errorStr = errorMessage.toLowerCase();
         // Check for specific error types
         if (errorStr.includes('not found') || errorStr.includes('endpoint') && errorStr.includes('not found')) {
-            throw new Error(`SageMaker endpoint '${ENDPOINT_NAME}' not found. Please verify the endpoint name and region.`);
+            throw new Error(`SageMaker endpoint '${endpointName}' not found. Please verify the endpoint name and region.`);
         }
         if (errorStr.includes('timeout') || errorStr.includes('timed out')) {
             if (attempt < maxAttempts) {

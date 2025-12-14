@@ -208,36 +208,113 @@ function createCSIScope(computedItems: Record<string, unknown[]>) {
 // IMAGE HELPERS
 // ===================
 
+/**
+ * Check if a hostname is a private/local address.
+ * Covers: 127.0.0.0/8 (loopback), ::1 (IPv6 loopback), localhost,
+ * and RFC1918 ranges: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16.
+ */
+function isLocalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+
+    // Check for 'localhost' hostname
+    if (hostname === 'localhost') {
+      return true;
+    }
+
+    // Check for IPv6 loopback (::1)
+    if (hostname === '::1' || hostname === '[::1]') {
+      return true;
+    }
+
+    // Parse IPv4 address
+    const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4Match) {
+      const octets = ipv4Match.slice(1).map(Number);
+      // Validate octets are in valid range
+      if (octets.some(o => o < 0 || o > 255)) {
+        return false;
+      }
+      const [first, second] = octets;
+
+      // 127.0.0.0/8 (loopback range: 127.*)
+      if (first === 127) {
+        return true;
+      }
+
+      // 10.0.0.0/8 (10.*)
+      if (first === 10) {
+        return true;
+      }
+
+      // 172.16.0.0/12 (172.16.* - 172.31.*)
+      if (first === 172 && second >= 16 && second <= 31) {
+        return true;
+      }
+
+      // 192.168.0.0/16 (192.168.*)
+      if (first === 192 && second === 168) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch {
+    // Invalid URL - treat as not local (will fail at fetch stage)
+    return false;
+  }
+}
+
+/**
+ * Convert an image URL to base64 data URI.
+ * Includes SSRF protection: blocks local/private addresses unless running in emulator.
+ * Derives MIME type from Content-Type header with safe fallback.
+ */
 async function imageUrlToBase64(imageUrl: string): Promise<string> {
+  // SSRF protection: block local/private URLs in production
+  if (isLocalUrl(imageUrl)) {
+    if (process.env.FUNCTIONS_EMULATOR !== 'true') {
+      console.error('[SSRF] Blocked attempt to fetch local/private URL in production');
+      throw new Error('Cannot fetch images from local or private addresses');
+    }
+    // In emulator mode, allow local URLs for development
+    console.log('[DEV] Allowing local URL fetch in emulator mode');
+  }
+
   try {
     const response = await fetch(imageUrl);
     if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      console.error(`[IMAGE] Fetch failed with status ${response.status}`);
+      throw new Error('Failed to fetch image');
+    }
+
+    // Derive MIME type from Content-Type header
+    const contentType = response.headers.get('content-type');
+    let mimeType = 'image/jpeg'; // Safe default fallback
+
+    if (contentType) {
+      const parsedType = contentType.split(';')[0].trim().toLowerCase();
+      if (parsedType.startsWith('image/')) {
+        mimeType = parsedType;
+      } else {
+        console.error(`[IMAGE] Invalid Content-Type received: ${parsedType}`);
+        throw new Error('Response is not an image');
+      }
+    } else {
+      console.warn('[IMAGE] No Content-Type header, defaulting to image/jpeg');
     }
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const base64 = buffer.toString('base64');
 
-    let mimeType = 'image/jpeg';
-    if (imageUrl.toLowerCase().includes('.png')) {
-      mimeType = 'image/png';
-    } else if (imageUrl.toLowerCase().includes('.webp')) {
-      mimeType = 'image/webp';
-    }
-
     return `data:${mimeType};base64,${base64}`;
   } catch (error) {
-    console.error('Error converting image to base64:', error);
-    throw new Error(`Failed to process image: ${error instanceof Error ? error.message : String(error)}`);
+    // Log error internally but re-throw with minimal detail
+    console.error('[IMAGE] Error processing image:', error instanceof Error ? error.message : 'Unknown error');
+    throw new Error('Failed to process image');
   }
-}
-
-function isLocalUrl(url: string): boolean {
-  return url.includes('127.0.0.1') ||
-         url.includes('localhost') ||
-         url.includes('10.0.') ||
-         url.includes('192.168.');
 }
 
 /**
@@ -265,10 +342,16 @@ function inferProjectType(scopeText: string): string {
 // Now uses enhanced inference module for better accuracy
 // ===================
 
+/**
+ * Prepare image URL for inference - converts local URLs to base64 when needed.
+ * SSRF protection is handled by imageUrlToBase64 (blocks local URLs in production).
+ */
 async function prepareImageForInference(planImageUrl: string): Promise<string> {
+  // For local URLs, convert to base64 (imageUrlToBase64 handles SSRF protection)
   if (isLocalUrl(planImageUrl)) {
     return await imageUrlToBase64(planImageUrl);
   }
+  // Public URLs can be passed directly to LLM APIs
   return planImageUrl;
 }
 
@@ -299,27 +382,66 @@ export const estimationPipeline = onCall({
       throw new HttpsError('invalid-argument', 'Scope text is required');
     }
 
+    if (!projectId) {
+      throw new HttpsError('invalid-argument', 'Project ID is required');
+    }
+
+    if (!sessionId) {
+      throw new HttpsError('invalid-argument', 'Session ID is required');
+    }
+
+    // ===================
+    // AUTHENTICATION & AUTHORIZATION
+    // ===================
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = request.auth.uid;
+
+    // Initialize Firestore early for auth checks
+    initFirebaseAdmin();
+    const db = admin.firestore();
+
+    // Verify user has access to this project (owner or collaborator)
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+
+    if (!projectDoc.exists) {
+      throw new HttpsError('not-found', 'Project not found');
+    }
+
+    const projectData = projectDoc.data();
+    if (projectData?.ownerId !== userId) {
+      // Check if user is a collaborator
+      const collaborators = projectData?.collaborators || [];
+      const isCollaborator = collaborators.some(
+        (c: { id: string }) => c.id === userId
+      );
+      if (!isCollaborator) {
+        throw new HttpsError('permission-denied', 'User does not have access to this project');
+      }
+    }
+
     console.log(`[ESTIMATION] Starting pass ${passNumber} for session ${sessionId}`);
 
     // ===================
     // LOAD CLARIFICATION CONTEXT FROM FIRESTORE (if not provided)
     // ===================
     let clarificationContext: ClarificationContext = providedContext || {};
-    
-    // Try to load from Firestore if not provided and we have auth context
-    if (!providedContext && request.auth?.uid) {
+
+    // Try to load from Firestore if not provided (db and userId already initialized above)
+    if (!providedContext) {
       try {
-        initFirebaseAdmin();
-        const db = admin.firestore();
         const contextDoc = await db
           .collection('users')
-          .doc(request.auth.uid)
+          .doc(userId)
           .collection('projects')
           .doc(projectId)
           .collection('context')
           .doc('clarifications')
           .get();
-        
+
         if (contextDoc.exists) {
           const contextData = contextDoc.data();
           clarificationContext = contextData?.clarifications || {};
@@ -342,17 +464,20 @@ export const estimationPipeline = onCall({
     // ===================
     console.log('[ESTIMATION] Computing quantities from user annotations...');
 
+    // Defensive null-safety: guard against annotationSnapshot being undefined/null
+    const safeAnnotationSnapshot = annotationSnapshot ?? { shapes: [], layers: [] };
+
     // Ensure layers have required fields
     const normalizedSnapshot: AnnotationSnapshot = {
-      shapes: annotationSnapshot.shapes || [],
-      layers: (annotationSnapshot.layers || []).map(layer => ({
-        id: layer.id,
-        name: layer.name,
-        visible: (layer as AnnotatedLayer).visible ?? true,
-        shapeCount: (layer as AnnotatedLayer).shapeCount ?? 0,
+      shapes: safeAnnotationSnapshot.shapes || [],
+      layers: (safeAnnotationSnapshot.layers || []).map(layer => ({
+        id: layer?.id ?? '',
+        name: layer?.name ?? '',
+        visible: (layer as AnnotatedLayer)?.visible ?? true,
+        shapeCount: (layer as AnnotatedLayer)?.shapeCount ?? 0,
       })),
-      scale: annotationSnapshot.scale,
-      capturedAt: annotationSnapshot.capturedAt || Date.now(),
+      scale: safeAnnotationSnapshot.scale,
+      capturedAt: safeAnnotationSnapshot.capturedAt || Date.now(),
     };
 
     const quantities = computeQuantitiesFromAnnotations(normalizedSnapshot);
@@ -433,11 +558,8 @@ export const estimationPipeline = onCall({
         console.log('[ESTIMATION] Running enhanced LLM inference for gap-filling...');
         const openai = getOpenAI();
         
-        // Prepare image URL if available
-        let imageUrl = planImageUrl;
-        if (planImageUrl && isLocalUrl(planImageUrl)) {
-          imageUrl = await prepareImageForInference(planImageUrl);
-        }
+        // Prepare image URL if available (handles local URL conversion and SSRF protection)
+        const imageUrl = planImageUrl ? await prepareImageForInference(planImageUrl) : planImageUrl;
         
         inferenceResult = await runEnhancedInference(
           openai,
@@ -448,15 +570,22 @@ export const estimationPipeline = onCall({
           clarificationData,
           imageUrl
         );
-        
-        spatialNarrative = inferenceResult.spatialNarrative;
-        
-        // Merge inferred items into CSI items
-        computedCSIItems = mergeInferenceIntoCSI(computedCSIItems, inferenceResult);
-        
-        console.log(`[ESTIMATION] LLM inference added ${inferenceResult.inferredItems.length} items, ${inferenceResult.standardAllowances.length} allowances`);
-        if (inferenceResult.scopeAmbiguities.length > 0) {
-          console.log(`[ESTIMATION] Found ${inferenceResult.scopeAmbiguities.length} scope ambiguities for review`);
+
+        // Safely access inferenceResult properties with defaults
+        spatialNarrative = inferenceResult?.spatialNarrative ?? '';
+
+        // Merge inferred items into CSI items (only if inferenceResult exists)
+        if (inferenceResult) {
+          computedCSIItems = mergeInferenceIntoCSI(computedCSIItems, inferenceResult);
+        }
+
+        const inferredItemsCount = (inferenceResult?.inferredItems ?? []).length;
+        const allowancesCount = (inferenceResult?.standardAllowances ?? []).length;
+        const ambiguitiesCount = (inferenceResult?.scopeAmbiguities ?? []).length;
+
+        console.log(`[ESTIMATION] LLM inference added ${inferredItemsCount} items, ${allowancesCount} allowances`);
+        if (ambiguitiesCount > 0) {
+          console.log(`[ESTIMATION] Found ${ambiguitiesCount} scope ambiguities for review`);
         }
       } else {
         console.log('[ESTIMATION] No API key - using annotation data only');
@@ -515,10 +644,10 @@ export const estimationPipeline = onCall({
       },
       scopeSummary: {
         description: scopeText,
-        totalSqft: quantities.totalFloorArea,
-        rooms: quantities.rooms.map(r => r.name),
+        totalSqft: quantities.totalFloorArea ?? 0,
+        rooms: (quantities.rooms ?? []).map(r => r?.name ?? ''),
         finishLevel: (clarificationData.finishLevel as string) || 'mid_range',
-        projectComplexity: quantities.totalRoomCount > 3 ? 'complex' : quantities.totalRoomCount > 1 ? 'moderate' : 'simple',
+        projectComplexity: (quantities.totalRoomCount ?? 0) > 3 ? 'complex' : (quantities.totalRoomCount ?? 0) > 1 ? 'moderate' : 'simple',
         includedDivisions,
         excludedDivisions,
         byOwnerDivisions: [] as string[],
@@ -580,11 +709,11 @@ export const estimationPipeline = onCall({
       cadData.livingAreaSpecific = projectSpecificData.livingAreaSpecific;
     }
 
-    // Build flags with enhanced data
+    // Build flags with enhanced data (defensive: copy warnings array to allow mutation)
     const flags = {
       lowConfidenceItems: [] as Array<{ field: string; confidence: number; reason: string }>,
-      missingData: quantities.warnings,
-      userVerificationRequired: !quantities.hasScale,
+      missingData: [...(quantities.warnings ?? [])],
+      userVerificationRequired: !(quantities.hasScale ?? false),
       verificationItems: [] as string[],
     };
 
@@ -595,12 +724,14 @@ export const estimationPipeline = onCall({
         reason: 'No scale set - all measurements are in pixels',
       });
     }
-    
+
     // Add scope ambiguities from LLM inference as verification items
     if (inferenceResult?.scopeAmbiguities) {
       for (const ambiguity of inferenceResult.scopeAmbiguities) {
-        flags.verificationItems.push(ambiguity.clarificationNeeded);
-        if (ambiguity.issue) {
+        if (ambiguity?.clarificationNeeded) {
+          flags.verificationItems.push(ambiguity.clarificationNeeded);
+        }
+        if (ambiguity?.issue) {
           flags.missingData.push(ambiguity.issue);
         }
       }
@@ -621,25 +752,25 @@ export const estimationPipeline = onCall({
         confidenceScore: quantities.hasScale ? 0.95 : 0.5,
       },
       flags,
-      // Include computed quantities summary for transparency
+      // Include computed quantities summary for transparency (with safe defaults)
       computedQuantities: {
         source: 'user_annotations',
-        hasScale: quantities.hasScale,
-        scaleUnit: quantities.scaleUnit,
-        totalWallLength: quantities.totalWallLength,
-        totalFloorArea: quantities.totalFloorArea,
-        totalRoomCount: quantities.totalRoomCount,
-        totalDoorCount: quantities.totalDoorCount,
-        totalWindowCount: quantities.totalWindowCount,
-        layerSummary: quantities.layerSummary,
+        hasScale: quantities.hasScale ?? false,
+        scaleUnit: quantities.scaleUnit ?? 'pixels',
+        totalWallLength: quantities.totalWallLength ?? 0,
+        totalFloorArea: quantities.totalFloorArea ?? 0,
+        totalRoomCount: quantities.totalRoomCount ?? 0,
+        totalDoorCount: quantities.totalDoorCount ?? 0,
+        totalWindowCount: quantities.totalWindowCount ?? 0,
+        layerSummary: quantities.layerSummary ?? {},
       },
-      // Include inference metadata for transparency
+      // Include inference metadata for transparency (with safe defaults for nested fields)
       inferenceMetadata: inferenceResult ? {
-        roomTypesInferred: inferenceResult.roomTypes.length,
-        itemsInferred: inferenceResult.inferredItems.length,
-        allowancesAdded: inferenceResult.standardAllowances.length,
-        ambiguitiesFound: inferenceResult.scopeAmbiguities.length,
-        materialsRecommended: inferenceResult.materialsAndFinishes.recommended.length,
+        roomTypesInferred: (inferenceResult.roomTypes ?? []).length,
+        itemsInferred: (inferenceResult.inferredItems ?? []).length,
+        allowancesAdded: (inferenceResult.standardAllowances ?? []).length,
+        ambiguitiesFound: (inferenceResult.scopeAmbiguities ?? []).length,
+        materialsRecommended: (inferenceResult.materialsAndFinishes?.recommended ?? []).length,
       } : null,
     };
 
@@ -665,8 +796,7 @@ export const estimationPipeline = onCall({
     console.log(`[ESTIMATION] After auto-fix: ${finalValidation.isValid ? 'PASSED' : 'STILL HAS ISSUES'}, Score: ${finalValidation.completenessScore}/100`);
 
     // Save to Firestore (use set with merge to create if doesn't exist)
-    initFirebaseAdmin();
-    const db = admin.firestore();
+    // Note: db already initialized and user access verified at start of function
     await db.collection('projects').doc(projectId)
       .collection('estimations').doc(sessionId)
       .set({

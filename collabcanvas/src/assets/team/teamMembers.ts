@@ -48,7 +48,7 @@ export const teamMembers: TeamMember[] = [
   },
   {
     name: "Sainatha Yatham",
-    role: "Unpaid Intern",
+    role: "CIO",
     image: sainathaImg,
     desc: "",
   },

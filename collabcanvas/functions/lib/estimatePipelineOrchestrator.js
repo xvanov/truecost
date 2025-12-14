@@ -159,18 +159,19 @@ exports.triggerEstimatePipeline = (0, https_1.onCall)({
 }, async (request) => {
     var _a;
     try {
-        const { projectId, userId } = request.data;
+        const { projectId } = request.data;
         // Validate required fields
         if (!projectId) {
             throw new https_1.HttpsError('invalid-argument', 'Project ID is required');
         }
-        if (!userId) {
-            throw new https_1.HttpsError('invalid-argument', 'User ID is required');
-        }
-        // Verify auth
+        // =================== SECURITY: Authentication Check ===================
+        // Verify auth first and bind userId from the authenticated identity
+        // IMPORTANT: Never trust request.data.userId - always use request.auth.uid
         if (!request.auth) {
             throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
         }
+        // Bind userId from authenticated identity - ignore any caller-supplied userId
+        const userId = request.auth.uid;
         const db = getDb();
         // Verify the user has access to this project
         const projectRef = db.collection('projects').doc(projectId);
@@ -279,6 +280,14 @@ exports.triggerEstimatePipeline = (0, https_1.onCall)({
 /**
  * Update pipeline stage (called by agent functions as they complete)
  */
+// Valid pipeline stage values for validation
+const VALID_PIPELINE_STAGES = _PIPELINE_STAGES;
+/**
+ * Validate that a stage value is a valid pipeline stage
+ */
+function isValidPipelineStage(stage) {
+    return typeof stage === 'string' && VALID_PIPELINE_STAGES.includes(stage);
+}
 exports.updatePipelineStage = (0, https_1.onCall)({
     cors: true,
     maxInstances: 20,
@@ -289,7 +298,36 @@ exports.updatePipelineStage = (0, https_1.onCall)({
         if (!projectId) {
             throw new https_1.HttpsError('invalid-argument', 'Project ID is required');
         }
+        // =================== SECURITY: Authentication Check ===================
+        if (!request.auth) {
+            throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+        }
+        // =================== SECURITY: Enum Validation ===================
+        // Validate completedStage if provided
+        if (completedStage !== undefined && completedStage !== null && !isValidPipelineStage(completedStage)) {
+            throw new https_1.HttpsError('invalid-argument', `Invalid completedStage: "${completedStage}". Must be one of: ${VALID_PIPELINE_STAGES.join(', ')}`);
+        }
+        // Validate nextStage if provided
+        if (nextStage !== undefined && nextStage !== null && !isValidPipelineStage(nextStage)) {
+            throw new https_1.HttpsError('invalid-argument', `Invalid nextStage: "${nextStage}". Must be one of: ${VALID_PIPELINE_STAGES.join(', ')}`);
+        }
         const db = getDb();
+        // =================== SECURITY: Authorization Check ===================
+        // Verify the user has access to this project (owner or collaborator)
+        const projectRef = db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists) {
+            throw new https_1.HttpsError('not-found', 'Project not found');
+        }
+        const projectData = projectDoc.data();
+        if ((projectData === null || projectData === void 0 ? void 0 : projectData.ownerId) !== request.auth.uid) {
+            // Check if user is a collaborator
+            const collaborators = (projectData === null || projectData === void 0 ? void 0 : projectData.collaborators) || [];
+            const isCollaborator = collaborators.some((c) => { var _a; return c.id === ((_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid); });
+            if (!isCollaborator) {
+                throw new https_1.HttpsError('permission-denied', 'User does not have access to this project');
+            }
+        }
         const statusRef = db.collection('projects').doc(projectId).collection('pipeline').doc('status');
         const statusDoc = await statusRef.get();
         if (!statusDoc.exists) {
