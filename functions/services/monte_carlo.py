@@ -20,11 +20,20 @@ from typing import List, Optional, Dict, Any
 import time
 
 import numpy as np
-from scipy import linalg
 import structlog
+from math import erf, sqrt
 
 # Configure structlog logger
 logger = structlog.get_logger(__name__)
+
+def _standard_normal_cdf(x: np.ndarray) -> np.ndarray:
+    """Vectorized standard normal CDF using erf.
+
+    Avoids SciPy dependency.
+    """
+    # Φ(x) = 0.5 * (1 + erf(x / sqrt(2)))
+    v_erf = np.vectorize(erf)
+    return 0.5 * (1.0 + v_erf(x / sqrt(2.0)))
 
 
 # =============================================================================
@@ -907,7 +916,7 @@ def run_schedule_simulation(
         ...     ScheduleTaskInput("2", "Framing", 10, 8, 15, is_critical=True),
         ... ]
         >>> result = run_schedule_simulation(tasks, iterations=1000)
-        >>> result.p50_days < result.p80_days < result.p90_days
+        >>> result.p50_days <= result.p80_days <= result.p90_days
         True
     """
     start_time = time.perf_counter()
@@ -1142,8 +1151,8 @@ def run_correlated_simulation(
 
     # Cholesky decomposition for generating correlated random variables
     try:
-        chol = linalg.cholesky(corr_mat, lower=True)
-    except linalg.LinAlgError:
+        chol = np.linalg.cholesky(corr_mat)
+    except np.linalg.LinAlgError:
         # If matrix is not positive definite, fall back to uncorrelated
         logger.warning(
             "correlation_matrix_not_positive_definite",
@@ -1159,8 +1168,7 @@ def run_correlated_simulation(
     correlated_samples = independent_samples @ chol.T
 
     # Convert to uniform [0, 1] using CDF of standard normal
-    from scipy.stats import norm
-    uniform_samples = norm.cdf(correlated_samples)
+    uniform_samples = _standard_normal_cdf(correlated_samples)
 
     # Use correlated uniform samples to drive triangular distributions
     # This creates correlation between the domains while preserving

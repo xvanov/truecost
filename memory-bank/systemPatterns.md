@@ -309,21 +309,57 @@ logger.error("agent_failed", estimate_id=id, agent="location", error=str(e))
 | Firestore fields | camelCase | `estimateId`, `createdAt` |
 | Environment variables | SCREAMING_SNAKE | `LLM_MODEL`, `OPENAI_API_KEY` |
 
-## Service Interfaces (Dependencies from Dev 4)
+## Service Interfaces
+
+### Live Services (Already Implemented)
 
 ```python
-# Location Service (Dev 4 implements, Dev 2 consumes)
+# BLS Labor Rates Service (Live - Dev 2 implements)
+async def get_labor_rates_for_zip(zip_code: str, trades: Optional[List[str]] = None) -> BLSResponse:
+    """Returns real labor rates from BLS API with fallback to cached data on failure."""
+
+# Weather Factors Service (Live - Dev 2 implements)
+async def get_weather_factors(zip_code: str) -> WeatherFactors:
+    """Returns real weather data from Open-Meteo API with fallback to regional defaults on failure."""
+```
+
+### Mock Services (Awaiting Dev 4 Implementation)
+
+```python
+# Location Factors (Mock - Dev 4 will implement)
 def get_location_factors(zip_code: str) -> LocationFactors:
     """Returns {laborRates: {}, isUnion: bool, permitCosts: {}, weatherFactors: {}}"""
 
-# Cost Data (Dev 4 implements, Dev 2 consumes)
+# Material Cost Data (Mock - Dev 4 will implement)
 def get_material_cost(item_code: str) -> MaterialCost:
     """Returns {unitCost: float, laborHours: float, crew: str, productivity: float}"""
 
-# Monte Carlo (Dev 4 implements, Dev 2 consumes)
+# Monte Carlo Simulation (Mock - Dev 4 will implement)
 def run_simulation(line_items: list, iterations: int = 1000) -> MonteCarloResult:
     """Returns {p50: float, p80: float, p90: float, contingency: float, topRisks: []}"""
 ```
+
+### Data Acquisition Status
+
+| Service | Implementation | Status | Data Source |
+|---------|---------------|--------|-------------|
+| Labor Rates | `functions/services/bls_service.py` | ✅ **Live** | BLS Occupational Employment Statistics API |
+| Weather Factors | `functions/services/weather_service.py` | ✅ **Live** | Open-Meteo Historical Weather API |
+| Retail Material Prices | `collabcanvas/functions/src/priceComparison.ts` + `functions/services/price_comparison_service.py` | ✅ **Live** | SerpApi Google Shopping + (optional) OpenAI match selection |
+| Location Factors | `functions/services/cost_data_service.py` | ⏳ **Mock** | Static data (awaiting Dev 4) |
+| RSMeans-Style Unit Costs | `functions/services/cost_data_service.py` | ⏳ **Mock** | Static data (awaiting Dev 4) |
+| Monte Carlo | `functions/services/monte_carlo.py` / `functions/services/monte_carlo_service.py` | ✅ **Implemented (NumPy-only)** | NumPy triangular distributions (SciPy removed) |
+
+### Pattern: CostAgent Uses Price Comparison First, Then Falls Back
+
+Policy: For material unit costs, prefer **live retailer pricing** when a `projectId` is available.
+
+Implementation:
+- `CostAgent` passes `project_id` (from `clarification_output` or `estimate_id` fallback) into `CostDataService.get_material_cost(...)`
+- `CostDataService.get_material_cost(..., project_id, zip_code)`:
+  - Attempts live pricing via `functions/services/price_comparison_service.py` (TS `comparePrices` callable + Firestore polling)
+  - Falls back to existing mock cost database when no price is available
+- `CostDataService.batch_prefetch_prices(...)` batches all line-item descriptions to avoid per-item tool calls
 
 ## Handoff Contract: Dev 3 → Dev 2
 

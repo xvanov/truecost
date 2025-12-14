@@ -9,6 +9,10 @@ import { doc, getDoc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
 import { firestore } from './firebase';
 import type { RiskOutput } from '../types/risk';
 
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 /**
  * Transform snake_case keys from Firestore to camelCase for TypeScript.
  */
@@ -29,12 +33,15 @@ function transformRiskOutput(data: Record<string, unknown>): RiskOutput | null {
       maxValue: (mc.max_value ?? mc.maxValue) as number,
       recommendedContingency: (mc.recommended_contingency ?? mc.recommendedContingency) as number,
       topRisks: (mc.top_risks ?? mc.topRisks ?? []) as RiskOutput['monteCarlo']['topRisks'],
-      histogram: (mc.histogram ?? []).map((bin: Record<string, unknown>) => ({
-        range_low: bin.range_low as number,
-        range_high: bin.range_high as number,
-        count: bin.count as number,
-        percentage: bin.percentage as number,
-      })),
+      histogram: asArray(mc.histogram).map((bin: unknown) => {
+        const b = (bin ?? {}) as Record<string, unknown>;
+        return {
+          range_low: b.range_low as number,
+          range_high: b.range_high as number,
+          count: b.count as number,
+          percentage: b.percentage as number,
+        };
+      }),
     };
   };
 
@@ -51,20 +58,24 @@ function transformRiskOutput(data: Record<string, unknown>): RiskOutput | null {
       minValue: (lmc.min_value ?? lmc.minValue) as number,
       maxValue: (lmc.max_value ?? lmc.maxValue) as number,
       recommendedContingency: (lmc.recommended_contingency ?? lmc.recommendedContingency) as number,
-      topLaborRisks: (lmc.top_labor_risks ?? lmc.topLaborRisks ?? []).map(
-        (risk: Record<string, unknown>) => ({
-          trade: risk.trade as string,
-          impact: risk.impact as number,
-          varianceContribution: (risk.variance_contribution ?? risk.varianceContribution) as number,
-          sensitivity: risk.sensitivity as number,
-        })
-      ),
-      histogram: (lmc.histogram ?? []).map((bin: Record<string, unknown>) => ({
-        range_low: bin.range_low as number,
-        range_high: bin.range_high as number,
-        count: bin.count as number,
-        percentage: bin.percentage as number,
-      })),
+      topLaborRisks: asArray(lmc.top_labor_risks ?? lmc.topLaborRisks).map((risk: unknown) => {
+        const r = (risk ?? {}) as Record<string, unknown>;
+        return {
+          trade: r.trade as string,
+          impact: r.impact as number,
+          varianceContribution: (r.variance_contribution ?? r.varianceContribution) as number,
+          sensitivity: r.sensitivity as number,
+        };
+      }),
+      histogram: asArray(lmc.histogram).map((bin: unknown) => {
+        const b = (bin ?? {}) as Record<string, unknown>;
+        return {
+          range_low: b.range_low as number,
+          range_high: b.range_high as number,
+          count: b.count as number,
+          percentage: b.percentage as number,
+        };
+      }),
       byTrade: (lmc.by_trade ?? lmc.byTrade ?? {}) as RiskOutput['laborMonteCarlo'] extends
         | undefined
         ? never
@@ -86,20 +97,24 @@ function transformRiskOutput(data: Record<string, unknown>): RiskOutput | null {
       maxDays: (smc.max_days ?? smc.maxDays) as number,
       criticalPathVariance: (smc.critical_path_variance ?? smc.criticalPathVariance) as number,
       scheduleRiskIndex: (smc.schedule_risk_index ?? smc.scheduleRiskIndex) as number,
-      histogram: (smc.histogram ?? []).map((bin: Record<string, unknown>) => ({
-        range_low: bin.range_low as number,
-        range_high: bin.range_high as number,
-        count: bin.count as number,
-        percentage: bin.percentage as number,
-      })),
-      taskSensitivities: (smc.task_sensitivities ?? smc.taskSensitivities ?? []).map(
-        (task: Record<string, unknown>) => ({
-          taskId: (task.task_id ?? task.taskId) as string,
-          taskName: (task.task_name ?? task.taskName) as string,
-          varianceContribution: (task.variance_contribution ?? task.varianceContribution) as number,
-          isCritical: (task.is_critical ?? task.isCritical) as boolean,
-        })
-      ),
+      histogram: asArray(smc.histogram).map((bin: unknown) => {
+        const b = (bin ?? {}) as Record<string, unknown>;
+        return {
+          range_low: b.range_low as number,
+          range_high: b.range_high as number,
+          count: b.count as number,
+          percentage: b.percentage as number,
+        };
+      }),
+      taskSensitivities: asArray(smc.task_sensitivities ?? smc.taskSensitivities).map((task: unknown) => {
+        const t = (task ?? {}) as Record<string, unknown>;
+        return {
+          taskId: (t.task_id ?? t.taskId) as string,
+          taskName: (t.task_name ?? t.taskName) as string,
+          varianceContribution: (t.variance_contribution ?? t.varianceContribution) as number,
+          isCritical: (t.is_critical ?? t.isCritical) as boolean,
+        };
+      }),
     };
   };
 

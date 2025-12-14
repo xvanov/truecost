@@ -47,6 +47,39 @@ The system now has **two coordinated tracks**:
    - Progress stages (`cad_analysis`, `location`, `scope`, `cost`, `risk`, `final`)
    - PDF generation via `collabcanvas/src/services/pdfService.ts`
 
+### New: CostAgent Uses Live Retail Material Pricing (Epic 5 `comparePrices`)
+
+We now have **live material pricing** available via the existing TS callable:
+
+- **TS Cloud Function**: `collabcanvas/functions/src/priceComparison.ts` (`comparePrices`)
+  - Scrapes retailer pricing via **SerpApi Google Shopping** + optional LLM matching
+  - Writes progress/results to: `/projects/{projectId}/priceComparison/latest`
+
+Integration into the Python pipeline:
+- **Python wrapper service**: `functions/services/price_comparison_service.py`
+  - Triggers `comparePrices` via HTTP
+  - Polls Firestore until `status == "complete"`
+  - Extracts best price per product name
+- **Cost data integration**: `functions/services/cost_data_service.py`
+  - `CostDataService.get_material_cost(..., project_id, zip_code)` attempts live price first
+  - Falls back to existing mock unit costs if price comparison fails/no match
+  - Uses `batch_prefetch_prices()` to request all line-item descriptions in one call per run
+- **CostAgent wiring**: `functions/agents/primary/cost_agent.py`
+  - Extracts `project_id` (from `clarification_output` or falls back to `estimate_id`)
+  - Passes `project_id` and `zip_code` through to cost lookups
+
+### New: Agent Tool for Material Prices
+
+- Added LangChain tool: `functions/tools/price_tools.py` (`get_material_prices_tool`)
+- Exported via: `functions/tools/__init__.py` (`DATA_TOOLS`)
+
+### Test + Reliability Updates
+
+- Added unit tests: `functions/tests/unit/test_price_comparison_integration.py`
+- Fixed `tools/data_tools.py` missing typing imports (`Dict`, `Any`) that caused pytest collection failures
+- Removed SciPy dependency from `functions/services/monte_carlo.py` (uses `numpy.linalg` + an `erf`-based normal CDF)
+- Fixed flaky schedule Monte Carlo test by allowing ties: `p50_days <= p80_days <= p90_days` (integer day percentiles can tie)
+
 ### New: User-Selected Cost Defaults (Input JSON)
 
 The pipeline now supports user-selected costing defaults supplied in the incoming JSON:
@@ -369,4 +402,4 @@ Finalize “granular cost” visibility end-to-end:
 
 ---
 
-_Last Updated: December 11, 2025 (Granular cost ledger + dashboard fixes; 205 tests passing)_
+_Last Updated: December 14, 2025 (Live retailer material pricing integrated into CostAgent; unit tests stable)_
