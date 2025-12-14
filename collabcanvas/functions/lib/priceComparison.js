@@ -9,31 +9,48 @@ const path = require("path");
 const openai_1 = require("openai");
 // Using cors: true to match other functions (aiCommand, materialEstimateCommand, sagemakerInvoke)
 // This supports Firebase preview channel URLs which have dynamic hostnames
-// Load environment variables - try multiple locations
-dotenv.config();
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-// Log environment variable loading status
-if (process.env.NODE_ENV !== 'production') {
-    console.log('[PRICE_COMPARISON] Environment check:');
-    console.log('[PRICE_COMPARISON] - UNWRANGLE_API_KEY:', process.env.UNWRANGLE_API_KEY ? 'SET' : 'NOT SET');
-    console.log('[PRICE_COMPARISON] - SERP_API_KEY:', process.env.SERP_API_KEY ? 'SET' : 'NOT SET');
-    console.log('[PRICE_COMPARISON] - OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET');
+// Lazy initialization to avoid timeout during module load
+let _initialized = false;
+let _db = null;
+function initializeEnv() {
+    if (_initialized)
+        return;
+    _initialized = true;
+    // Load environment variables - try multiple locations
+    dotenv.config();
+    dotenv.config({ path: path.resolve(__dirname, '../.env') });
+    dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+    // Log environment variable loading status
+    if (process.env.NODE_ENV !== 'production') {
+        console.log('[PRICE_COMPARISON] Environment check:');
+        console.log('[PRICE_COMPARISON] - UNWRANGLE_API_KEY:', process.env.UNWRANGLE_API_KEY ? 'SET' : 'NOT SET');
+        console.log('[PRICE_COMPARISON] - SERP_API_KEY:', process.env.SERP_API_KEY ? 'SET' : 'NOT SET');
+        console.log('[PRICE_COMPARISON] - OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET');
+    }
+    // Configure Firestore to use emulator if running locally
+    if (process.env.FIRESTORE_EMULATOR_HOST) {
+        console.log('[PRICE_COMPARISON] Using Firestore emulator:', process.env.FIRESTORE_EMULATOR_HOST);
+    }
+    else if (process.env.NODE_ENV === 'development' && !process.env.FUNCTIONS_EMULATOR) {
+        process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
+        console.log('[PRICE_COMPARISON] Local development detected - setting FIRESTORE_EMULATOR_HOST to 127.0.0.1:8081');
+    }
 }
-// Initialize admin if not already
-try {
-    admin.app();
+function initFirebaseAdmin() {
+    try {
+        admin.app();
+    }
+    catch (_a) {
+        admin.initializeApp();
+    }
 }
-catch (_a) {
-    admin.initializeApp();
-}
-// Configure Firestore to use emulator if running locally
-if (process.env.FIRESTORE_EMULATOR_HOST) {
-    console.log('[PRICE_COMPARISON] Using Firestore emulator:', process.env.FIRESTORE_EMULATOR_HOST);
-}
-else if (process.env.NODE_ENV === 'development' && !process.env.FUNCTIONS_EMULATOR) {
-    process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-    console.log('[PRICE_COMPARISON] Local development detected - setting FIRESTORE_EMULATOR_HOST to 127.0.0.1:8081');
+function getDb() {
+    if (!_db) {
+        initializeEnv();
+        initFirebaseAdmin();
+        _db = (0, firestore_1.getFirestore)();
+    }
+    return _db;
 }
 // CacheLookupResult interface reserved for future use (tracking cache hits/misses)
 // ============ CONSTANTS ============
@@ -99,6 +116,7 @@ async function findInProductCache(db, retailer, searchQuery) {
  */
 async function assessCacheMatchConfidence(searchQuery, cachedProduct) {
     var _a, _b;
+    initializeEnv();
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
         console.error('[PRICE_COMPARISON] OPENAI_API_KEY not configured for cache confidence');
@@ -198,6 +216,7 @@ async function saveToProductCache(db, retailer, product, searchQuery) {
 }
 // ============ UNWRANGLE API ============
 async function fetchFromUnwrangle(productName, platform, zipCode) {
+    initializeEnv();
     const apiKey = process.env.UNWRANGLE_API_KEY;
     if (!apiKey) {
         console.error('[PRICE_COMPARISON] UNWRANGLE_API_KEY not configured');
@@ -243,6 +262,7 @@ const MERCHANT_PATTERNS = {
     'lowes.com': /lowe'?s/i,
 };
 async function fetchFromSerpApi(productName, merchantKey) {
+    initializeEnv();
     const apiKey = process.env.SERP_API_KEY;
     if (!apiKey) {
         console.error('[PRICE_COMPARISON] SERP_API_KEY not configured');
@@ -327,6 +347,7 @@ async function selectBestMatch(productName, results, retailer) {
     if (results.length === 0) {
         return { index: -1, confidence: 0, reasoning: 'No search results' };
     }
+    initializeEnv();
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
         console.error('[PRICE_COMPARISON] OPENAI_API_KEY not configured');
@@ -493,7 +514,7 @@ async function compareOneProduct(productName, zipCode, db) {
     const matches = {};
     console.log(`[PRICE_COMPARISON] Comparing product: "${productName}"`);
     // Get Firestore instance if not provided (for cache operations)
-    const firestoreDb = db || (0, firestore_1.getFirestore)();
+    const firestoreDb = db || getDb();
     // Process each retailer with cache-first strategy
     const retailerResults = await Promise.all(RETAILERS.map(async (retailer) => {
         try {
@@ -595,7 +616,7 @@ exports.comparePrices = (0, https_1.onCall)(exports.comparePricesConfig, async (
         console.error('[PRICE_COMPARISON] productNames array is required');
         throw new https_1.HttpsError('invalid-argument', 'productNames array is required');
     }
-    const db = (0, firestore_1.getFirestore)();
+    const db = getDb();
     const docRef = db.collection('projects').doc(projectId)
         .collection('priceComparison').doc('latest');
     // 1. Check for existing complete results (unless forceRefresh)

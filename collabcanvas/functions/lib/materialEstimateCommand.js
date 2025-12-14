@@ -4,12 +4,17 @@ exports.materialEstimateCommand = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const openai_1 = require("openai");
 const dotenv = require("dotenv");
-// Load environment variables
-dotenv.config();
-// Initialize OpenAI client
-const openai = new openai_1.OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || '',
-});
+// Lazy initialization to avoid timeout during module load
+let _openai = null;
+function getOpenAI() {
+    if (!_openai) {
+        dotenv.config();
+        _openai = new openai_1.OpenAI({
+            apiKey: process.env.OPENAI_API_KEY || '',
+        });
+    }
+    return _openai;
+}
 /**
  * Material Estimation AI Command
  * Uses OpenAI to parse natural language requests for construction material estimation
@@ -56,7 +61,7 @@ Return ONLY the JSON object with fields they specified, nothing else.`;
             `Current context: ${JSON.stringify(context)}\n\nUser message: "${userMessage}"` :
             `User message: "${userMessage}"`;
         // Call OpenAI
-        const completion = await openai.chat.completions.create({
+        const completion = await getOpenAI().chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
                 { role: 'system', content: systemPrompt },
@@ -137,7 +142,7 @@ IMPORTANT: Count ALL doors including:
 - Exterior doors  
 - Double doors (count as 2)
 - Closet doors`;
-        const completion = await openai.chat.completions.create({
+        const completion = await getOpenAI().chat.completions.create({
             model: 'gpt-4o',
             messages: [
                 {

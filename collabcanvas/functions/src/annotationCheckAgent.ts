@@ -85,12 +85,58 @@ interface AnnotationCheckRequest {
   userMessage?: string;
 }
 
+// Structured clarification data extracted from conversation
+interface ExtractedClarifications {
+  // Confirmed quantities (from user confirmation)
+  confirmedQuantities?: {
+    doors?: number;
+    windows?: number;
+    rooms?: number;
+    walls?: number;
+  };
+  // Area relationships (e.g., "demolition area = floor area")
+  areaRelationships?: {
+    demolitionArea?: 'same_as_floor' | 'same_as_room' | 'custom' | 'none';
+    ceilingArea?: 'same_as_floor' | 'same_as_room' | 'custom' | 'none';
+    paintArea?: 'walls_only' | 'walls_and_ceiling' | 'custom';
+  };
+  // Exclusions (things user confirmed are NOT needed)
+  exclusions?: {
+    electrical?: boolean;
+    plumbing?: boolean;
+    hvac?: boolean;
+    demolition?: boolean;
+    ceiling?: boolean;
+    trim?: boolean;
+    [key: string]: boolean | undefined;
+  };
+  // Inclusions (things user confirmed ARE needed)
+  inclusions?: {
+    windowTrim?: boolean;
+    doorHardware?: boolean;
+    baseTrim?: boolean;
+    crownMolding?: boolean;
+    [key: string]: boolean | undefined;
+  };
+  // Specific details provided
+  details?: {
+    ceilingType?: string;
+    flooringType?: string;
+    paintType?: string;
+    doorStyle?: string;
+    [key: string]: string | undefined;
+  };
+  // Raw clarification notes for LLM context
+  notes?: string[];
+}
+
 interface AnnotationCheckResponse {
   success: boolean;
   message: string;
   isComplete: boolean;
   missingAnnotations: string[];
   clarificationQuestions: string[];
+  extractedClarifications?: ExtractedClarifications;
   annotationSummary: {
     hasScale: boolean;
     wallCount: number;
@@ -104,6 +150,18 @@ interface AnnotationCheckResponse {
 
 // System prompt for the annotation check agent
 const ANNOTATION_CHECK_PROMPT = `You are a construction plan annotation assistant. Your role is to verify if a user has annotated all required elements on their construction plan based on their project scope.
+
+IMPORTANT: CONVERSATION CONTEXT
+You have access to the conversation history. The user may be:
+1. Starting a new annotation check (saying "annotation check" or similar)
+2. Answering your previous questions (e.g., "1) No 2) Yes", "yes", "no electrical work", etc.)
+3. Providing additional context about their annotations or scope
+
+When the user answers your previous questions:
+- Parse their response carefully (they might use numbered answers, bullet points, or natural language)
+- Acknowledge their answers and update your assessment accordingly
+- Don't repeat questions they've already answered
+- Use their answers to refine the completeness check
 
 PROJECT SCOPE AND DETAILS:
 {scopeText}
@@ -149,17 +207,65 @@ LAYER-BASED VALIDATION:
 - If a layer exists but is empty or has few shapes, ask about it
 - If scope mentions work but no matching layer exists, suggest creating one
 
+HANDLING FOLLOW-UP RESPONSES:
+When the user provides answers to your questions:
+- If they say something is NOT needed (e.g., "no electrical", "no", "N/A"), mark that as clarified and don't ask again
+- If they confirm something (e.g., "yes", "correct", "that's right"), acknowledge and incorporate into your assessment
+- If they provide numbered answers like "1) No 2) Yes", match each answer to the corresponding question from your previous message
+- Update your completeness assessment based on their clarifications
+
+EXTRACTING CLARIFICATIONS FOR ESTIMATION:
+As users answer questions, extract structured data that will help the estimation pipeline:
+
+1. **Confirmed Quantities**: When user confirms counts (e.g., "yes, 2 doors")
+2. **Area Relationships**: When user says areas are the same (e.g., "demolition = floor area", "ceiling same as room")
+3. **Exclusions**: Things user says are NOT needed (e.g., "no electrical", "no ceiling work")
+4. **Inclusions**: Things user confirms ARE included (e.g., "yes, includes window trim")
+5. **Details**: Specific information (e.g., "standard 6-panel doors", "latex paint")
+
+Common patterns to recognize:
+- "same as floor/room" → areaRelationships with 'same_as_floor' or 'same_as_room'
+- "no [X]" or "not needed" → exclusions[X] = true
+- "yes" to inclusion questions → inclusions[X] = true
+- Numbers confirm counts → confirmedQuantities
+
 Return JSON:
 {
   "isComplete": boolean,
-  "message": "Your response explaining what's complete/missing. Reference specific layers and their contents. Be specific about WHY each annotation is needed based on the scope.",
-  "missingAnnotations": ["list of what's missing - reference layers and shape types needed"],
-  "clarificationQuestions": ["any questions if scope or layer purpose is unclear"],
-  "suggestions": ["helpful tips for organizing annotations into layers"]
+  "message": "Your response. Acknowledge what you learned from their answers.",
+  "missingAnnotations": ["list of what's still missing"],
+  "clarificationQuestions": ["only NEW questions"],
+  "suggestions": ["helpful tips"],
+  "extractedClarifications": {
+    "confirmedQuantities": { "doors": 2, "windows": 1 },
+    "areaRelationships": {
+      "demolitionArea": "same_as_floor",
+      "ceilingArea": "same_as_room"
+    },
+    "exclusions": {
+      "electrical": true,
+      "specialCeilingFeatures": true
+    },
+    "inclusions": {
+      "windowTrim": true,
+      "doorHardware": true
+    },
+    "details": {
+      "doorStyle": "6-panel solid core",
+      "paintType": "standard latex"
+    },
+    "notes": ["User confirmed demolition area matches floor area of 107.6 sq ft"]
+  }
 }
 
-If isComplete is true, congratulate the user and tell them they can proceed to generate the estimate. Mention which layers contain the key information.
-If isComplete is false, clearly explain what needs to be annotated, suggest relevant layer names, and tie it back to the project scope.`;
+The extractedClarifications will be used by the estimation pipeline to:
+- Calculate demolition quantities based on floor area
+- Skip electrical line items if excluded
+- Include correct door/window counts and styles
+- Apply appropriate pricing based on confirmed details
+
+If isComplete is true, congratulate the user and tell them they can proceed to generate the estimate.
+If isComplete is false, clearly explain what still needs to be done.`;
 
 // ===================
 // HELPER FUNCTIONS
@@ -504,12 +610,36 @@ export const annotationCheckAgent = onCall({
 
     const aiResponse = JSON.parse(responseText);
 
+    // Parse extracted clarifications from AI response
+    const extractedClarifications: ExtractedClarifications = aiResponse.extractedClarifications || {};
+    
+    // Ensure all fields have proper defaults
+    if (!extractedClarifications.confirmedQuantities) {
+      extractedClarifications.confirmedQuantities = {};
+    }
+    if (!extractedClarifications.areaRelationships) {
+      extractedClarifications.areaRelationships = {};
+    }
+    if (!extractedClarifications.exclusions) {
+      extractedClarifications.exclusions = {};
+    }
+    if (!extractedClarifications.inclusions) {
+      extractedClarifications.inclusions = {};
+    }
+    if (!extractedClarifications.details) {
+      extractedClarifications.details = {};
+    }
+    if (!extractedClarifications.notes) {
+      extractedClarifications.notes = [];
+    }
+
     const response: AnnotationCheckResponse = {
       success: true,
       message: aiResponse.message || 'Annotation check complete.',
       isComplete: aiResponse.isComplete || false,
       missingAnnotations: aiResponse.missingAnnotations || [],
       clarificationQuestions: aiResponse.clarificationQuestions || [],
+      extractedClarifications,
       annotationSummary,
     };
 

@@ -517,21 +517,28 @@ export function buildSpaceModelFromQuantities(quantities: ComputedQuantities): R
     confidence: wall.confidence,
   }));
 
-  // Build openings array
+  // Build openings array using COUNTS with standard USA sizes
+  // Door and window quantities are COUNTS, not areas from bounding boxes
   const openings = [
-    ...quantities.doors.map(door => ({
+    // Standard USA interior door: 32" x 80" (2.67' x 6.67')
+    ...quantities.doors.map((door, index) => ({
       id: door.id,
       type: 'door' as const,
-      width: door.widthReal,
-      height: door.heightReal || 6.67, // Default door height
+      width: 2.67,  // Standard 32" door width in feet
+      height: 6.67, // Standard 80" door height in feet
+      standardSize: '32" x 80"',
       confidence: door.confidence,
+      note: `Door ${index + 1} of ${quantities.doors.length} (standard USA size applied)`,
     })),
-    ...quantities.windows.map(window => ({
+    // Standard USA window: 36" x 48" (3' x 4')
+    ...quantities.windows.map((window, index) => ({
       id: window.id,
       type: 'window' as const,
-      width: window.widthReal,
-      height: window.heightReal,
+      width: 3.0,   // Standard 36" window width in feet
+      height: 4.0,  // Standard 48" window height in feet
+      standardSize: '36" x 48"',
       confidence: window.confidence,
+      note: `Window ${index + 1} of ${quantities.windows.length} (standard USA size applied)`,
     })),
   ];
 
