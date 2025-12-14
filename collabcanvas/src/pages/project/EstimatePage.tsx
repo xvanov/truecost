@@ -133,8 +133,8 @@ const mapProjectType = (
  * Transform deep pipeline estimate data to BillOfMaterials format
  * This allows the results view to display data from the estimates collection
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const transformEstimateToBOM = (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   estimateData: any,
   estimateId: string
 ): BillOfMaterials | null => {

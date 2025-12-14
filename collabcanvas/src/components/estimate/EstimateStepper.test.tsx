@@ -69,7 +69,7 @@ describe('EstimateStepper Component', () => {
     expect(checkIcon).toBeInTheDocument();
   });
 
-  it('should disable future steps (but not the immediate next step)', () => {
+  it('should allow navigation to any step', () => {
     render(
       <BrowserRouter>
         <EstimateStepper {...defaultProps} currentStep="scope" />
@@ -79,9 +79,9 @@ describe('EstimateStepper Component', () => {
     const annotateButton = screen.getByText('Annotate').closest('button');
     const estimateButton = screen.getByText('Estimate').closest('button');
 
-    // Next step (annotate) is accessible, only 2+ steps ahead are disabled
+    // All steps should be clickable for flexible navigation
     expect(annotateButton).not.toBeDisabled();
-    expect(estimateButton).toBeDisabled();
+    expect(estimateButton).not.toBeDisabled();
   });
 
   it('should navigate when clicking completed step', () => {
@@ -114,7 +114,7 @@ describe('EstimateStepper Component', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/project/test-project-123/annotate');
   });
 
-  it('should not navigate when clicking future step', () => {
+  it('should navigate when clicking future step', () => {
     render(
       <BrowserRouter>
         <EstimateStepper {...defaultProps} currentStep="scope" />
@@ -124,7 +124,8 @@ describe('EstimateStepper Component', () => {
     const estimateButton = screen.getByText('Estimate').closest('button');
     fireEvent.click(estimateButton!);
 
-    expect(mockNavigate).not.toHaveBeenCalled();
+    // All steps are clickable for flexible navigation
+    expect(mockNavigate).toHaveBeenCalledWith('/project/test-project-123/estimate');
   });
 
   it('should treat previous steps as implicitly completed', () => {
