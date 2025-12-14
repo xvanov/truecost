@@ -4,23 +4,35 @@
  * Validates if user has annotated all required fields based on the project scope
  * This is the clarification agent for the annotation workflow
  */
-var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.annotationCheckAgent = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const openai_1 = require("openai");
 const dotenv = require("dotenv");
 const path = require("path");
-// Load environment variables
-const envPath = path.resolve(process.cwd(), '.env');
-const envResult = dotenv.config({ path: envPath, override: true });
-const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-const apiKeyFromEnv = (_a = envResult.parsed) === null || _a === void 0 ? void 0 : _a.OPENAI_API_KEY;
-const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-const apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-const openai = new openai_1.OpenAI({ apiKey });
-if (!apiKey) {
-    console.warn('⚠️ OPENAI_API_KEY not found. Annotation check agent will not work.');
+// Lazy initialization to avoid timeout during module load
+let _openai = null;
+let _apiKey = null;
+function getApiKey() {
+    var _a;
+    if (_apiKey === null) {
+        const envPath = path.resolve(process.cwd(), '.env');
+        const envResult = dotenv.config({ path: envPath, override: true });
+        const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
+        const apiKeyFromEnv = (_a = envResult.parsed) === null || _a === void 0 ? void 0 : _a.OPENAI_API_KEY;
+        const apiKeyFromProcess = process.env.OPENAI_API_KEY;
+        _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
+        if (!_apiKey) {
+            console.warn('⚠️ OPENAI_API_KEY not found. Annotation check agent will not work.');
+        }
+    }
+    return _apiKey;
+}
+function getOpenAI() {
+    if (!_openai) {
+        _openai = new openai_1.OpenAI({ apiKey: getApiKey() });
+    }
+    return _openai;
 }
 // System prompt for the annotation check agent
 const ANNOTATION_CHECK_PROMPT = `You are a construction plan annotation assistant. Your role is to verify if a user has annotated all required elements on their construction plan based on their project scope.
@@ -362,7 +374,7 @@ exports.annotationCheckAgent = (0, https_1.onCall)({
         else {
             messages.push({ role: 'user', content: 'Please check if my annotations are complete for this project scope.' });
         }
-        const completion = await openai.chat.completions.create({
+        const completion = await getOpenAI().chat.completions.create({
             model: 'gpt-4o',
             messages,
             temperature: 0.7,

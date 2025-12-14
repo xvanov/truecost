@@ -46,7 +46,6 @@ function firestoreDocToProject(docId: string, data: DocumentData): Project {
     // Scope fields
     address: data.address,
     projectType: data.projectType,
-    size: data.size,
     useUnionLabor: data.useUnionLabor,
     estimateConfig: data.estimateConfig,
     planImageUrl: data.planImageUrl,
@@ -91,7 +90,6 @@ export interface ProjectScopeData {
   description: string;
   address?: ProjectAddress;
   projectType?: string;
-  size?: string;
   useUnionLabor?: boolean;
   estimateConfig?: EstimateConfig;
   planImageUrl?: string;
@@ -146,7 +144,6 @@ export async function createProject(
     if (scopeData) {
       if (scopeData.address) projectData.address = scopeData.address;
       if (scopeData.projectType) projectData.projectType = scopeData.projectType;
-      if (scopeData.size) projectData.size = scopeData.size;
       if (scopeData.useUnionLabor !== undefined) projectData.useUnionLabor = scopeData.useUnionLabor;
       if (scopeData.estimateConfig) projectData.estimateConfig = scopeData.estimateConfig;
       if (scopeData.planImageUrl) projectData.planImageUrl = scopeData.planImageUrl;
@@ -168,7 +165,6 @@ export async function createProject(
       updatedBy: userId,
       address: scopeData?.address,
       projectType: scopeData?.projectType,
-      size: scopeData?.size,
       useUnionLabor: scopeData?.useUnionLabor,
       estimateConfig: scopeData?.estimateConfig,
       planImageUrl: scopeData?.planImageUrl,
@@ -214,7 +210,6 @@ export async function updateProjectScope(
     if (scopeData.description !== undefined) updateData.description = scopeData.description;
     if (scopeData.address !== undefined) updateData.address = scopeData.address;
     if (scopeData.projectType !== undefined) updateData.projectType = scopeData.projectType;
-    if (scopeData.size !== undefined) updateData.size = scopeData.size;
     if (scopeData.useUnionLabor !== undefined) updateData.useUnionLabor = scopeData.useUnionLabor;
     if (scopeData.estimateConfig !== undefined) updateData.estimateConfig = scopeData.estimateConfig;
     if (scopeData.planImageUrl !== undefined) updateData.planImageUrl = scopeData.planImageUrl;

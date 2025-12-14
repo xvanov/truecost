@@ -20,6 +20,7 @@ export interface Collaborator {
 
 // Structured address for location-specific pricing
 export interface ProjectAddress {
+  formattedAddress: string; // Full address as selected from autocomplete
   streetAddress: string;
   city: string;
   state: string;
@@ -32,7 +33,6 @@ export interface EstimateConfig {
   projectName?: string;
   address?: ProjectAddress; // Structured address for accurate location pricing
   projectType?: string;
-  approximateSize?: string;
   useUnionLabor?: boolean;
   
   // Scope definition (user-provided description)
@@ -64,7 +64,6 @@ export interface Project {
   // Scope fields
   address?: ProjectAddress; // Structured address
   projectType?: string;
-  size?: string;
   useUnionLabor?: boolean;
   estimateConfig?: EstimateConfig;
 

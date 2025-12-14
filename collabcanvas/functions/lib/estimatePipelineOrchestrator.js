@@ -9,11 +9,18 @@ exports.updatePipelineStage = exports.triggerEstimatePipeline = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
-// Initialize Firebase Admin if not already initialized
-if ((0, app_1.getApps)().length === 0) {
-    (0, app_1.initializeApp)();
+// Lazy initialization to avoid timeout during module load
+let _db = null;
+function getDb() {
+    if (!_db) {
+        // Initialize Firebase Admin if not already initialized
+        if ((0, app_1.getApps)().length === 0) {
+            (0, app_1.initializeApp)();
+        }
+        _db = (0, firestore_1.getFirestore)();
+    }
+    return _db;
 }
-const db = (0, firestore_1.getFirestore)();
 /**
  * Pipeline stages for the estimate generation pipeline
  * Note: Clarification runs separately during Annotate phase (Epic 3)
@@ -98,6 +105,7 @@ function buildClarificationOutput(context, pipelineId) {
  * Gather project context data for the pipeline
  */
 async function gatherProjectContext(projectId) {
+    const db = getDb();
     // Get project document
     const projectRef = db.collection('projects').doc(projectId);
     const projectDoc = await projectRef.get();
@@ -163,6 +171,7 @@ exports.triggerEstimatePipeline = (0, https_1.onCall)({
         if (!request.auth) {
             throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
         }
+        const db = getDb();
         // Verify the user has access to this project
         const projectRef = db.collection('projects').doc(projectId);
         const projectDoc = await projectRef.get();
@@ -280,6 +289,7 @@ exports.updatePipelineStage = (0, https_1.onCall)({
         if (!projectId) {
             throw new https_1.HttpsError('invalid-argument', 'Project ID is required');
         }
+        const db = getDb();
         const statusRef = db.collection('projects').doc(projectId).collection('pipeline').doc('status');
         const statusDoc = await statusRef.get();
         if (!statusDoc.exists) {

@@ -8,7 +8,7 @@ import type { StoreApi } from 'zustand';
 import type { Shape, Lock, Presence, User, SelectionBox, TransformControls, CanvasAction, CreateActionData, UpdateActionData, MoveActionData, BulkDuplicateActionData, BulkMoveActionData, BulkRotateActionData, Layer, AlignmentType, SnapIndicator, AICommand, AIStatus, BackgroundImage, ScaleLine, UnitType, DialogueContext, DialogueStage, BillOfMaterials, MaterialCalculation, UserMaterialPreferences } from '../types';
 import type { ConnectionState } from '../services/offline';
 import { isHarnessEnabled, registerHarnessApi } from '../utils/harness';
-import { createHistoryService } from '../services/historyService';
+import { createHistoryService, createAction } from '../services/historyService';
 import { saveBackgroundImage, saveScaleLine, deleteScaleLineFromFirestore, deleteBackgroundImageFromFirestore, subscribeToBoardState, type FirestoreBoardState } from '../services/firestore';
 import { AIService } from '../services/aiService';
 import { AICommandExecutor } from '../services/aiCommandExecutor';
@@ -368,14 +368,30 @@ function createProjectCanvasStore(projectId: string): StoreApi<CanvasState> {
       // Initial state - all project-scoped stores start empty
       shapes: new Map<string, Shape>(),
       
-      createShape: (shape: Shape) =>
+      createShape: (shape: Shape) => {
+        const state = get();
+        const currentUser = state.currentUser;
+
         set((state: CanvasState) => {
           const newShapes = new Map(state.shapes);
           newShapes.set(shape.id, shape);
           return { shapes: newShapes };
-        }),
+        });
+
+        // Record in history for undo/redo
+        if (currentUser) {
+          const action = createAction.create(shape.id, shape, currentUser.uid);
+          historyService.pushAction(action);
+        }
+      },
       
-      updateShapePosition: (id: string, x: number, y: number, updatedBy: string, clientUpdatedAt: number) =>
+      updateShapePosition: (id: string, x: number, y: number, updatedBy: string, clientUpdatedAt: number) => {
+        const state = get();
+        const currentUser = state.currentUser;
+        const shape = state.shapes.get(id);
+        const previousX = shape?.x ?? 0;
+        const previousY = shape?.y ?? 0;
+
         set((state: CanvasState) => {
           const newShapes = new Map(state.shapes);
           const shape = newShapes.get(id);
@@ -390,9 +406,21 @@ function createProjectCanvasStore(projectId: string): StoreApi<CanvasState> {
             });
           }
           return { shapes: newShapes };
-        }),
+        });
+
+        // Record in history for undo/redo (only if position actually changed)
+        if (currentUser && (x !== previousX || y !== previousY)) {
+          const action = createAction.move(id, x, y, previousX, previousY, currentUser.uid);
+          historyService.pushAction(action);
+        }
+      },
       
-      updateShapeProperty: (id: string, property: keyof Shape, value: unknown, updatedBy: string, clientUpdatedAt: number) =>
+      updateShapeProperty: (id: string, property: keyof Shape, value: unknown, updatedBy: string, clientUpdatedAt: number) => {
+        const state = get();
+        const currentUser = state.currentUser;
+        const shape = state.shapes.get(id);
+        const previousValue = shape ? shape[property] : undefined;
+
         set((state) => {
           const newShapes = new Map(state.shapes);
           const shape = newShapes.get(id);
@@ -406,7 +434,14 @@ function createProjectCanvasStore(projectId: string): StoreApi<CanvasState> {
             });
           }
           return { shapes: newShapes };
-        }),
+        });
+
+        // Record in history for undo/redo (only if value actually changed)
+        if (currentUser && value !== previousValue) {
+          const action = createAction.update(id, property, value, previousValue, currentUser.uid);
+          historyService.pushAction(action);
+        }
+      },
       
       setShapes: (shapes: Shape[]) =>
         set(() => ({

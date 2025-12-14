@@ -12,7 +12,7 @@ export function ChatMessage({ role, content, timestamp }: ChatMessageProps) {
     <div className={`flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className="max-w-[80%]">
         <p className="font-body text-body-meta text-truecost-text-muted mb-1 px-2">
-          {role === 'agent' ? 'TrueCost AI' : 'You'}
+          {role === 'agent' ? 'Project Assistant' : 'You'}
         </p>
         <div
           className={`

@@ -24,9 +24,8 @@ const steps: Step[] = [
  * Features:
  * - Three steps: Scope, Annotate, Estimate
  * - Current step is highlighted with cyan/teal gradient
- * - Completed steps are clickable (navigate to route)
- * - Next step is always accessible (users can move forward freely)
- * - Only steps 2+ ahead are disabled
+ * - All steps are clickable for easy navigation
+ * - Completed steps show a checkmark
  */
 export function EstimateStepper({
   currentStep,
@@ -41,15 +40,12 @@ export function EstimateStepper({
     if (step.id === currentStep) return 'current';
     if (completedSteps.includes(step.id)) return 'completed';
     if (index < currentStepIndex) return 'completed'; // All previous steps are implicitly completed
-    if (index === currentStepIndex + 1) return 'next'; // Next step is always accessible
-    return 'future';
+    return 'available'; // All other steps are available for navigation
   };
 
-  const handleStepClick = (step: Step, state: string) => {
-    // Allow navigation to completed, current, or next step
-    if (state === 'completed' || state === 'current' || state === 'next') {
-      navigate(step.route(projectId));
-    }
+  const handleStepClick = (step: Step) => {
+    // Allow navigation to any step
+    navigate(step.route(projectId));
   };
 
   return (
@@ -63,18 +59,15 @@ export function EstimateStepper({
             <div key={step.id} className="flex items-center">
               {/* Step Circle + Label */}
               <button
-                onClick={() => handleStepClick(step, state)}
-                disabled={state === 'future'}
+                onClick={() => handleStepClick(step)}
                 className={`
-                  flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-200
+                  flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-200 cursor-pointer
                   ${
                     state === 'current'
-                      ? 'bg-gradient-to-br from-truecost-cyan to-truecost-teal text-truecost-bg-primary font-semibold cursor-default'
+                      ? 'bg-gradient-to-br from-truecost-cyan to-truecost-teal text-truecost-bg-primary font-semibold'
                       : state === 'completed'
-                        ? 'bg-truecost-glass-bg text-truecost-cyan hover:bg-truecost-cyan/20 cursor-pointer'
-                        : state === 'next'
-                          ? 'bg-truecost-glass-bg text-truecost-text-primary hover:bg-truecost-cyan/10 cursor-pointer border border-truecost-glass-border'
-                          : 'bg-truecost-glass-bg/50 text-truecost-text-muted cursor-not-allowed opacity-50'
+                        ? 'bg-truecost-glass-bg text-truecost-cyan hover:bg-truecost-cyan/20'
+                        : 'bg-truecost-glass-bg text-truecost-text-primary hover:bg-truecost-cyan/10 border border-truecost-glass-border'
                   }
                 `}
               >
@@ -87,9 +80,7 @@ export function EstimateStepper({
                         ? 'bg-white/20 text-truecost-bg-primary'
                         : state === 'completed'
                           ? 'bg-truecost-cyan/20 text-truecost-cyan'
-                          : state === 'next'
-                            ? 'bg-truecost-glass-border text-truecost-text-primary'
-                            : 'bg-truecost-glass-border text-truecost-text-muted'
+                          : 'bg-truecost-glass-border text-truecost-text-primary'
                     }
                   `}
                 >

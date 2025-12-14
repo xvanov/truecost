@@ -4,7 +4,6 @@
  * PRIMARY: Uses user annotations (polylines, polygons, bounding boxes) with scale for accurate measurements
  * SECONDARY: Uses OpenAI Vision only for inference/gap-filling when annotations are insufficient
  */
-var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.estimationPipeline = void 0;
 const https_1 = require("firebase-functions/v2/https");
@@ -14,20 +13,35 @@ const firestore_1 = require("firebase-admin/firestore");
 const dotenv = require("dotenv");
 const path = require("path");
 const annotationQuantifier_1 = require("./annotationQuantifier");
-// Initialize Firebase Admin if not already
-if (!admin.apps.length) {
-    admin.initializeApp();
+// Lazy initialization to avoid timeout during module load
+let _openai = null;
+let _apiKey = null;
+function getApiKey() {
+    var _a;
+    if (_apiKey === null) {
+        // Load environment variables
+        const envPath = path.resolve(process.cwd(), '.env');
+        const envResult = dotenv.config({ path: envPath, override: true });
+        const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
+        const apiKeyFromEnv = (_a = envResult.parsed) === null || _a === void 0 ? void 0 : _a.OPENAI_API_KEY;
+        const apiKeyFromProcess = process.env.OPENAI_API_KEY;
+        _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
+        if (!_apiKey) {
+            console.warn('⚠️ OPENAI_API_KEY not found. LLM inference will not work.');
+        }
+    }
+    return _apiKey;
 }
-// Load environment variables
-const envPath = path.resolve(process.cwd(), '.env');
-const envResult = dotenv.config({ path: envPath, override: true });
-const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-const apiKeyFromEnv = (_a = envResult.parsed) === null || _a === void 0 ? void 0 : _a.OPENAI_API_KEY;
-const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-const apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-const openai = new openai_1.OpenAI({ apiKey });
-if (!apiKey) {
-    console.warn('⚠️ OPENAI_API_KEY not found. LLM inference will not work.');
+function getOpenAI() {
+    if (!_openai) {
+        _openai = new openai_1.OpenAI({ apiKey: getApiKey() });
+    }
+    return _openai;
+}
+function initFirebaseAdmin() {
+    if (!admin.apps.length) {
+        admin.initializeApp();
+    }
 }
 // ===================
 // CSI DIVISION TEMPLATE
@@ -142,6 +156,7 @@ Return JSON with:
 IMPORTANT: Do NOT provide quantities for walls, floors, doors, or windows - those are computed from annotations.`;
 async function inferMissingData(quantities, scopeText, clarificationData, planImageUrl) {
     var _a, _b;
+    const apiKey = getApiKey();
     if (!apiKey) {
         console.log('[ESTIMATION] No API key - skipping LLM inference');
         return {
@@ -165,8 +180,9 @@ async function inferMissingData(quantities, scopeText, clarificationData, planIm
         .replace('{clarificationData}', JSON.stringify(clarificationData, null, 2));
     try {
         // Build messages for OpenAI
+        const openai = getOpenAI();
         let response;
-        if (planImageUrl && apiKey) {
+        if (planImageUrl) {
             let imageContent = planImageUrl;
             if (isLocalUrl(planImageUrl)) {
                 imageContent = await imageUrlToBase64(planImageUrl);
@@ -446,6 +462,7 @@ exports.estimationPipeline = (0, https_1.onCall)({
             },
         };
         // Save to Firestore (use set with merge to create if doesn't exist)
+        initFirebaseAdmin();
         const db = admin.firestore();
         await db.collection('projects').doc(projectId)
             .collection('estimations').doc(sessionId)
