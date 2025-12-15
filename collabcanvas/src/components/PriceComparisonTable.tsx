@@ -25,21 +25,21 @@ const DISPLAYED_RETAILERS: Retailer[] = ['homeDepot', 'lowes']
 export function PriceComparisonTable({ results }: Props) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse bg-white rounded-lg shadow">
+      <table className="w-full border-collapse">
         <thead>
-          <tr className="bg-gray-100">
-            <th className="p-3 text-left font-semibold text-black">Product</th>
+          <tr className="bg-truecost-bg-secondary">
+            <th className="p-3 text-left font-semibold text-truecost-text-primary">Product</th>
             {DISPLAYED_RETAILERS.map((retailer) => (
-              <th key={retailer} className="p-3 text-left font-semibold text-black">
+              <th key={retailer} className="p-3 text-left font-semibold text-truecost-text-primary">
                 {RETAILER_LABELS[retailer]}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-truecost-glass-border">
           {results.map((result) => (
-            <tr key={result.originalProductName} className="border-t">
-              <td className="p-3 font-medium text-black">{result.originalProductName}</td>
+            <tr key={result.originalProductName} className="hover:bg-truecost-glass-bg">
+              <td className="p-3 font-medium text-truecost-text-primary">{result.originalProductName}</td>
               {DISPLAYED_RETAILERS.map((retailer) => (
                 <ProductCell
                   key={retailer}
@@ -65,7 +65,7 @@ function ProductCell({
   // Handle missing retailer data (retailer not queried)
   if (!match) {
     return (
-      <td className="p-3 bg-gray-100 text-black italic">
+      <td className="p-3 bg-truecost-bg-secondary text-truecost-text-muted italic">
         Not available
       </td>
     )
@@ -75,19 +75,21 @@ function ProductCell({
 
   if (!product) {
     return (
-      <td className="p-3 bg-gray-50 text-black">
+      <td className="p-3 text-truecost-text-muted">
         No match found
       </td>
     )
   }
 
   return (
-    <td className={`p-3 ${isBest ? 'bg-green-50' : ''}`}>
+    <td className={`p-3 ${isBest ? 'bg-truecost-success/10' : ''}`}>
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-black">${product.price.toFixed(2)}</span>
+          <span className={`font-semibold ${isBest ? 'text-truecost-success' : 'text-truecost-cyan'}`}>
+            ${product.price.toFixed(2)}
+          </span>
           {isBest && (
-            <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded">
+            <span className="text-xs bg-truecost-success text-white px-2 py-0.5 rounded">
               BEST
             </span>
           )}
@@ -96,7 +98,7 @@ function ProductCell({
           href={product.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-black hover:underline truncate"
+          className="text-sm text-truecost-text-secondary hover:text-truecost-cyan hover:underline truncate"
         >
           {product.name}
         </a>

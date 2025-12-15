@@ -20,9 +20,11 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
+import asyncio
 import time
 import io
 import os
+import base64
 
 import structlog
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -32,6 +34,54 @@ logger = structlog.get_logger(__name__)
 
 # Template directory
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
+
+# Assets directory
+ASSETS_DIR = Path(__file__).parent.parent / "assets"
+
+
+def _load_logo_base64() -> str:
+    """
+    Load logo image as base64 string for embedding in PDF.
+    
+    Returns:
+        Base64-encoded PNG string, or empty string if not found
+    """
+    logo_path = ASSETS_DIR / "logo.png"
+    if logo_path.exists():
+        with open(logo_path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    logger.warning("logo_not_found", path=str(logo_path))
+    return ""
+
+
+def _parse_square_footage(value) -> float:
+    """
+    Parse square footage from various formats to a float.
+    
+    Handles:
+    - Numbers (int/float): returns as-is
+    - Strings like "0 sq ft", "1500", "1,500 sq ft": extracts numeric value
+    - Empty/None: returns 0
+    
+    Returns:
+        Square footage as a float, defaulting to 0 if unparseable
+    """
+    if value is None or value == "":
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        # Remove common suffixes and extract number
+        import re
+        # Remove "sq ft", "sqft", "sf" etc and commas
+        cleaned = re.sub(r'[,\s]*(sq\.?\s*ft\.?|sqft|sf)\s*$', '', value, flags=re.IGNORECASE)
+        cleaned = cleaned.replace(',', '').strip()
+        try:
+            return float(cleaned) if cleaned else 0.0
+        except ValueError:
+            return 0.0
+    return 0.0
+
 
 # Available sections for PDF generation
 ALL_SECTIONS = [
@@ -256,19 +306,23 @@ def _render_html(
     env = _get_jinja_env()
     template = env.get_template("estimate_report.html")
 
+    # Load logo for embedding
+    logo_base64 = _load_logo_base64()
+
     # Build template context
     context = {
         "estimate_id": estimate_id,
         "report_date": datetime.now().strftime("%B %d, %Y"),
         "sections": sections,
         "client_ready": client_ready,
+        "logo_base64": logo_base64,
         # Project information
         "project": {
             "name": estimate_data.get("projectName", "Construction Project"),
             "address": estimate_data.get("address", "Address not specified"),
             "type": estimate_data.get("projectType", "Residential"),
             "scope": estimate_data.get("scope", ""),
-            "square_footage": estimate_data.get("squareFootage", ""),
+            "square_footage": _parse_square_footage(estimate_data.get("squareFootage", 0)),
         },
         # Estimate summary
         "estimate": {
