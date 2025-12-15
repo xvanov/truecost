@@ -75,15 +75,14 @@ export function ContractorSettings() {
 
   return (
     <AuthenticatedLayout>
-      <div className="container-spacious max-w-7xl pt-24 pb-16 md:pt-28">
+      <div className="container-spacious max-w-7xl px-3 md:px-6 pt-16 pb-16 md:pt-24">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="font-heading text-h1 text-truecost-text-primary mb-2">
+        <div className="mb-4 md:mb-8">
+          <h1 className="font-heading text-xl md:text-h1 text-truecost-text-primary mb-1 md:mb-2">
             Contractor Settings
           </h1>
-          <p className="font-body text-body text-truecost-text-secondary">
-            Configure your crews, material pricing, and supplier relationships. These settings
-            apply across all your projects.
+          <p className="font-body text-sm md:text-body text-truecost-text-secondary">
+            Configure your crews, material pricing, and supplier relationships.
           </p>
         </div>
 
@@ -95,17 +94,17 @@ export function ContractorSettings() {
         )}
 
         {/* Summary cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-3 gap-2 md:gap-4 mb-4 md:mb-8">
           <SummaryCard
             icon="👷"
-            label="Crew Templates"
+            label="Crews"
             count={crews.length}
             onClick={() => setActiveTab('crews')}
             isActive={activeTab === 'crews'}
           />
           <SummaryCard
             icon="📦"
-            label="Custom Materials"
+            label="Materials"
             count={materials.length}
             onClick={() => setActiveTab('materials')}
             isActive={activeTab === 'materials'}
@@ -120,14 +119,14 @@ export function ContractorSettings() {
         </div>
 
         {/* Tab navigation */}
-        <div className="border-b border-truecost-glass-border mb-6">
-          <nav className="-mb-px flex space-x-8">
+        <div className="border-b border-truecost-glass-border mb-4 md:mb-6 overflow-x-auto">
+          <nav className="-mb-px flex space-x-2 md:space-x-8">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
-                  py-4 px-1 border-b-2 font-heading text-body font-medium transition-all duration-120
+                  py-2 md:py-4 px-2 md:px-1 border-b-2 font-heading text-xs md:text-body font-medium transition-all duration-120 whitespace-nowrap
                   ${
                     activeTab === tab.id
                       ? 'border-truecost-cyan text-truecost-cyan'
@@ -135,8 +134,8 @@ export function ContractorSettings() {
                   }
                 `}
               >
-                <span className="mr-2">{tab.icon}</span>
-                {tab.label}
+                <span className="mr-1 md:mr-2">{tab.icon}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
               </button>
             ))}
           </nav>
@@ -154,7 +153,7 @@ export function ContractorSettings() {
 
         {/* Tab content */}
         {initialized && (
-          <GlassPanel className="p-6">
+          <GlassPanel className="p-3 md:p-6">
             {activeTab === 'crews' && <CrewsTab userId={user.uid} />}
             {activeTab === 'materials' && <MaterialsTab userId={user.uid} />}
             {activeTab === 'suppliers' && <SuppliersTab userId={user.uid} />}
@@ -179,7 +178,7 @@ function SummaryCard({ icon, label, count, onClick, isActive }: SummaryCardProps
     <button
       onClick={onClick}
       className={`
-        glass-panel-hover p-6 text-left w-full transition-all duration-120
+        glass-panel-hover p-3 md:p-6 text-left w-full transition-all duration-120
         ${
           isActive
             ? 'border-truecost-cyan shadow-[0_0_16px_rgba(59,227,245,0.3)]'
@@ -187,11 +186,11 @@ function SummaryCard({ icon, label, count, onClick, isActive }: SummaryCardProps
         }
       `}
     >
-      <div className="flex items-center">
-        <span className="text-3xl mr-4">{icon}</span>
-        <div>
-          <p className="font-heading text-h2 text-truecost-text-primary">{count}</p>
-          <p className="font-body text-body-meta text-truecost-text-secondary">{label}</p>
+      <div className="flex flex-col md:flex-row items-center md:items-center gap-1 md:gap-0">
+        <span className="text-xl md:text-3xl md:mr-4">{icon}</span>
+        <div className="text-center md:text-left">
+          <p className="font-heading text-lg md:text-h2 text-truecost-text-primary">{count}</p>
+          <p className="font-body text-xs md:text-body-meta text-truecost-text-secondary">{label}</p>
         </div>
       </div>
     </button>

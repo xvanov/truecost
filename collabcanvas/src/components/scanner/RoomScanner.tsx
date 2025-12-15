@@ -1,14 +1,15 @@
 /**
  * Room Scanner Component
  *
- * Provides integration with Canvas app for LiDAR room scanning
- * - Instructions for using Canvas
- * - Import measurements from Canvas
- * - Manual room entry fallback
+ * Provides room scanning with multiple methods:
+ * - ARCore native scanning (Android) - Uses plane detection and depth API
+ * - Canvas LiDAR scanning (iOS) - Import measurements from Canvas app
+ * - Manual room entry - Fallback for any device
  * - Generate scope items from scanned rooms
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Button, Input, GlassPanel } from '../ui';
 import {
   createRoom,
@@ -19,6 +20,7 @@ import {
 } from '../../services/roomScanService';
 import type { ScannedRoom, RoomType, RoomFeature } from '../../types/roomScan';
 import { ROOM_TYPE_LABELS, FEATURE_TYPE_LABELS } from '../../types/roomScan';
+import ARCoreRoomScanner from '../../plugins/ARCoreRoomScanner';
 
 interface RoomScannerProps {
   projectId: string;
@@ -28,13 +30,89 @@ interface RoomScannerProps {
   ) => void;
 }
 
-type ViewMode = 'home' | 'canvas-guide' | 'import' | 'manual' | 'review';
+type ViewMode = 'home' | 'canvas-guide' | 'import' | 'manual' | 'review' | 'arcore-scanning';
 
 export function RoomScanner({ onRoomsScanned, onScopeGenerated }: RoomScannerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('home');
   const [rooms, setRooms] = useState<ScannedRoom[]>([]);
   const [importText, setImportText] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
+
+  // ARCore state
+  const [isAndroid, setIsAndroid] = useState(false);
+  const [arCoreAvailable, setArCoreAvailable] = useState(false);
+  const [arCoreScanning, setArCoreScanning] = useState(false);
+  const [arCoreError, setArCoreError] = useState<string | null>(null);
+
+  // Check ARCore availability on mount
+  useEffect(() => {
+    const checkARCore = async () => {
+      const platform = Capacitor.getPlatform();
+      setIsAndroid(platform === 'android');
+
+      if (platform === 'android') {
+        try {
+          const availability = await ARCoreRoomScanner.checkAvailability();
+          setArCoreAvailable(availability.isSupported);
+        } catch {
+          setArCoreAvailable(false);
+        }
+      }
+    };
+
+    checkARCore();
+  }, []);
+
+  // Handle ARCore room scan
+  const handleARCoreScan = async () => {
+    setArCoreError(null);
+    setArCoreScanning(true);
+
+    try {
+      // Request camera permission first
+      const permission = await ARCoreRoomScanner.requestPermission();
+      if (!permission.granted) {
+        setArCoreError('Camera permission is required for AR scanning');
+        setArCoreScanning(false);
+        return;
+      }
+
+      // Start the scan
+      const result = await ARCoreRoomScanner.startScan();
+
+      if (result.success && result.dimensions) {
+        // Create room from ARCore scan results
+        const newRoom: ScannedRoom = {
+          id: `room_${Date.now()}_arcore`,
+          name: 'Scanned Room',
+          type: 'other',
+          dimensions: {
+            length: result.dimensions.length,
+            width: result.dimensions.width,
+            height: result.dimensions.height,
+            area: result.dimensions.area,
+            volume: result.dimensions.volume,
+          },
+          features: result.features?.map((f) => ({
+            type: f.type,
+            count: f.count,
+          })) || [],
+          scanDate: new Date(),
+          sourceApp: 'arcore',
+        };
+
+        setRooms((prev) => [...prev, newRoom]);
+        setViewMode('review');
+      } else {
+        setArCoreError(result.reason || 'Scan was cancelled');
+      }
+    } catch (err) {
+      setArCoreError('Failed to scan room. Please try again or use manual entry.');
+      console.error('ARCore scan error:', err);
+    } finally {
+      setArCoreScanning(false);
+    }
+  };
 
   // Manual entry form
   const [manualForm, setManualForm] = useState({
@@ -158,32 +236,63 @@ export function RoomScanner({ onRoomsScanned, onScopeGenerated }: RoomScannerPro
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Canvas/LiDAR Option */}
-          <button
-            onClick={() => setViewMode('canvas-guide')}
-            className="glass-panel-hover p-6 text-left transition-all duration-120 group"
-          >
-            <div className="flex items-start gap-4">
-              <div className="text-4xl">📱</div>
-              <div>
-                <h3 className="font-heading text-body font-medium text-truecost-text-primary group-hover:text-truecost-cyan transition-colors">
-                  LiDAR Scan with Canvas
-                </h3>
-                <p className="font-body text-body-meta text-truecost-text-secondary mt-1">
-                  Use iPhone/iPad LiDAR for professional-grade 3D scanning with 99%
-                  accuracy
-                </p>
-                <div className="flex items-center gap-2 mt-3">
-                  <span className="text-xs bg-truecost-teal/20 text-truecost-teal px-2 py-0.5 rounded-full">
-                    Recommended
-                  </span>
-                  <span className="text-xs text-truecost-text-muted">
-                    Requires iPhone 12 Pro+
-                  </span>
+          {/* ARCore Option - Android Only */}
+          {isAndroid && arCoreAvailable && (
+            <button
+              onClick={handleARCoreScan}
+              disabled={arCoreScanning}
+              className="glass-panel-hover p-6 text-left transition-all duration-120 group disabled:opacity-50"
+            >
+              <div className="flex items-start gap-4">
+                <div className="text-4xl">{arCoreScanning ? '⏳' : '📐'}</div>
+                <div>
+                  <h3 className="font-heading text-body font-medium text-truecost-text-primary group-hover:text-truecost-cyan transition-colors">
+                    {arCoreScanning ? 'Scanning...' : 'AR Room Scan'}
+                  </h3>
+                  <p className="font-body text-body-meta text-truecost-text-secondary mt-1">
+                    Use your camera to scan room dimensions with ARCore depth sensing
+                  </p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className="text-xs bg-truecost-teal/20 text-truecost-teal px-2 py-0.5 rounded-full">
+                      Recommended
+                    </span>
+                    <span className="text-xs text-truecost-text-muted">
+                      Native Android AR
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </button>
+            </button>
+          )}
+
+          {/* Canvas/LiDAR Option - Show for iOS or when ARCore not available */}
+          {(!isAndroid || !arCoreAvailable) && (
+            <button
+              onClick={() => setViewMode('canvas-guide')}
+              className="glass-panel-hover p-6 text-left transition-all duration-120 group"
+            >
+              <div className="flex items-start gap-4">
+                <div className="text-4xl">📱</div>
+                <div>
+                  <h3 className="font-heading text-body font-medium text-truecost-text-primary group-hover:text-truecost-cyan transition-colors">
+                    LiDAR Scan with Canvas
+                  </h3>
+                  <p className="font-body text-body-meta text-truecost-text-secondary mt-1">
+                    Use iPhone/iPad LiDAR for professional-grade 3D scanning with 99%
+                    accuracy
+                  </p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className="text-xs bg-truecost-teal/20 text-truecost-teal px-2 py-0.5 rounded-full">
+                      Recommended
+                    </span>
+                    <span className="text-xs text-truecost-text-muted">
+                      Requires iPhone 12 Pro+
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </button>
+          )}
 
           {/* Manual Entry Option */}
           <button
@@ -208,6 +317,21 @@ export function RoomScanner({ onRoomsScanned, onScopeGenerated }: RoomScannerPro
             </div>
           </button>
         </div>
+
+        {/* ARCore Error Message */}
+        {arCoreError && (
+          <div className="bg-truecost-danger/10 border border-truecost-danger/30 rounded-lg p-4">
+            <p className="font-body text-body-meta text-truecost-danger">
+              {arCoreError}
+            </p>
+            <button
+              onClick={() => setArCoreError(null)}
+              className="font-body text-body-meta text-truecost-text-secondary hover:text-truecost-text-primary mt-2"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Already have rooms */}
         {rooms.length > 0 && (
@@ -577,7 +701,7 @@ Area: 120 sq ft
                   </p>
                 </div>
                 <span className="text-xs bg-truecost-cyan/20 text-truecost-cyan px-2 py-0.5 rounded-full">
-                  {room.sourceApp === 'canvas' ? 'LiDAR' : 'Manual'}
+                  {room.sourceApp === 'canvas' ? 'LiDAR' : room.sourceApp === 'arcore' ? 'ARCore' : 'Manual'}
                 </span>
               </div>
 
