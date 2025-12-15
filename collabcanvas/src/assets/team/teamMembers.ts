@@ -49,7 +49,7 @@ export const teamMembers: TeamMember[] = [
     name: "Atharva Sardar",
     role: "Co-Founder & CAIO",
     image: atharvaImg,
-    desc: "Ash has been looking for him since 2025",
+    desc: "",
     linkedin: "https://www.linkedin.com/in/atharva-sardar-983349192/",
   },
   {
