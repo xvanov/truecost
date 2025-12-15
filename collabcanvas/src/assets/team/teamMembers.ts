@@ -13,6 +13,7 @@ export interface TeamMember {
   role: string;
   image: string;
   desc?: string;
+  linkedin?: string;
 }
 
 export const teamMembers: TeamMember[] = [
@@ -21,35 +22,41 @@ export const teamMembers: TeamMember[] = [
     role: "Co-Founder & CEO",
     image: kalinImg,
     desc: "",
+    linkedin: "https://www.linkedin.com/in/kalin-the-analyst/",
   },
   {
     name: "Yahav Corcos",
     role: "Co-Founder & COO",
     image: yahavImg,
     desc: "",
+    linkedin: "https://www.linkedin.com/in/yahavcorcos/",
   },
   {
     name: "Ankit Rijal",
     role: "Co-Founder & CTO",
     image: ankitImg,
     desc: "",
+    linkedin: "https://www.linkedin.com/in/ankitrjl2054/",
   },
   {
     name: "Kishor Kashid",
     role: "Co-Founder & CFO",
     image: kishorImg,
     desc: "",
+    linkedin: "https://www.linkedin.com/in/kishor-kashid/",
   },
   {
     name: "Atharva Sardar",
     role: "Co-Founder & CAIO",
     image: atharvaImg,
     desc: "Ash has been looking for him since 2025",
+    linkedin: "https://www.linkedin.com/in/atharva-sardar-983349192/",
   },
   {
     name: "Sainatha Yatham",
     role: "CIO",
     image: sainathaImg,
     desc: "",
+    linkedin: "https://www.linkedin.com/in/sainathayatham/",
   },
 ];
