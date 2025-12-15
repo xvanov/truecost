@@ -1,38 +1,34 @@
 /**
- * DemoPage - Step-by-step demo walkthrough of the TrueCost estimation workflow
+ * DemoPage - Full-screen step-by-step demo walkthrough of the TrueCost estimation workflow
  * Shows hardcoded bathroom remodel example through Scope → Annotate → Estimate
  * Toggle through each step with Previous/Next buttons
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { PublicLayout } from "../components/layouts/PublicLayout";
 
 // Asset imports
 import heroVideo from "../assets/animated_hero.mp4";
 import logo from "../assets/logo.png";
-import floorPlanImage from "../assets/floor_plan.png";
+import floorPlanGemini from "../assets/floor_plan_gemini.png";
 import qrCodeImage from "../assets/qr-code.png";
 import { teamMembers } from "../assets/team/teamMembers";
+import "../styles/hero.css";
 
-// All demo steps in order
+// All demo steps in order (simplified - removed materials, labor, timeline, risk pages)
 const DEMO_STEPS = [
   { id: "home", label: "Welcome", phase: "home" },
   { id: "scope", label: "Project Scope", phase: "scope" },
   { id: "annotate-plan", label: "Plan Annotations", phase: "annotate" },
   { id: "annotate-chat", label: "AI Clarification", phase: "annotate" },
-  { id: "gen-1", label: "Analyzing blueprints", phase: "generating" },
-  { id: "gen-2", label: "Extracting scope items", phase: "generating" },
-  { id: "gen-3", label: "Calculating materials", phase: "generating" },
-  { id: "gen-4", label: "Pricing & labor", phase: "generating" },
-  { id: "gen-5", label: "Building timeline", phase: "generating" },
-  { id: "gen-6", label: "Analyzing risks", phase: "generating" },
-  { id: "gen-7", label: "Final assembly", phase: "generating" },
+  { id: "gen-1", label: "Scope Agent", phase: "generating" },
+  { id: "gen-2", label: "Location Agent", phase: "generating" },
+  { id: "gen-3", label: "Cost Agent", phase: "generating" },
+  { id: "gen-4", label: "Code Compliance Agent", phase: "generating" },
+  { id: "gen-5", label: "Risk Agent", phase: "generating" },
+  { id: "gen-6", label: "Timeline Agent", phase: "generating" },
+  { id: "gen-7", label: "Final Agent", phase: "generating" },
   { id: "result-summary", label: "Estimate Summary", phase: "results" },
-  { id: "result-materials", label: "Materials", phase: "results" },
-  { id: "result-labor", label: "Labor", phase: "results" },
-  { id: "result-timeline", label: "Timeline", phase: "results" },
-  { id: "result-risks", label: "Risk Analysis", phase: "results" },
   { id: "result-price-compare", label: "Price Comparison", phase: "results" },
   { id: "result-pdf", label: "PDF Reports", phase: "results" },
   { id: "result-accuracy", label: "Estimate Accuracy", phase: "results" },
@@ -56,13 +52,14 @@ const DEMO_SCOPE = {
   },
 };
 
-const DEMO_ANNOTATIONS = [
-  { id: 1, label: "Shower Cabin", area: "42 sq ft", type: "tile" },
-  { id: 2, label: "Floor Area", area: "85 sq ft", type: "tile" },
-  { id: 3, label: "Knee Wall", area: "12 linear ft", type: "framing" },
-  { id: 4, label: "Recessed Lights", count: "6 fixtures", type: "electrical" },
-  { id: 5, label: "Toilet Location", count: "1 unit", type: "plumbing" },
-  { id: 6, label: "Cabinets", area: "24 sq ft", type: "paint" },
+// CSI Divisions detected from scope
+const CSI_DIVISIONS = [
+  { code: "03", name: "Concrete", items: ["Foundation repair allowance"] },
+  { code: "06", name: "Wood, Plastics, and Composites", items: ["Knee wall framing", "Pressure treated 2x4 studs"] },
+  { code: "07", name: "Thermal & Moisture Protection", items: ["Waterproof membrane (Kerdi)", "Waterproofing corners & bands"] },
+  { code: "09", name: "Finishes", items: ["Large format porcelain tile", "Tile adhesive", "Epoxy grout", "Moisture resistant drywall", "Cabinet paint"] },
+  { code: "22", name: "Plumbing", items: ["Ceiling mount shower head", "Copper pipe", "Toilet", "Wax ring & bolts"] },
+  { code: "26", name: "Electrical", items: ["LED recessed light kit", "Dimmer switch", "Romex wire"] },
 ];
 
 const DEMO_ESTIMATE = {
@@ -110,29 +107,17 @@ const DEMO_ESTIMATE = {
     { id: 7, trade: "General Labor", hours: 20, rate: 45, total: 900 },
     { id: 8, trade: "Project Supervision", hours: 16, rate: 85, total: 1360 },
   ],
-  timeline: [
-    { phase: "Demo & Prep", days: 2, tasks: ["Remove existing tile", "Demo rotten framing", "Prep surfaces"] },
-    { phase: "Rough-In", days: 4, tasks: ["New framing", "Plumbing rough-in", "Electrical rough-in"] },
-    { phase: "Drywall & Waterproofing", days: 3, tasks: ["Install drywall", "Apply waterproofing", "Cure time"] },
-    { phase: "Tile Installation", days: 5, tasks: ["Wall tile", "Floor tile", "Grout and seal"] },
-    { phase: "Fixtures & Finish", days: 3, tasks: ["Install toilet", "Install lights", "Paint cabinets"] },
-    { phase: "Final Inspection", days: 1, tasks: ["Clean up", "Final walkthrough", "Punch list"] },
-  ],
-  risks: [
-    { level: "high", item: "Hidden water damage", mitigation: "Allow for additional demo contingency", impact: "$500-$2,000" },
-    { level: "medium", item: "Plumbing modifications complexity", mitigation: "Verified ceiling access available", impact: "$300-$800" },
-    { level: "low", item: "Tile delivery delays", mitigation: "Order materials 2 weeks ahead", impact: "1-3 day delay" },
-  ],
 };
 
+// Actual DeepAgent pipeline stages
 const PIPELINE_STAGES = [
-  { id: "gen-1", name: "Analyzing blueprints", percent: 10 },
-  { id: "gen-2", name: "Extracting scope items", percent: 25 },
-  { id: "gen-3", name: "Calculating material quantities", percent: 40 },
-  { id: "gen-4", name: "Pricing materials and labor", percent: 55 },
-  { id: "gen-5", name: "Building project timeline", percent: 70 },
-  { id: "gen-6", name: "Analyzing project risks", percent: 85 },
-  { id: "gen-7", name: "Assembling final estimate", percent: 100 },
+  { id: "gen-1", name: "Scope Agent", description: "Extracting and validating project scope from description", icon: "📋", percent: 10 },
+  { id: "gen-2", name: "Location Agent", description: "Analyzing regional labor rates and material costs for SF Bay Area", icon: "📍", percent: 25 },
+  { id: "gen-3", name: "Cost Agent", description: "Calculating material quantities and pricing from multiple vendors", icon: "💰", percent: 40 },
+  { id: "gen-4", name: "Code Compliance Agent", description: "Verifying building codes and permit requirements", icon: "📜", percent: 55 },
+  { id: "gen-5", name: "Risk Agent", description: "Identifying potential risks and mitigation strategies", icon: "⚠️", percent: 70 },
+  { id: "gen-6", name: "Timeline Agent", description: "Building project schedule with trade dependencies", icon: "📅", percent: 85 },
+  { id: "gen-7", name: "Final Agent", description: "Assembling comprehensive estimate with Monte Carlo simulation", icon: "✅", percent: 100 },
 ];
 
 // Price comparison data - Home Depot vs Lowes
@@ -255,32 +240,25 @@ const ACCURACY_COMPARISON = {
   },
 };
 
-// PDF Demo Data
-const PDF_DEMO_DATA = [
-  { name: "Complete Estimate", description: "Full project breakdown with all line items", pages: 12 },
-  { name: "Executive Summary", description: "High-level overview for stakeholders", pages: 3 },
-  { name: "Material Takeoff", description: "Detailed materials list with quantities", pages: 5 },
-  { name: "Labor Schedule", description: "Trade-by-trade labor breakdown", pages: 4 },
-  { name: "Project Timeline", description: "Gantt chart and milestone schedule", pages: 2 },
-];
-
-// Gantt Schedule Data
-const GANTT_SCHEDULE = [
-  { task: "Demo & Prep", start: 0, duration: 2, color: "bg-red-500" },
-  { task: "Rough-In (Plumbing)", start: 2, duration: 2, color: "bg-blue-500" },
-  { task: "Rough-In (Electrical)", start: 2, duration: 1.5, color: "bg-yellow-500" },
-  { task: "Framing", start: 3, duration: 2, color: "bg-orange-500" },
-  { task: "Drywall", start: 5, duration: 2, color: "bg-purple-500" },
-  { task: "Waterproofing", start: 7, duration: 1, color: "bg-cyan-500" },
-  { task: "Tile - Walls", start: 8, duration: 3, color: "bg-teal-500" },
-  { task: "Tile - Floor", start: 11, duration: 2, color: "bg-teal-400" },
-  { task: "Fixtures", start: 13, duration: 2, color: "bg-green-500" },
-  { task: "Paint & Finish", start: 15, duration: 2, color: "bg-pink-500" },
-  { task: "Final Inspection", start: 17, duration: 1, color: "bg-gray-500" },
-];
+// Annotation types
+type AnnotationPoint = { x: number; y: number };
+type Annotation = {
+  id: number;
+  type: "polyline" | "polygon";
+  points: AnnotationPoint[];
+  label: string;
+  color: string;
+};
 
 export function DemoPage() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [currentAnnotation, setCurrentAnnotation] = useState<AnnotationPoint[]>([]);
+  const [annotationMode, setAnnotationMode] = useState<"polyline" | "polygon" | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfsGenerated, setPdfsGenerated] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
 
   const currentStep = DEMO_STEPS[currentStepIndex];
   const isFirstStep = currentStepIndex === 0;
@@ -296,10 +274,6 @@ export function DemoPage() {
     if (!isFirstStep) {
       setCurrentStepIndex((prev) => prev - 1);
     }
-  };
-
-  const goToStep = (index: number) => {
-    setCurrentStepIndex(index);
   };
 
   // Keyboard navigation
@@ -327,145 +301,254 @@ export function DemoPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  // Get current phase for the stepper highlight
-  const getCurrentPhase = () => {
-    if (currentStep.phase === "home") return "home";
-    if (currentStep.phase === "scope") return "scope";
-    if (currentStep.phase === "annotate") return "annotate";
-    if (currentStep.phase === "about") return "about";
-    return "estimate";
+  // Canvas annotation handling
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!annotationMode || !canvasRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+    setCurrentAnnotation([...currentAnnotation, { x, y }]);
   };
 
-  // Render the workflow stepper
-  const renderStepper = () => {
-    const phase = getCurrentPhase();
-    const phases = [
-      { id: "home", label: "Welcome" },
-      { id: "scope", label: "Scope" },
-      { id: "annotate", label: "Annotate" },
-      { id: "estimate", label: "Estimate" },
-      { id: "about", label: "About" },
-    ];
+  const finishAnnotation = () => {
+    if (currentAnnotation.length < 2) return;
 
-    return (
-      <div className="flex items-center justify-center gap-4 mb-6">
-        {phases.map((p, index) => {
-          const isActive = p.id === phase;
-          const phaseOrder = ["home", "scope", "annotate", "estimate", "about"];
-          const currentPhaseIndex = phaseOrder.indexOf(phase);
-          const thisPhaseIndex = phaseOrder.indexOf(p.id);
-          const isCompleted = thisPhaseIndex < currentPhaseIndex;
+    const colors = ["#00D4FF", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
+    const newAnnotation: Annotation = {
+      id: Date.now(),
+      type: annotationMode!,
+      points: currentAnnotation,
+      label: `Area ${annotations.length + 1}`,
+      color: colors[annotations.length % colors.length],
+    };
 
-          return (
-            <div key={p.id} className="flex items-center">
-              <div
-                className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${
-                  isActive
-                    ? "bg-gradient-to-r from-truecost-cyan to-truecost-teal text-truecost-bg-primary font-semibold"
-                    : isCompleted
-                    ? "bg-truecost-cyan/20 text-truecost-cyan"
-                    : "bg-truecost-glass-bg text-truecost-text-secondary"
-                }`}
-              >
-                <span
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${
-                    isCompleted ? "bg-truecost-cyan text-truecost-bg-primary" : "bg-truecost-glass-border"
-                  }`}
-                >
-                  {isCompleted ? "✓" : index + 1}
-                </span>
-                {p.label}
-              </div>
-              {index < phases.length - 1 && <div className="w-8 h-0.5 bg-truecost-glass-border mx-2" />}
-            </div>
-          );
-        })}
-      </div>
-    );
+    setAnnotations([...annotations, newAnnotation]);
+    setCurrentAnnotation([]);
+    setAnnotationMode(null);
   };
 
-  // Render step indicator dots
-  const renderStepDots = () => (
-    <div className="flex items-center justify-center gap-1 mb-6">
-      {DEMO_STEPS.map((step, index) => (
-        <button
-          key={step.id}
-          onClick={() => goToStep(index)}
-          className={`w-2 h-2 rounded-full transition-all ${
-            index === currentStepIndex
-              ? "w-6 bg-truecost-cyan"
-              : index < currentStepIndex
-              ? "bg-truecost-cyan/50"
-              : "bg-truecost-glass-border"
-          }`}
-          title={step.label}
-        />
-      ))}
-    </div>
-  );
+  const clearAnnotations = () => {
+    setAnnotations([]);
+    setCurrentAnnotation([]);
+    setAnnotationMode(null);
+  };
+
+  // Draw annotations on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const image = imageRef.current;
+    if (!canvas || !image || currentStep.id !== "annotate-plan") return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Clear and redraw
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw existing annotations
+    annotations.forEach((ann) => {
+      if (ann.points.length < 2) return;
+
+      ctx.beginPath();
+      ctx.strokeStyle = ann.color;
+      ctx.lineWidth = 3;
+      ctx.fillStyle = ann.color + "33";
+
+      const startX = (ann.points[0].x / 100) * canvas.width;
+      const startY = (ann.points[0].y / 100) * canvas.height;
+      ctx.moveTo(startX, startY);
+
+      ann.points.slice(1).forEach((p) => {
+        ctx.lineTo((p.x / 100) * canvas.width, (p.y / 100) * canvas.height);
+      });
+
+      if (ann.type === "polygon") {
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.stroke();
+
+      // Draw label
+      const centerX = ann.points.reduce((sum, p) => sum + p.x, 0) / ann.points.length;
+      const centerY = ann.points.reduce((sum, p) => sum + p.y, 0) / ann.points.length;
+      ctx.fillStyle = ann.color;
+      ctx.font = "bold 14px Inter";
+      ctx.fillText(ann.label, (centerX / 100) * canvas.width - 20, (centerY / 100) * canvas.height);
+    });
+
+    // Draw current annotation in progress
+    if (currentAnnotation.length > 0) {
+      ctx.beginPath();
+      ctx.strokeStyle = "#00D4FF";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+
+      const startX = (currentAnnotation[0].x / 100) * canvas.width;
+      const startY = (currentAnnotation[0].y / 100) * canvas.height;
+      ctx.moveTo(startX, startY);
+
+      currentAnnotation.slice(1).forEach((p) => {
+        ctx.lineTo((p.x / 100) * canvas.width, (p.y / 100) * canvas.height);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw points
+      currentAnnotation.forEach((p) => {
+        ctx.beginPath();
+        ctx.arc((p.x / 100) * canvas.width, (p.y / 100) * canvas.height, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#00D4FF";
+        ctx.fill();
+      });
+    }
+  }, [annotations, currentAnnotation, currentStep.id]);
+
+  // Generate PDFs
+  const generatePdfs = async () => {
+    setPdfLoading(true);
+    // Simulate PDF generation
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    setPdfsGenerated(true);
+    setPdfLoading(false);
+  };
 
   // Content renderers
+  const renderHomeContent = () => (
+    <section className="hero" style={{ minHeight: "100vh", paddingTop: 0 }}>
+      <div className="hero__background">
+        <video
+          className="hero__bg-image"
+          src={heroVideo}
+          autoPlay
+          loop
+          muted
+          playsInline
+        />
+        <div className="hero__overlay" />
+      </div>
+
+      <div className="hero__content container-spacious">
+        <div className="hero__card" style={{ opacity: 1, animation: "none" }}>
+          <div className="hero__logo">
+            <img src={logo} alt="TrueCost logo" className="hero__logo-img" />
+            <span className="hero__logo-text">TRUECOST</span>
+          </div>
+
+          <h1 className="hero__title">AI-Powered Construction Estimating</h1>
+          <p className="hero__subtitle">
+            Transform project blueprints into accurate, detailed estimates in minutes, not hours.
+            Watch our demo to see TrueCost in action.
+          </p>
+
+          <div className="hero__actions">
+            <button onClick={goNext} className="hero__btn hero__btn--primary">
+              Start Demo →
+            </button>
+            <Link to="/signup" className="hero__btn hero__btn--secondary">
+              <span className="hero__btn-icon">▶</span> Get Started
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
   const renderScopeContent = () => (
-    <div className="space-y-6 animate-fadeIn">
-      <div className="glass-panel p-6">
-        <h2 className="text-xl font-semibold text-truecost-text-primary mb-4">Project Details</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm text-truecost-text-secondary mb-1">Project Name</label>
-            <div className="p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
-              {DEMO_SCOPE.projectName}
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+      <div className="flex-1 max-w-6xl mx-auto w-full space-y-4">
+        {/* Project Details */}
+        <div className="glass-panel p-6">
+          <h2 className="text-xl font-semibold text-truecost-text-primary mb-4">Project Details</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-truecost-text-secondary mb-1">Project Name</label>
+              <div className="p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
+                {DEMO_SCOPE.projectName}
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="block text-sm text-truecost-text-secondary mb-1">Location</label>
-            <div className="p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
-              {DEMO_SCOPE.location}
+            <div>
+              <label className="block text-sm text-truecost-text-secondary mb-1">Location</label>
+              <div className="p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
+                {DEMO_SCOPE.location}
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="block text-sm text-truecost-text-secondary mb-1">Project Type</label>
-            <div className="p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
-              {DEMO_SCOPE.projectType}
+            <div>
+              <label className="block text-sm text-truecost-text-secondary mb-1">Project Type</label>
+              <div className="p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
+                {DEMO_SCOPE.projectType}
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="block text-sm text-truecost-text-secondary mb-1">Start Date</label>
-            <div className="p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
-              {new Date(DEMO_SCOPE.estimateConfig.startDate).toLocaleDateString("en-US", {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
+            <div>
+              <label className="block text-sm text-truecost-text-secondary mb-1">Start Date</label>
+              <div className="p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
+                {new Date(DEMO_SCOPE.estimateConfig.startDate).toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="glass-panel p-6">
-        <h2 className="text-xl font-semibold text-truecost-text-primary mb-4">Scope Description</h2>
-        <div className="p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary leading-relaxed">
-          {DEMO_SCOPE.scopeText}
+        {/* Scope Description */}
+        <div className="glass-panel p-6">
+          <h2 className="text-xl font-semibold text-truecost-text-primary mb-4">Scope Description</h2>
+          <div className="p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary leading-relaxed">
+            {DEMO_SCOPE.scopeText}
+          </div>
         </div>
-      </div>
 
-      <div className="glass-panel p-6">
-        <h2 className="text-xl font-semibold text-truecost-text-primary mb-4">Estimate Configuration</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center p-3 bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30">
-            <p className="text-2xl font-bold text-truecost-cyan">{DEMO_SCOPE.estimateConfig.overheadPercent}%</p>
-            <p className="text-xs text-truecost-text-secondary">Overhead</p>
+        {/* Estimate Configuration */}
+        <div className="glass-panel p-6">
+          <h2 className="text-xl font-semibold text-truecost-text-primary mb-4">Estimate Configuration</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-3 bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30">
+              <p className="text-2xl font-bold text-truecost-cyan">{DEMO_SCOPE.estimateConfig.overheadPercent}%</p>
+              <p className="text-xs text-truecost-text-secondary">Overhead</p>
+            </div>
+            <div className="text-center p-3 bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30">
+              <p className="text-2xl font-bold text-truecost-cyan">{DEMO_SCOPE.estimateConfig.profitPercent}%</p>
+              <p className="text-xs text-truecost-text-secondary">Profit</p>
+            </div>
+            <div className="text-center p-3 bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30">
+              <p className="text-2xl font-bold text-truecost-cyan">{DEMO_SCOPE.estimateConfig.contingencyPercent}%</p>
+              <p className="text-xs text-truecost-text-secondary">Contingency</p>
+            </div>
+            <div className="text-center p-3 bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30">
+              <p className="text-2xl font-bold text-truecost-cyan">{DEMO_SCOPE.estimateConfig.wasteFactorPercent}%</p>
+              <p className="text-xs text-truecost-text-secondary">Waste Factor</p>
+            </div>
           </div>
-          <div className="text-center p-3 bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30">
-            <p className="text-2xl font-bold text-truecost-cyan">{DEMO_SCOPE.estimateConfig.profitPercent}%</p>
-            <p className="text-xs text-truecost-text-secondary">Profit</p>
-          </div>
-          <div className="text-center p-3 bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30">
-            <p className="text-2xl font-bold text-truecost-cyan">{DEMO_SCOPE.estimateConfig.contingencyPercent}%</p>
-            <p className="text-xs text-truecost-text-secondary">Contingency</p>
-          </div>
-          <div className="text-center p-3 bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30">
-            <p className="text-2xl font-bold text-truecost-cyan">{DEMO_SCOPE.estimateConfig.wasteFactorPercent}%</p>
-            <p className="text-xs text-truecost-text-secondary">Waste Factor</p>
+        </div>
+
+        {/* Auto-generated CSI Divisions */}
+        <div className="glass-panel p-6 flex-1">
+          <h2 className="text-xl font-semibold text-truecost-text-primary mb-4">
+            Auto-Detected CSI Divisions
+            <span className="ml-2 text-sm font-normal text-truecost-text-secondary">(from scope analysis)</span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {CSI_DIVISIONS.map((div) => (
+              <div key={div.code} className="p-4 bg-truecost-glass-bg rounded-lg border border-truecost-glass-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-1 bg-truecost-cyan/20 text-truecost-cyan text-xs font-mono rounded">
+                    Div {div.code}
+                  </span>
+                  <span className="font-medium text-truecost-text-primary text-sm">{div.name}</span>
+                </div>
+                <ul className="space-y-1">
+                  {div.items.map((item, idx) => (
+                    <li key={idx} className="text-xs text-truecost-text-secondary flex items-center gap-1">
+                      <span className="w-1 h-1 rounded-full bg-truecost-cyan" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -473,139 +556,207 @@ export function DemoPage() {
   );
 
   const renderAnnotatePlanContent = () => (
-    <div className="space-y-6 animate-fadeIn">
-      <div className="glass-panel p-6">
-        <h2 className="text-xl font-semibold text-truecost-text-primary mb-4">Plan Annotations</h2>
-        <p className="text-truecost-text-secondary mb-6">
-          AI has analyzed the uploaded floor plan and identified the following areas for the bathroom remodel:
-        </p>
-
-        {/* Simulated floor plan */}
-        <div className="relative bg-truecost-glass-bg rounded-lg p-4 mb-6">
-          <div className="aspect-[4/3] bg-gradient-to-br from-truecost-bg-primary to-truecost-bg-secondary rounded-lg flex items-center justify-center relative overflow-hidden">
-            <div
-              className="absolute inset-0 opacity-10"
-              style={{
-                backgroundImage:
-                  "linear-gradient(to right, #00D4FF 1px, transparent 1px), linear-gradient(to bottom, #00D4FF 1px, transparent 1px)",
-                backgroundSize: "40px 40px",
-              }}
-            />
-            <div className="absolute inset-8 border-2 border-truecost-cyan/50 rounded">
-              <div className="absolute top-2 left-2 w-1/3 h-2/5 border-2 border-dashed border-truecost-teal bg-truecost-teal/10 rounded flex items-center justify-center">
-                <span className="text-xs text-truecost-teal font-medium">Shower Cabin</span>
-              </div>
-              <div className="absolute top-2 right-2 w-1/3 h-2/5 border-2 border-dashed border-blue-400 bg-blue-400/10 rounded flex items-center justify-center">
-                <span className="text-xs text-blue-400 font-medium">Bathtub</span>
-              </div>
-              <div className="absolute top-2 left-[38%] w-[4%] h-2/5 bg-orange-400/30 border border-orange-400 flex items-center justify-center">
-                <span className="text-[10px] text-orange-400 font-medium writing-vertical">Knee Wall</span>
-              </div>
-              <div className="absolute bottom-4 left-4 w-16 h-20 border-2 border-dashed border-purple-400 bg-purple-400/10 rounded flex items-center justify-center">
-                <span className="text-xs text-purple-400 font-medium">Toilet</span>
-              </div>
-              <div className="absolute bottom-4 right-4 w-1/3 h-1/4 border-2 border-dashed border-yellow-400 bg-yellow-400/10 rounded flex items-center justify-center">
-                <span className="text-xs text-yellow-400 font-medium">Cabinets</span>
-              </div>
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                <div className="flex gap-6">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="w-4 h-4 rounded-full bg-yellow-300/60 border border-yellow-300" />
-                  ))}
-                </div>
-                <div className="flex gap-6 mt-6">
-                  {[4, 5, 6].map((i) => (
-                    <div key={i} className="w-4 h-4 rounded-full bg-yellow-300/60 border border-yellow-300" />
-                  ))}
-                </div>
-              </div>
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+      <div className="flex-1 max-w-6xl mx-auto w-full">
+        <div className="glass-panel p-6 h-full flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-semibold text-truecost-text-primary">Plan Annotations</h2>
+              <p className="text-truecost-text-secondary text-sm">
+                Draw polylines and polygons to annotate areas on the floor plan
+              </p>
             </div>
-            <div className="absolute bottom-4 right-4 flex items-center gap-2 text-truecost-text-secondary text-xs">
-              <div className="w-16 h-0.5 bg-truecost-cyan" />
-              <span>4 ft</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setAnnotationMode("polyline")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  annotationMode === "polyline"
+                    ? "bg-truecost-cyan text-truecost-bg-primary"
+                    : "bg-truecost-glass-bg text-truecost-text-primary border border-truecost-glass-border hover:border-truecost-cyan/50"
+                }`}
+              >
+                📏 Polyline
+              </button>
+              <button
+                onClick={() => setAnnotationMode("polygon")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  annotationMode === "polygon"
+                    ? "bg-truecost-cyan text-truecost-bg-primary"
+                    : "bg-truecost-glass-bg text-truecost-text-primary border border-truecost-glass-border hover:border-truecost-cyan/50"
+                }`}
+              >
+                ⬡ Polygon
+              </button>
+              {currentAnnotation.length >= 2 && (
+                <button
+                  onClick={finishAnnotation}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-green-500 text-white hover:bg-green-600"
+                >
+                  ✓ Finish
+                </button>
+              )}
+              {annotations.length > 0 && (
+                <button
+                  onClick={clearAnnotations}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                >
+                  Clear All
+                </button>
+              )}
             </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {DEMO_ANNOTATIONS.map((annotation) => (
-            <div
-              key={annotation.id}
-              className="p-3 bg-truecost-glass-bg rounded-lg border border-truecost-glass-border"
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <div
-                  className={`w-3 h-3 rounded-full ${
-                    annotation.type === "tile"
-                      ? "bg-truecost-teal"
-                      : annotation.type === "framing"
-                      ? "bg-orange-400"
-                      : annotation.type === "electrical"
-                      ? "bg-yellow-400"
-                      : annotation.type === "plumbing"
-                      ? "bg-purple-400"
-                      : "bg-yellow-400"
-                  }`}
-                />
-                <span className="font-medium text-truecost-text-primary text-sm">{annotation.label}</span>
+          {/* Floor plan with canvas overlay */}
+          <div className="relative flex-1 bg-white rounded-xl overflow-hidden" style={{ minHeight: "500px" }}>
+            <img
+              ref={imageRef}
+              src={floorPlanGemini}
+              alt="Floor Plan"
+              className="absolute inset-0 w-full h-full object-contain"
+              onLoad={() => {
+                if (canvasRef.current && imageRef.current) {
+                  canvasRef.current.width = imageRef.current.clientWidth;
+                  canvasRef.current.height = imageRef.current.clientHeight;
+                }
+              }}
+            />
+            <canvas
+              ref={canvasRef}
+              onClick={handleCanvasClick}
+              className={`absolute inset-0 w-full h-full ${annotationMode ? "cursor-crosshair" : ""}`}
+              style={{ pointerEvents: annotationMode ? "auto" : "none" }}
+            />
+            {annotationMode && (
+              <div className="absolute top-4 left-4 px-3 py-2 bg-truecost-bg-primary/90 rounded-lg border border-truecost-cyan text-truecost-cyan text-sm">
+                Click to add points. {currentAnnotation.length >= 2 ? "Click 'Finish' when done." : `${2 - currentAnnotation.length} more point(s) needed.`}
               </div>
-              <p className="text-xs text-truecost-text-secondary">{annotation.area || annotation.count}</p>
+            )}
+          </div>
+
+          {/* Annotations list */}
+          {annotations.length > 0 && (
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+              {annotations.map((ann) => (
+                <div
+                  key={ann.id}
+                  className="p-3 bg-truecost-glass-bg rounded-lg border border-truecost-glass-border"
+                  style={{ borderLeftColor: ann.color, borderLeftWidth: 4 }}
+                >
+                  <span className="font-medium text-truecost-text-primary text-sm">{ann.label}</span>
+                  <p className="text-xs text-truecost-text-secondary">
+                    {ann.type === "polyline" ? "Line" : "Area"} • {ann.points.length} points
+                  </p>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>
   );
 
   const renderAnnotateChatContent = () => (
-    <div className="space-y-6 animate-fadeIn">
-      <div className="glass-panel p-6">
-        <h2 className="text-xl font-semibold text-truecost-text-primary mb-4">AI Clarification Chat</h2>
-        <p className="text-truecost-text-secondary mb-6">
-          The AI assistant asks clarifying questions to ensure accurate estimates:
-        </p>
-        <div className="space-y-3">
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
-              AI
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+      <div className="flex-1 max-w-4xl mx-auto w-full">
+        <div className="glass-panel p-6 h-full flex flex-col" style={{ minHeight: "calc(100vh - 200px)" }}>
+          <h2 className="text-xl font-semibold text-truecost-text-primary mb-2">AI Clarification Chat</h2>
+          <p className="text-truecost-text-secondary mb-4">
+            The AI assistant asks clarifying questions to ensure accurate estimates:
+          </p>
+
+          {/* Chat messages with scroller */}
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2" style={{ maxHeight: "calc(100vh - 350px)" }}>
+            <div className="flex gap-3">
+              <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
+                I've analyzed the floor plan. The bathroom is approximately 85 sq ft. I see a separate shower cabin and
+                bathtub with a knee wall between them. Can you confirm the ceiling height for the recessed lighting?
+              </div>
             </div>
-            <div className="flex-1 p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
-              I've analyzed the floor plan. The bathroom is approximately 85 sq ft. I see a separate shower cabin and
-              bathtub with a knee wall between them. Can you confirm the ceiling height for the recessed lighting?
+            <div className="flex gap-3 justify-end">
+              <div className="flex-1 max-w-[80%] p-4 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary">
+                The ceiling height is 9 feet. We want 6 recessed lights total, evenly distributed.
+              </div>
+              <div className="w-10 h-10 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-sm flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
+                Perfect. For the large format tiles on the shower walls, what size are you planning? Standard options are
+                24x48 or 12x24 porcelain.
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <div className="flex-1 max-w-[80%] p-4 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary">
+                24x48 porcelain tiles for a modern look. Grey/neutral color.
+              </div>
+              <div className="w-10 h-10 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-sm flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
+                The knee wall between the shower and bathtub - should this be rebuilt to the same height, or do you want
+                modifications? Also, what finish for the shower head assembly?
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <div className="flex-1 max-w-[80%] p-4 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary">
+                Same height, about 4 feet. Chrome finish for all fixtures.
+              </div>
+              <div className="w-10 h-10 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-sm flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
+                Great! One more question - do you have an existing permit or will you need one pulled? San Francisco
+                typically requires permits for bathroom remodels involving plumbing and electrical changes.
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <div className="flex-1 max-w-[80%] p-4 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary">
+                We'll need to pull a permit. Please include that in the estimate.
+              </div>
+              <div className="w-10 h-10 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-sm flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary border border-green-500/30">
+                <span className="text-green-400 font-medium">✓ All clarifications complete!</span><br /><br />
+                I have all the information needed to generate your estimate. The system will now run through our
+                multi-agent pipeline to create a comprehensive, accurate estimate.
+              </div>
             </div>
           </div>
-          <div className="flex gap-3 justify-end">
-            <div className="flex-1 max-w-[80%] p-3 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary text-sm">
-              The ceiling height is 9 feet. We want 6 recessed lights total, evenly distributed.
-            </div>
-            <div className="w-8 h-8 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-sm flex-shrink-0">
-              U
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
-              AI
-            </div>
-            <div className="flex-1 p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
-              Perfect. For the large format tiles on the shower walls, what size are you planning? Standard options are
-              24x48 or 12x24 porcelain.
-            </div>
-          </div>
-          <div className="flex gap-3 justify-end">
-            <div className="flex-1 max-w-[80%] p-3 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary text-sm">
-              24x48 porcelain tiles for a modern look. Grey/neutral color.
-            </div>
-            <div className="w-8 h-8 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-sm flex-shrink-0">
-              U
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
-              AI
-            </div>
-            <div className="flex-1 p-3 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
-              Got it. I have all the information needed to generate your estimate. Ready when you are!
-            </div>
+
+          {/* Input area (disabled for demo) */}
+          <div className="mt-4 flex gap-2">
+            <input
+              type="text"
+              placeholder="Type a message..."
+              disabled
+              className="flex-1 p-3 bg-truecost-glass-bg rounded-lg border border-truecost-glass-border text-truecost-text-primary placeholder-truecost-text-muted"
+            />
+            <button disabled className="px-6 py-3 bg-truecost-glass-border text-truecost-text-muted rounded-lg">
+              Send
+            </button>
           </div>
         </div>
       </div>
@@ -613,62 +764,72 @@ export function DemoPage() {
   );
 
   const renderGeneratingContent = () => {
-    // Find which stage we're on based on current step id
     const currentStageIndex = PIPELINE_STAGES.findIndex((s) => s.id === currentStep.id);
     const currentStage = PIPELINE_STAGES[currentStageIndex];
 
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] glass-panel p-8 animate-fadeIn">
-        <div className="w-full max-w-xl">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-semibold text-truecost-text-primary mb-2">Generating Your Estimate</h2>
-            <p className="text-truecost-text-secondary">Our AI agents are analyzing your project...</p>
-          </div>
-
-          {/* Progress bar */}
-          <div className="mb-6">
-            <div className="flex justify-between text-sm text-truecost-text-secondary mb-2">
-              <span>{currentStage?.name || "Starting..."}</span>
-              <span>{currentStage?.percent || 0}%</span>
+      <div className="min-h-screen flex items-center justify-center bg-truecost-bg-primary px-4">
+        <div className="w-full max-w-3xl">
+          <div className="glass-panel p-8">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-semibold text-truecost-text-primary mb-2">Generating Your Estimate</h2>
+              <p className="text-truecost-text-secondary">Our DeepAgent pipeline is analyzing your project...</p>
             </div>
-            <div className="w-full h-3 bg-truecost-glass-border rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-truecost-cyan to-truecost-teal transition-all duration-300 ease-out"
-                style={{ width: `${currentStage?.percent || 0}%` }}
-              />
-            </div>
-          </div>
 
-          {/* Stage checklist */}
-          <div className="space-y-2">
-            {PIPELINE_STAGES.map((stage, index) => {
-              const isCompleted = index < currentStageIndex;
-              const isCurrent = index === currentStageIndex;
-
-              return (
+            {/* Progress bar */}
+            <div className="mb-8">
+              <div className="flex justify-between text-sm text-truecost-text-secondary mb-2">
+                <span>{currentStage?.name || "Starting..."}</span>
+                <span>{currentStage?.percent || 0}%</span>
+              </div>
+              <div className="w-full h-4 bg-truecost-glass-border rounded-full overflow-hidden">
                 <div
-                  key={stage.id}
-                  className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                    isCompleted
-                      ? "bg-truecost-cyan/10 text-truecost-cyan"
-                      : isCurrent
-                      ? "bg-truecost-glass-bg text-truecost-text-primary"
-                      : "text-truecost-text-muted"
-                  }`}
-                >
-                  {isCompleted ? (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : isCurrent ? (
-                    <div className="w-5 h-5 border-2 border-truecost-cyan rounded-full border-t-transparent animate-spin" />
-                  ) : (
-                    <div className="w-5 h-5 border-2 border-truecost-glass-border rounded-full" />
-                  )}
-                  <span>{stage.name}</span>
-                </div>
-              );
-            })}
+                  className="h-full bg-gradient-to-r from-truecost-cyan to-truecost-teal transition-all duration-500 ease-out"
+                  style={{ width: `${currentStage?.percent || 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Agent checklist */}
+            <div className="space-y-3">
+              {PIPELINE_STAGES.map((stage, index) => {
+                const isCompleted = index < currentStageIndex;
+                const isCurrent = index === currentStageIndex;
+
+                return (
+                  <div
+                    key={stage.id}
+                    className={`flex items-start gap-4 p-4 rounded-lg transition-all ${
+                      isCompleted
+                        ? "bg-truecost-cyan/10 border border-truecost-cyan/30"
+                        : isCurrent
+                        ? "bg-truecost-glass-bg border border-truecost-cyan animate-pulse"
+                        : "bg-truecost-glass-bg/50 border border-transparent"
+                    }`}
+                  >
+                    <div className="text-2xl">{stage.icon}</div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-medium ${isCompleted || isCurrent ? "text-truecost-text-primary" : "text-truecost-text-muted"}`}>
+                          {stage.name}
+                        </span>
+                        {isCompleted && (
+                          <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        {isCurrent && (
+                          <div className="w-4 h-4 border-2 border-truecost-cyan rounded-full border-t-transparent animate-spin" />
+                        )}
+                      </div>
+                      <p className={`text-sm mt-1 ${isCompleted || isCurrent ? "text-truecost-text-secondary" : "text-truecost-text-muted"}`}>
+                        {stage.description}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -676,237 +837,104 @@ export function DemoPage() {
   };
 
   const renderResultSummary = () => (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Cost Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="glass-panel p-4 text-center">
-          <p className="text-3xl font-bold text-truecost-cyan">${DEMO_ESTIMATE.summary.totalCost.toLocaleString()}</p>
-          <p className="text-sm text-truecost-text-secondary">Total Estimate</p>
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+      <div className="flex-1 max-w-6xl mx-auto w-full space-y-6">
+        {/* Cost Summary Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="glass-panel p-6 text-center">
+            <p className="text-4xl font-bold text-truecost-cyan">${DEMO_ESTIMATE.summary.totalCost.toLocaleString()}</p>
+            <p className="text-sm text-truecost-text-secondary mt-1">Total Estimate</p>
+          </div>
+          <div className="glass-panel p-6 text-center">
+            <p className="text-4xl font-bold text-truecost-teal">${DEMO_ESTIMATE.summary.costPerSqft}</p>
+            <p className="text-sm text-truecost-text-secondary mt-1">Per Sq Ft</p>
+          </div>
+          <div className="glass-panel p-6 text-center">
+            <p className="text-4xl font-bold text-truecost-text-primary">{DEMO_ESTIMATE.summary.duration}</p>
+            <p className="text-sm text-truecost-text-secondary mt-1">Duration</p>
+          </div>
+          <div className="glass-panel p-6 text-center">
+            <p className="text-4xl font-bold capitalize text-yellow-400">{DEMO_ESTIMATE.summary.riskLevel}</p>
+            <p className="text-sm text-truecost-text-secondary mt-1">Risk Level</p>
+          </div>
         </div>
-        <div className="glass-panel p-4 text-center">
-          <p className="text-3xl font-bold text-truecost-teal">${DEMO_ESTIMATE.summary.costPerSqft}</p>
-          <p className="text-sm text-truecost-text-secondary">Per Sq Ft</p>
-        </div>
-        <div className="glass-panel p-4 text-center">
-          <p className="text-3xl font-bold text-truecost-text-primary">{DEMO_ESTIMATE.summary.duration}</p>
-          <p className="text-sm text-truecost-text-secondary">Duration</p>
-        </div>
-        <div className="glass-panel p-4 text-center">
-          <p className="text-3xl font-bold capitalize text-yellow-400">{DEMO_ESTIMATE.summary.riskLevel}</p>
-          <p className="text-sm text-truecost-text-secondary">Risk Level</p>
-        </div>
-      </div>
 
-      <div className="glass-panel p-6">
-        <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Cost Breakdown</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-          <div className="p-4 bg-truecost-glass-bg rounded-lg">
-            <p className="text-2xl font-bold text-truecost-cyan">
-              ${DEMO_ESTIMATE.costBreakdown.materials.toLocaleString()}
-            </p>
-            <p className="text-sm text-truecost-text-secondary">Materials</p>
-          </div>
-          <div className="p-4 bg-truecost-glass-bg rounded-lg">
-            <p className="text-2xl font-bold text-truecost-teal">
-              ${DEMO_ESTIMATE.costBreakdown.labor.toLocaleString()}
-            </p>
-            <p className="text-sm text-truecost-text-secondary">Labor</p>
-          </div>
-          <div className="p-4 bg-truecost-glass-bg rounded-lg">
-            <p className="text-2xl font-bold text-truecost-text-primary">
-              ${DEMO_ESTIMATE.costBreakdown.equipment.toLocaleString()}
-            </p>
-            <p className="text-sm text-truecost-text-secondary">Equipment</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-lg font-semibold text-truecost-text-primary">
-              ${DEMO_ESTIMATE.costBreakdown.overhead.toLocaleString()}
-            </p>
-            <p className="text-xs text-truecost-text-secondary">Overhead (10%)</p>
-          </div>
-          <div>
-            <p className="text-lg font-semibold text-truecost-text-primary">
-              ${DEMO_ESTIMATE.costBreakdown.profit.toLocaleString()}
-            </p>
-            <p className="text-xs text-truecost-text-secondary">Profit (10%)</p>
-          </div>
-          <div>
-            <p className="text-lg font-semibold text-yellow-400">
-              ${DEMO_ESTIMATE.costBreakdown.contingency.toLocaleString()}
-            </p>
-            <p className="text-xs text-truecost-text-secondary">Contingency (5%)</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderResultMaterials = () => (
-    <div className="glass-panel p-6 animate-fadeIn">
-      <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Bill of Materials</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-truecost-text-secondary uppercase border-b border-truecost-glass-border">
-              <th className="pb-3 pr-4">Category</th>
-              <th className="pb-3 pr-4">Item</th>
-              <th className="pb-3 pr-4 text-right">Qty</th>
-              <th className="pb-3 pr-4">Unit</th>
-              <th className="pb-3 pr-4 text-right">Unit Cost</th>
-              <th className="pb-3 text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-truecost-glass-border/50">
-            {DEMO_ESTIMATE.materials.map((mat) => (
-              <tr key={mat.id} className="hover:bg-truecost-glass-bg/50">
-                <td className="py-3 pr-4 text-truecost-text-secondary">{mat.category}</td>
-                <td className="py-3 pr-4 text-truecost-text-primary">{mat.item}</td>
-                <td className="py-3 pr-4 text-right font-mono">{mat.qty}</td>
-                <td className="py-3 pr-4 text-truecost-text-secondary">{mat.unit}</td>
-                <td className="py-3 pr-4 text-right font-mono">${mat.unitCost.toFixed(2)}</td>
-                <td className="py-3 text-right font-mono text-truecost-cyan">${mat.total.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-truecost-glass-border font-semibold">
-              <td colSpan={5} className="py-3 text-right text-truecost-text-primary">
-                Total Materials:
-              </td>
-              <td className="py-3 text-right text-truecost-cyan">
-                ${DEMO_ESTIMATE.materials.reduce((sum, m) => sum + m.total, 0).toLocaleString()}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-  );
-
-  const renderResultLabor = () => (
-    <div className="glass-panel p-6 animate-fadeIn">
-      <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Labor Breakdown</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-truecost-text-secondary uppercase border-b border-truecost-glass-border">
-              <th className="pb-3 pr-4">Trade</th>
-              <th className="pb-3 pr-4 text-right">Hours</th>
-              <th className="pb-3 pr-4 text-right">Rate/Hr</th>
-              <th className="pb-3 text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-truecost-glass-border/50">
-            {DEMO_ESTIMATE.labor.map((labor) => (
-              <tr key={labor.id} className="hover:bg-truecost-glass-bg/50">
-                <td className="py-3 pr-4 text-truecost-text-primary">{labor.trade}</td>
-                <td className="py-3 pr-4 text-right font-mono">{labor.hours}</td>
-                <td className="py-3 pr-4 text-right font-mono">${labor.rate}</td>
-                <td className="py-3 text-right font-mono text-truecost-teal">${labor.total.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-truecost-glass-border font-semibold">
-              <td className="py-3 text-truecost-text-primary">Total</td>
-              <td className="py-3 text-right font-mono">
-                {DEMO_ESTIMATE.labor.reduce((sum, l) => sum + l.hours, 0)} hrs
-              </td>
-              <td className="py-3"></td>
-              <td className="py-3 text-right text-truecost-teal">
-                ${DEMO_ESTIMATE.labor.reduce((sum, l) => sum + l.total, 0).toLocaleString()}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-  );
-
-  const renderResultTimeline = () => (
-    <div className="glass-panel p-6 animate-fadeIn">
-      <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Project Timeline</h3>
-      <div className="space-y-4">
-        {DEMO_ESTIMATE.timeline.map((phase, index) => (
-          <div key={index} className="flex gap-4">
-            <div className="flex flex-col items-center">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-truecost-cyan to-truecost-teal flex items-center justify-center text-truecost-bg-primary font-bold">
-                {index + 1}
-              </div>
-              {index < DEMO_ESTIMATE.timeline.length - 1 && (
-                <div className="w-0.5 flex-1 bg-truecost-glass-border my-2" />
-              )}
-            </div>
-            <div className="flex-1 pb-6">
-              <div className="flex items-center gap-3 mb-2">
-                <h4 className="font-semibold text-truecost-text-primary">{phase.phase}</h4>
-                <span className="px-2 py-0.5 bg-truecost-cyan/20 text-truecost-cyan text-xs rounded-full">
-                  {phase.days} {phase.days === 1 ? "day" : "days"}
-                </span>
-              </div>
-              <ul className="space-y-1">
-                {phase.tasks.map((task, taskIndex) => (
-                  <li key={taskIndex} className="text-sm text-truecost-text-secondary flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-truecost-text-muted" />
-                    {task}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-6 p-4 bg-truecost-glass-bg rounded-lg text-center">
-        <p className="text-truecost-text-secondary">
-          Total Duration:{" "}
-          <span className="font-semibold text-truecost-text-primary">
-            {DEMO_ESTIMATE.timeline.reduce((sum, p) => sum + p.days, 0)} days (
-            {Math.ceil(DEMO_ESTIMATE.timeline.reduce((sum, p) => sum + p.days, 0) / 5)} weeks)
-          </span>
-        </p>
-      </div>
-    </div>
-  );
-
-  const renderResultRisks = () => (
-    <div className="glass-panel p-6 animate-fadeIn">
-      <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Risk Analysis</h3>
-      <div className="space-y-4">
-        {DEMO_ESTIMATE.risks.map((risk, index) => (
-          <div
-            key={index}
-            className={`p-4 rounded-lg border ${
-              risk.level === "high"
-                ? "bg-red-500/10 border-red-500/30"
-                : risk.level === "medium"
-                ? "bg-yellow-500/10 border-yellow-500/30"
-                : "bg-green-500/10 border-green-500/30"
-            }`}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span
-                className={`px-2 py-0.5 text-xs rounded-full font-medium uppercase ${
-                  risk.level === "high"
-                    ? "bg-red-500/20 text-red-400"
-                    : risk.level === "medium"
-                    ? "bg-yellow-500/20 text-yellow-400"
-                    : "bg-green-500/20 text-green-400"
-                }`}
-              >
-                {risk.level}
+        {/* Main breakdown with materials and labor */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Materials Summary */}
+          <div className="glass-panel p-6">
+            <h3 className="text-lg font-semibold text-truecost-text-primary mb-4 flex items-center gap-2">
+              <span className="text-2xl">🧱</span> Materials
+              <span className="ml-auto text-2xl font-bold text-truecost-cyan">
+                ${DEMO_ESTIMATE.costBreakdown.materials.toLocaleString()}
               </span>
-              <span className="font-semibold text-truecost-text-primary">{risk.item}</span>
+            </h3>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {DEMO_ESTIMATE.materials.slice(0, 10).map((mat) => (
+                <div key={mat.id} className="flex justify-between items-center p-2 bg-truecost-glass-bg/50 rounded">
+                  <div>
+                    <p className="text-sm text-truecost-text-primary">{mat.item}</p>
+                    <p className="text-xs text-truecost-text-muted">{mat.qty} {mat.unit}</p>
+                  </div>
+                  <span className="font-mono text-truecost-cyan">${mat.total}</span>
+                </div>
+              ))}
+              <p className="text-xs text-truecost-text-muted text-center">+ {DEMO_ESTIMATE.materials.length - 10} more items</p>
             </div>
-            <p className="text-sm text-truecost-text-secondary mb-2">
-              <span className="font-medium">Mitigation:</span> {risk.mitigation}
-            </p>
-            <p className="text-sm text-truecost-text-secondary">
-              <span className="font-medium">Potential Impact:</span> {risk.impact}
-            </p>
           </div>
-        ))}
+
+          {/* Labor Summary */}
+          <div className="glass-panel p-6">
+            <h3 className="text-lg font-semibold text-truecost-text-primary mb-4 flex items-center gap-2">
+              <span className="text-2xl">👷</span> Labor
+              <span className="ml-auto text-2xl font-bold text-truecost-teal">
+                ${DEMO_ESTIMATE.costBreakdown.labor.toLocaleString()}
+              </span>
+            </h3>
+            <div className="space-y-2">
+              {DEMO_ESTIMATE.labor.map((labor) => (
+                <div key={labor.id} className="flex justify-between items-center p-2 bg-truecost-glass-bg/50 rounded">
+                  <div>
+                    <p className="text-sm text-truecost-text-primary">{labor.trade}</p>
+                    <p className="text-xs text-truecost-text-muted">{labor.hours} hrs @ ${labor.rate}/hr</p>
+                  </div>
+                  <span className="font-mono text-truecost-teal">${labor.total.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Additional costs */}
+        <div className="glass-panel p-6">
+          <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Additional Costs</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 bg-truecost-glass-bg rounded-lg">
+              <p className="text-2xl font-bold text-truecost-text-primary">
+                ${DEMO_ESTIMATE.costBreakdown.equipment.toLocaleString()}
+              </p>
+              <p className="text-xs text-truecost-text-secondary">Equipment</p>
+            </div>
+            <div className="text-center p-4 bg-truecost-glass-bg rounded-lg">
+              <p className="text-2xl font-bold text-truecost-text-primary">
+                ${DEMO_ESTIMATE.costBreakdown.overhead.toLocaleString()}
+              </p>
+              <p className="text-xs text-truecost-text-secondary">Overhead (10%)</p>
+            </div>
+            <div className="text-center p-4 bg-truecost-glass-bg rounded-lg">
+              <p className="text-2xl font-bold text-truecost-text-primary">
+                ${DEMO_ESTIMATE.costBreakdown.profit.toLocaleString()}
+              </p>
+              <p className="text-xs text-truecost-text-secondary">Profit (10%)</p>
+            </div>
+            <div className="text-center p-4 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+              <p className="text-2xl font-bold text-yellow-400">
+                ${DEMO_ESTIMATE.costBreakdown.contingency.toLocaleString()}
+              </p>
+              <p className="text-xs text-truecost-text-secondary">Contingency (5%)</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -921,665 +949,392 @@ export function DemoPage() {
     const savings = Math.min(hdTotal, lowesTotal) - bestTotal;
 
     return (
-      <div className="space-y-6 animate-fadeIn">
-        {/* Summary cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="glass-panel p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                <span className="text-orange-500 font-bold text-sm">HD</span>
-              </div>
-              <div>
-                <p className="text-sm text-truecost-text-secondary">Home Depot Total</p>
-                <p className="text-xl font-bold text-truecost-text-primary">${hdTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-              </div>
-            </div>
-          </div>
-          <div className="glass-panel p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <span className="text-blue-500 font-bold text-sm">L</span>
-              </div>
-              <div>
-                <p className="text-sm text-truecost-text-secondary">Lowe's Total</p>
-                <p className="text-xl font-bold text-truecost-text-primary">${lowesTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+      <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+        <div className="flex-1 max-w-6xl mx-auto w-full space-y-6">
+          {/* Summary cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="glass-panel p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                  <span className="text-orange-500 font-bold text-sm">HD</span>
+                </div>
+                <div>
+                  <p className="text-sm text-truecost-text-secondary">Home Depot Total</p>
+                  <p className="text-xl font-bold text-truecost-text-primary">${hdTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="glass-panel p-4 border-2 border-truecost-cyan/50">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-lg bg-truecost-cyan/20 flex items-center justify-center">
-                <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm text-truecost-text-secondary">Best Price (Mixed)</p>
-                <p className="text-xl font-bold text-truecost-cyan">${bestTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <div className="glass-panel p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                  <span className="text-blue-500 font-bold text-sm">L</span>
+                </div>
+                <div>
+                  <p className="text-sm text-truecost-text-secondary">Lowe's Total</p>
+                  <p className="text-xl font-bold text-truecost-text-primary">${lowesTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
               </div>
             </div>
-            <p className="text-xs text-green-400">Save ${savings.toFixed(2)} with smart sourcing</p>
+            <div className="glass-panel p-4 border-2 border-truecost-cyan/50">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg bg-truecost-cyan/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm text-truecost-text-secondary">Best Price (Mixed)</p>
+                  <p className="text-xl font-bold text-truecost-cyan">${bestTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+              <p className="text-xs text-green-400">Save ${savings.toFixed(2)} with smart sourcing</p>
+            </div>
           </div>
-        </div>
 
-        {/* Price comparison table */}
-        <div className="glass-panel p-6">
-          <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Material Price Comparison</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-truecost-text-secondary uppercase border-b border-truecost-glass-border">
-                  <th className="pb-3 pr-4">Item</th>
-                  <th className="pb-3 pr-4 text-center">Qty</th>
-                  <th className="pb-3 pr-4 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <span className="w-5 h-5 rounded bg-orange-500/20 text-orange-500 text-xs flex items-center justify-center font-bold">HD</span>
-                      Home Depot
-                    </div>
-                  </th>
-                  <th className="pb-3 pr-4 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <span className="w-5 h-5 rounded bg-blue-500/20 text-blue-500 text-xs flex items-center justify-center font-bold">L</span>
-                      Lowe's
-                    </div>
-                  </th>
-                  <th className="pb-3 text-center">Best Price</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-truecost-glass-border/50">
-                {PRICE_COMPARISON.map((item, index) => (
-                  <tr key={index} className="hover:bg-truecost-glass-bg/50">
-                    <td className="py-3 pr-4">
-                      <p className="text-truecost-text-primary font-medium">{item.item}</p>
-                    </td>
-                    <td className="py-3 pr-4 text-center text-truecost-text-secondary">
-                      {item.qty} {item.unit}
-                    </td>
-                    <td className="py-3 pr-4">
-                      <div className={`text-center p-2 rounded ${item.selected === "homeDepot" ? "bg-orange-500/10 border border-orange-500/30" : ""}`}>
-                        <p className="font-mono font-medium">${item.homeDepot.price.toFixed(2)}</p>
-                        <p className="text-xs text-truecost-text-muted">{item.homeDepot.sku}</p>
-                        <span className={`text-xs ${item.homeDepot.inStock ? "text-green-400" : "text-red-400"}`}>
-                          {item.homeDepot.inStock ? "In Stock" : "Out of Stock"}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <div className={`text-center p-2 rounded ${item.selected === "lowes" ? "bg-blue-500/10 border border-blue-500/30" : ""}`}>
-                        <p className="font-mono font-medium">${item.lowes.price.toFixed(2)}</p>
-                        <p className="text-xs text-truecost-text-muted">{item.lowes.sku}</p>
-                        <span className={`text-xs ${item.lowes.inStock ? "text-green-400" : "text-red-400"}`}>
-                          {item.lowes.inStock ? "In Stock" : "Out of Stock"}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 text-center">
-                      <p className="font-mono font-bold text-truecost-cyan">
-                        ${((item.selected === "homeDepot" ? item.homeDepot.price : item.lowes.price) * item.qty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${item.selected === "homeDepot" ? "bg-orange-500/20 text-orange-400" : "bg-blue-500/20 text-blue-400"}`}>
-                        {item.selected === "homeDepot" ? "Home Depot" : "Lowe's"}
-                      </span>
-                    </td>
+          {/* Price comparison table */}
+          <div className="glass-panel p-6 flex-1">
+            <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Material Price Comparison</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-truecost-text-secondary uppercase border-b border-truecost-glass-border">
+                    <th className="pb-3 pr-4">Item</th>
+                    <th className="pb-3 pr-4 text-center">Qty</th>
+                    <th className="pb-3 pr-4 text-center">Home Depot</th>
+                    <th className="pb-3 pr-4 text-center">Lowe's</th>
+                    <th className="pb-3 text-center">Best Price</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-truecost-glass-border/50">
+                  {PRICE_COMPARISON.map((item, index) => (
+                    <tr key={index} className="hover:bg-truecost-glass-bg/50">
+                      <td className="py-3 pr-4">
+                        <p className="text-truecost-text-primary font-medium">{item.item}</p>
+                      </td>
+                      <td className="py-3 pr-4 text-center text-truecost-text-secondary">
+                        {item.qty} {item.unit}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className={`text-center p-2 rounded ${item.selected === "homeDepot" ? "bg-orange-500/10 border border-orange-500/30" : ""}`}>
+                          <p className="font-mono font-medium">${item.homeDepot.price.toFixed(2)}</p>
+                          <span className={`text-xs ${item.homeDepot.inStock ? "text-green-400" : "text-red-400"}`}>
+                            {item.homeDepot.inStock ? "In Stock" : "Out of Stock"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className={`text-center p-2 rounded ${item.selected === "lowes" ? "bg-blue-500/10 border border-blue-500/30" : ""}`}>
+                          <p className="font-mono font-medium">${item.lowes.price.toFixed(2)}</p>
+                          <span className={`text-xs ${item.lowes.inStock ? "text-green-400" : "text-red-400"}`}>
+                            {item.lowes.inStock ? "In Stock" : "Out of Stock"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 text-center">
+                        <p className="font-mono font-bold text-truecost-cyan">
+                          ${((item.selected === "homeDepot" ? item.homeDepot.price : item.lowes.price) * item.qty).toFixed(2)}
+                        </p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-
-        {/* Smart sourcing note */}
-        <div className="glass-panel p-4 border-l-4 border-truecost-cyan">
-          <p className="text-sm text-truecost-text-secondary">
-            <span className="font-semibold text-truecost-text-primary">TrueCost Smart Sourcing:</span> We automatically compare prices across major retailers and factor in availability to recommend the best purchasing strategy for your project.
-          </p>
         </div>
       </div>
     );
   };
+
+  const renderPDFReports = () => (
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+      <div className="flex-1 max-w-6xl mx-auto w-full">
+        <div className="glass-panel p-6 text-center mb-6">
+          <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">PDF Reports</h2>
+          <p className="text-truecost-text-secondary">
+            Generate professional contractor and client reports
+          </p>
+          {!pdfsGenerated && (
+            <button
+              onClick={generatePdfs}
+              disabled={pdfLoading}
+              className="mt-4 px-6 py-3 bg-truecost-cyan text-truecost-bg-primary rounded-lg font-medium hover:bg-truecost-cyan/90 disabled:opacity-50"
+            >
+              {pdfLoading ? "Generating..." : "Generate PDF Reports"}
+            </button>
+          )}
+        </div>
+
+        {/* Side by side PDFs */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Contractor Report */}
+          <div className="glass-panel p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-14 bg-red-500/20 rounded flex items-center justify-center">
+                <svg className="w-8 h-8 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-truecost-text-primary">Contractor Report</h3>
+                <p className="text-sm text-truecost-text-secondary">Full breakdown with unit costs & labor rates</p>
+              </div>
+            </div>
+            {pdfsGenerated ? (
+              <div className="bg-white rounded-lg overflow-hidden" style={{ height: "500px" }}>
+                <iframe
+                  src="/contractor_report.pdf"
+                  className="w-full h-full"
+                  title="Contractor Report"
+                />
+              </div>
+            ) : (
+              <div className="bg-truecost-glass-bg rounded-lg flex items-center justify-center" style={{ height: "500px" }}>
+                <p className="text-truecost-text-muted">Click "Generate PDF Reports" to view</p>
+              </div>
+            )}
+          </div>
+
+          {/* Client Report */}
+          <div className="glass-panel p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-14 bg-blue-500/20 rounded flex items-center justify-center">
+                <svg className="w-8 h-8 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-truecost-text-primary">Client Report</h3>
+                <p className="text-sm text-truecost-text-secondary">Executive summary without sensitive pricing</p>
+              </div>
+            </div>
+            {pdfsGenerated ? (
+              <div className="bg-white rounded-lg overflow-hidden" style={{ height: "500px" }}>
+                <iframe
+                  src="/client_report.pdf"
+                  className="w-full h-full"
+                  title="Client Report"
+                />
+              </div>
+            ) : (
+              <div className="bg-truecost-glass-bg rounded-lg flex items-center justify-center" style={{ height: "500px" }}>
+                <p className="text-truecost-text-muted">Click "Generate PDF Reports" to view</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   const renderAccuracyComparison = () => {
     const { manualEstimate, trueCostEstimate, actualCost } = ACCURACY_COMPARISON;
     const manualVariance = ((manualEstimate.total - actualCost.total) / actualCost.total) * 100;
     const trueCostVariance = ((trueCostEstimate.total - actualCost.total) / actualCost.total) * 100;
 
+    // Calculate positions for the linear graph (scale from 70% to 110% of actual)
+    const scale = (value: number) => ((value / actualCost.total - 0.7) / 0.4) * 100;
+    const manualPos = Math.max(0, Math.min(100, scale(manualEstimate.total)));
+    const trueCostPos = Math.max(0, Math.min(100, scale(trueCostEstimate.total)));
+    const actualPos = scale(actualCost.total);
+
     return (
-      <div className="space-y-6 animate-fadeIn">
+      <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+        <div className="flex-1 max-w-6xl mx-auto w-full space-y-6">
+          {/* Header */}
+          <div className="glass-panel p-6 text-center">
+            <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Estimate Accuracy Comparison</h2>
+            <p className="text-truecost-text-secondary">See how TrueCost AI compares to traditional manual estimates</p>
+          </div>
+
+          {/* Visual comparison bar - FIXED label overlap */}
+          <div className="glass-panel p-6">
+            <h3 className="text-lg font-semibold text-truecost-text-primary mb-8">Total Cost Comparison</h3>
+            <div className="relative h-32 mb-4">
+              {/* Scale line */}
+              <div className="absolute top-12 left-0 right-0 h-2 bg-truecost-glass-border rounded-full" />
+
+              {/* Scale labels */}
+              <div className="absolute top-16 left-0 text-xs text-truecost-text-muted">$20k</div>
+              <div className="absolute top-16 right-0 text-xs text-truecost-text-muted">$32k</div>
+
+              {/* Manual estimate marker - positioned above line */}
+              <div
+                className="absolute transform -translate-x-1/2"
+                style={{ left: `${manualPos}%`, top: 0 }}
+              >
+                <div className="flex flex-col items-center">
+                  <span className="text-xs text-red-400 font-medium whitespace-nowrap mb-1">Manual</span>
+                  <span className="text-xs text-red-400 font-bold">${(manualEstimate.total/1000).toFixed(1)}k</span>
+                  <div className="w-0.5 h-4 bg-red-500/50 my-1" />
+                  <div className="w-4 h-4 rounded-full bg-red-500 border-2 border-truecost-bg-primary" />
+                </div>
+              </div>
+
+              {/* TrueCost estimate marker - positioned below line */}
+              <div
+                className="absolute transform -translate-x-1/2"
+                style={{ left: `${trueCostPos}%`, top: "52px" }}
+              >
+                <div className="flex flex-col items-center">
+                  <div className="w-4 h-4 rounded-full bg-truecost-cyan border-2 border-truecost-bg-primary" />
+                  <div className="w-0.5 h-4 bg-truecost-cyan/50 my-1" />
+                  <span className="text-xs text-truecost-cyan font-bold">${(trueCostEstimate.total/1000).toFixed(1)}k</span>
+                  <span className="text-xs text-truecost-cyan font-medium whitespace-nowrap mt-1">TrueCost</span>
+                </div>
+              </div>
+
+              {/* Actual cost marker - centered with different styling */}
+              <div
+                className="absolute transform -translate-x-1/2"
+                style={{ left: `${actualPos}%`, top: "4px" }}
+              >
+                <div className="flex flex-col items-center">
+                  <span className="text-xs text-green-400 font-medium whitespace-nowrap px-2 py-1 bg-green-500/20 rounded">Actual: ${(actualCost.total/1000).toFixed(1)}k</span>
+                  <div className="w-0.5 h-2 bg-green-500/50 my-1" />
+                  <div className="w-5 h-5 rounded-full bg-green-500 border-2 border-truecost-bg-primary flex items-center justify-center">
+                    <span className="text-white text-xs">✓</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Variance indicators */}
+            <div className="grid grid-cols-3 gap-4 text-center mt-8">
+              <div className="p-4 bg-red-500/10 rounded-lg border border-red-500/30">
+                <p className="text-2xl font-bold text-red-400">{manualVariance.toFixed(1)}%</p>
+                <p className="text-xs text-truecost-text-secondary">Manual Variance</p>
+              </div>
+              <div className="p-4 bg-green-500/10 rounded-lg border border-green-500/30">
+                <p className="text-2xl font-bold text-green-400">Baseline</p>
+                <p className="text-xs text-truecost-text-secondary">Actual Cost</p>
+              </div>
+              <div className="p-4 bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30">
+                <p className="text-2xl font-bold text-truecost-cyan">{trueCostVariance.toFixed(1)}%</p>
+                <p className="text-xs text-truecost-text-secondary">TrueCost Variance</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom line */}
+          <div className="glass-panel p-6 bg-gradient-to-r from-truecost-cyan/10 to-truecost-teal/10 border border-truecost-cyan/30">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div>
+                <h4 className="font-semibold text-truecost-text-primary mb-1">Bottom Line</h4>
+                <p className="text-sm text-truecost-text-secondary">
+                  TrueCost was within <span className="text-truecost-cyan font-semibold">{Math.abs(trueCostVariance).toFixed(1)}%</span> of actual costs,
+                  while the manual estimate was off by <span className="text-red-400 font-semibold">{Math.abs(manualVariance).toFixed(1)}%</span> —
+                  a difference of <span className="text-green-400 font-semibold">${(actualCost.total - manualEstimate.total).toLocaleString()}</span> that would have impacted profitability.
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-3xl font-bold text-truecost-cyan">{(Math.abs(manualVariance) / Math.abs(trueCostVariance)).toFixed(1)}x</p>
+                <p className="text-xs text-truecost-text-secondary">More Accurate</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDifferentiatorContent = () => (
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+      <div className="flex-1 max-w-6xl mx-auto w-full space-y-6">
         {/* Header */}
         <div className="glass-panel p-6 text-center">
-          <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Estimate Accuracy Comparison</h2>
-          <p className="text-truecost-text-secondary">See how TrueCost AI compares to traditional manual estimates</p>
+          <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Why Choose TrueCost?</h2>
+          <p className="text-truecost-text-secondary">Built by contractors, for contractors</p>
         </div>
 
-        {/* Visual comparison bar */}
-        <div className="glass-panel p-6">
-          <h3 className="text-lg font-semibold text-truecost-text-primary mb-6">Total Cost Comparison</h3>
-          <div className="relative h-16 mb-8">
-            {/* Scale line */}
-            <div className="absolute top-1/2 left-0 right-0 h-1 bg-truecost-glass-border rounded" />
-
-            {/* Manual estimate marker */}
-            <div
-              className="absolute top-0 transform -translate-x-1/2"
-              style={{ left: `${(manualEstimate.total / actualCost.total) * 50}%` }}
-            >
-              <div className="w-4 h-16 flex flex-col items-center">
-                <div className="w-4 h-4 rounded-full bg-red-500 border-2 border-truecost-bg-primary" />
-                <div className="w-0.5 h-6 bg-red-500/50" />
-                <span className="text-xs text-red-400 whitespace-nowrap mt-1">Manual</span>
-              </div>
+        {/* Key differentiator - Field Experience */}
+        <div className="glass-panel p-8 bg-gradient-to-r from-truecost-cyan/10 to-truecost-teal/10 border border-truecost-cyan/30">
+          <div className="flex flex-col md:flex-row items-center gap-6">
+            <div className="w-24 h-24 rounded-full bg-truecost-cyan/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-5xl">🏗️</span>
             </div>
-
-            {/* TrueCost estimate marker */}
-            <div
-              className="absolute top-0 transform -translate-x-1/2"
-              style={{ left: `${(trueCostEstimate.total / actualCost.total) * 50}%` }}
-            >
-              <div className="w-4 h-16 flex flex-col items-center">
-                <div className="w-4 h-4 rounded-full bg-truecost-cyan border-2 border-truecost-bg-primary" />
-                <div className="w-0.5 h-6 bg-truecost-cyan/50" />
-                <span className="text-xs text-truecost-cyan whitespace-nowrap mt-1">TrueCost</span>
-              </div>
-            </div>
-
-            {/* Actual cost marker */}
-            <div
-              className="absolute top-0 transform -translate-x-1/2"
-              style={{ left: "50%" }}
-            >
-              <div className="w-4 h-16 flex flex-col items-center">
-                <div className="w-4 h-4 rounded-full bg-green-500 border-2 border-truecost-bg-primary" />
-                <div className="w-0.5 h-6 bg-green-500/50" />
-                <span className="text-xs text-green-400 whitespace-nowrap mt-1">Actual</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Variance indicators */}
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div className="p-4 bg-red-500/10 rounded-lg border border-red-500/30">
-              <p className="text-2xl font-bold text-red-400">{manualVariance.toFixed(1)}%</p>
-              <p className="text-xs text-truecost-text-secondary">Manual Variance</p>
-              <p className="text-lg font-semibold text-truecost-text-primary mt-1">${manualEstimate.total.toLocaleString()}</p>
-            </div>
-            <div className="p-4 bg-green-500/10 rounded-lg border border-green-500/30">
-              <p className="text-2xl font-bold text-green-400">Actual</p>
-              <p className="text-xs text-truecost-text-secondary">Final Project Cost</p>
-              <p className="text-lg font-semibold text-truecost-text-primary mt-1">${actualCost.total.toLocaleString()}</p>
-            </div>
-            <div className="p-4 bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30">
-              <p className="text-2xl font-bold text-truecost-cyan">{trueCostVariance.toFixed(1)}%</p>
-              <p className="text-xs text-truecost-text-secondary">TrueCost Variance</p>
-              <p className="text-lg font-semibold text-truecost-text-primary mt-1">${trueCostEstimate.total.toLocaleString()}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Detailed comparison */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Manual Estimate */}
-          <div className="glass-panel p-5 border-t-4 border-red-500">
-            <div className="flex items-center gap-2 mb-3">
-              <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <h4 className="font-semibold text-truecost-text-primary">{manualEstimate.label}</h4>
-            </div>
-            <p className="text-xs text-truecost-text-secondary mb-4">{manualEstimate.description}</p>
-
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Materials</span>
-                <span className="font-mono">${manualEstimate.materials.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Labor</span>
-                <span className="font-mono">${manualEstimate.labor.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Overhead</span>
-                <span className="font-mono">${manualEstimate.overhead.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Contingency</span>
-                <span className="font-mono">${manualEstimate.contingency.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm font-semibold border-t border-truecost-glass-border pt-2">
-                <span>Total</span>
-                <span className="text-red-400">${manualEstimate.total.toLocaleString()}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-truecost-text-secondary mb-3">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Time: {manualEstimate.timeToCreate}
-            </div>
-
-            <div className="mt-4">
-              <p className="text-xs font-medium text-red-400 mb-2">Issues Found:</p>
-              <ul className="space-y-1">
-                {manualEstimate.issues.map((issue, i) => (
-                  <li key={i} className="text-xs text-truecost-text-secondary flex items-start gap-1">
-                    <span className="text-red-400 mt-0.5">×</span>
-                    {issue}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* TrueCost Estimate */}
-          <div className="glass-panel p-5 border-t-4 border-truecost-cyan ring-2 ring-truecost-cyan/20">
-            <div className="flex items-center gap-2 mb-3">
-              <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <h4 className="font-semibold text-truecost-text-primary">{trueCostEstimate.label}</h4>
-            </div>
-            <p className="text-xs text-truecost-text-secondary mb-4">{trueCostEstimate.description}</p>
-
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Materials</span>
-                <span className="font-mono">${trueCostEstimate.materials.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Labor</span>
-                <span className="font-mono">${trueCostEstimate.labor.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Overhead</span>
-                <span className="font-mono">${trueCostEstimate.overhead.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Contingency</span>
-                <span className="font-mono">${trueCostEstimate.contingency.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm font-semibold border-t border-truecost-glass-border pt-2">
-                <span>Total</span>
-                <span className="text-truecost-cyan">${trueCostEstimate.total.toLocaleString()}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-truecost-cyan mb-3">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              Time: {trueCostEstimate.timeToCreate}
-            </div>
-
-            <div className="mt-4">
-              <p className="text-xs font-medium text-truecost-cyan mb-2">Key Features:</p>
-              <ul className="space-y-1">
-                {trueCostEstimate.features.map((feature, i) => (
-                  <li key={i} className="text-xs text-truecost-text-secondary flex items-start gap-1">
-                    <span className="text-truecost-cyan mt-0.5">✓</span>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* Actual Cost */}
-          <div className="glass-panel p-5 border-t-4 border-green-500">
-            <div className="flex items-center gap-2 mb-3">
-              <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <h4 className="font-semibold text-truecost-text-primary">{actualCost.label}</h4>
-            </div>
-            <p className="text-xs text-truecost-text-secondary mb-4">{actualCost.description}</p>
-
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Materials</span>
-                <span className="font-mono">${actualCost.materials.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Labor</span>
-                <span className="font-mono">${actualCost.labor.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Overhead</span>
-                <span className="font-mono">${actualCost.overhead.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-truecost-text-secondary">Contingency Used</span>
-                <span className="font-mono">${actualCost.contingency.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm font-semibold border-t border-truecost-glass-border pt-2">
-                <span>Total</span>
-                <span className="text-green-400">${actualCost.total.toLocaleString()}</span>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <p className="text-xs font-medium text-green-400 mb-2">Project Notes:</p>
-              <ul className="space-y-1">
-                {actualCost.notes.map((note, i) => (
-                  <li key={i} className="text-xs text-truecost-text-secondary flex items-start gap-1">
-                    <span className="text-green-400 mt-0.5">•</span>
-                    {note}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom line */}
-        <div className="glass-panel p-6 bg-gradient-to-r from-truecost-cyan/10 to-truecost-teal/10 border border-truecost-cyan/30">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
-              <h4 className="font-semibold text-truecost-text-primary mb-1">Bottom Line</h4>
-              <p className="text-sm text-truecost-text-secondary">
-                TrueCost was within <span className="text-truecost-cyan font-semibold">{Math.abs(trueCostVariance).toFixed(1)}%</span> of actual costs,
-                while the manual estimate was off by <span className="text-red-400 font-semibold">{Math.abs(manualVariance).toFixed(1)}%</span> —
-                a difference of <span className="text-green-400 font-semibold">${(actualCost.total - manualEstimate.total).toLocaleString()}</span> that would have impacted profitability.
+              <h3 className="text-xl font-bold text-truecost-text-primary mb-2">
+                We're Builders First, Tech Company Second
+              </h3>
+              <p className="text-truecost-text-secondary leading-relaxed">
+                TrueCost was founded by <span className="text-truecost-cyan font-semibold">licensed general contractors</span> with
+                decades of field experience. We're not a Silicon Valley AI company trying to "disrupt" construction —
+                we're <span className="text-truecost-cyan font-semibold">builders who got frustrated</span> with inaccurate estimates
+                and decided to do something about it. Every feature, every calculation, every assumption in our system comes
+                from <span className="text-truecost-cyan font-semibold">real-world experience</span> on job sites, not textbooks.
               </p>
             </div>
-            <div className="text-center">
-              <p className="text-3xl font-bold text-truecost-cyan">{(Math.abs(manualVariance) / Math.abs(trueCostVariance)).toFixed(1)}x</p>
-              <p className="text-xs text-truecost-text-secondary">More Accurate</p>
-            </div>
           </div>
         </div>
-      </div>
-    );
-  };
 
-  // Home content renderer
-  const renderHomeContent = () => (
-    <div className="space-y-8 animate-fadeIn">
-      {/* Hero Section */}
-      <div className="glass-panel p-8 text-center">
-        <img src={logo} alt="TrueCost" className="h-16 mx-auto mb-6" />
-        <h2 className="text-3xl md:text-4xl font-bold text-truecost-text-primary mb-4">
-          AI-Powered Construction Estimation
-        </h2>
-        <p className="text-lg text-truecost-text-secondary max-w-2xl mx-auto mb-6">
-          Transform project blueprints into accurate, detailed estimates in minutes, not hours.
-          See how TrueCost revolutionizes construction cost estimation.
-        </p>
-        <div className="flex flex-wrap justify-center gap-4">
-          <div className="flex items-center gap-2 px-4 py-2 bg-truecost-cyan/10 rounded-full border border-truecost-cyan/30">
-            <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <span className="text-truecost-cyan text-sm font-medium">3 minutes vs 6 hours</span>
+        {/* Key Differentiators Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="glass-panel p-6">
+            <div className="w-12 h-12 rounded-full bg-truecost-cyan/20 flex items-center justify-center mb-4">
+              <svg className="w-6 h-6 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">120x Faster</h3>
+            <p className="text-truecost-text-secondary">
+              What takes 6+ hours manually, TrueCost completes in 3 minutes.
+              More time for client relationships, less time on spreadsheets.
+            </p>
           </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-truecost-teal/10 rounded-full border border-truecost-teal/30">
-            <svg className="w-5 h-5 text-truecost-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-truecost-teal text-sm font-medium">98.5% Accuracy</span>
+
+          <div className="glass-panel p-6">
+            <div className="w-12 h-12 rounded-full bg-truecost-teal/20 flex items-center justify-center mb-4">
+              <svg className="w-6 h-6 text-truecost-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">Field-Tested Accuracy</h3>
+            <p className="text-truecost-text-secondary">
+              Our estimates are calibrated against <span className="text-truecost-teal font-semibold">real project outcomes</span>.
+              We know the difference between a bid and a realistic budget.
+            </p>
+          </div>
+
+          <div className="glass-panel p-6">
+            <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
+              <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">No Fluff, Just Facts</h3>
+            <p className="text-truecost-text-secondary">
+              We don't pad estimates or hide fees. What you see is what the job actually costs.
+              Built on <span className="text-green-500 font-semibold">real vendor pricing</span> and regional labor data.
+            </p>
+          </div>
+
+          <div className="glass-panel p-6">
+            <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
+              <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">Contractor Community</h3>
+            <p className="text-truecost-text-secondary">
+              We speak your language. Our support team includes <span className="text-purple-500 font-semibold">licensed contractors</span> who
+              understand the realities of running a construction business.
+            </p>
           </div>
         </div>
-      </div>
 
-      {/* Video Demo */}
-      <div className="glass-panel p-6">
-        <h3 className="text-xl font-semibold text-truecost-text-primary mb-4 text-center">See TrueCost in Action</h3>
-        <div className="relative rounded-xl overflow-hidden bg-truecost-bg-secondary">
-          <video
-            src={heroVideo}
-            className="w-full aspect-video object-cover"
-            autoPlay
-            loop
-            muted
-            playsInline
-          />
-        </div>
-      </div>
-
-      {/* What You'll See */}
-      <div className="glass-panel p-6">
-        <h3 className="text-xl font-semibold text-truecost-text-primary mb-4">In This Demo</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 bg-truecost-glass-bg rounded-lg">
-            <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center mb-3">
-              <span className="text-truecost-cyan font-bold">1</span>
-            </div>
-            <h4 className="font-medium text-truecost-text-primary mb-1">Project Scope</h4>
-            <p className="text-sm text-truecost-text-secondary">Define project details and upload blueprints</p>
-          </div>
-          <div className="p-4 bg-truecost-glass-bg rounded-lg">
-            <div className="w-10 h-10 rounded-full bg-truecost-teal/20 flex items-center justify-center mb-3">
-              <span className="text-truecost-teal font-bold">2</span>
-            </div>
-            <h4 className="font-medium text-truecost-text-primary mb-1">AI Analysis</h4>
-            <p className="text-sm text-truecost-text-secondary">Watch AI extract measurements and calculate costs</p>
-          </div>
-          <div className="p-4 bg-truecost-glass-bg rounded-lg">
-            <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center mb-3">
-              <span className="text-green-500 font-bold">3</span>
-            </div>
-            <h4 className="font-medium text-truecost-text-primary mb-1">Detailed Estimate</h4>
-            <p className="text-sm text-truecost-text-secondary">Review comprehensive cost breakdowns and reports</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // PDF Reports renderer
-  const renderPDFReports = () => {
-    const totalDays = 18;
-
-    return (
-      <div className="space-y-6 animate-fadeIn">
-        {/* Header */}
+        {/* Quote */}
         <div className="glass-panel p-6 text-center">
-          <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">PDF Reports & Timeline</h2>
-          <p className="text-truecost-text-secondary">Export professional reports and visualize your project schedule</p>
-        </div>
-
-        {/* Gantt Chart */}
-        <div className="glass-panel p-6">
-          <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Project Timeline - Gantt Chart</h3>
-          <div className="overflow-x-auto">
-            <div className="min-w-[800px]">
-              {/* Timeline header */}
-              <div className="flex border-b border-truecost-glass-border pb-2 mb-4">
-                <div className="w-40 flex-shrink-0 text-sm text-truecost-text-secondary">Task</div>
-                <div className="flex-1 flex">
-                  {Array.from({ length: totalDays }, (_, i) => (
-                    <div key={i} className="flex-1 text-center text-xs text-truecost-text-muted">
-                      Day {i + 1}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Gantt bars */}
-              <div className="space-y-2">
-                {GANTT_SCHEDULE.map((item, index) => (
-                  <div key={index} className="flex items-center">
-                    <div className="w-40 flex-shrink-0 text-sm text-truecost-text-primary truncate pr-2">
-                      {item.task}
-                    </div>
-                    <div className="flex-1 flex relative h-8">
-                      <div
-                        className={`absolute h-6 ${item.color} rounded opacity-80 top-1`}
-                        style={{
-                          left: `${(item.start / totalDays) * 100}%`,
-                          width: `${(item.duration / totalDays) * 100}%`,
-                        }}
-                      >
-                        <span className="text-xs text-white px-2 leading-6 truncate block">
-                          {item.duration}d
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Legend */}
-              <div className="mt-6 pt-4 border-t border-truecost-glass-border">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-truecost-text-secondary">
-                    Total Duration: <span className="font-semibold text-truecost-text-primary">{totalDays} days</span>
-                  </p>
-                  <p className="text-sm text-truecost-text-secondary">
-                    Start Date: <span className="font-semibold text-truecost-text-primary">Jan 15, 2025</span>
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Available PDF Reports */}
-        <div className="glass-panel p-6">
-          <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Available Reports</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {PDF_DEMO_DATA.map((pdf, index) => (
-              <div key={index} className="p-4 bg-truecost-glass-bg rounded-lg border border-truecost-glass-border hover:border-truecost-cyan/50 transition-colors cursor-pointer">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-12 bg-red-500/20 rounded flex items-center justify-center flex-shrink-0">
-                    <svg className="w-6 h-6 text-red-400" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-truecost-text-primary mb-1">{pdf.name}</h4>
-                    <p className="text-xs text-truecost-text-secondary mb-2">{pdf.description}</p>
-                    <span className="text-xs text-truecost-text-muted">{pdf.pages} pages</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Floor Plan Preview */}
-        <div className="glass-panel p-6">
-          <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Annotated Floor Plan</h3>
-          <div className="rounded-xl overflow-hidden border border-truecost-glass-border">
-            <img src={floorPlanImage} alt="Floor Plan" className="w-full object-contain bg-white" />
-          </div>
-          <p className="text-sm text-truecost-text-secondary mt-3 text-center">
-            AI-annotated floor plan included in all reports
-          </p>
-        </div>
-      </div>
-    );
-  };
-
-  // Differentiator content renderer
-  const renderDifferentiatorContent = () => (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Header */}
-      <div className="glass-panel p-6 text-center">
-        <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Why Choose TrueCost?</h2>
-        <p className="text-truecost-text-secondary">The AI-powered advantage for construction professionals</p>
-      </div>
-
-      {/* Key Differentiators */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="glass-panel p-6">
-          <div className="w-12 h-12 rounded-full bg-truecost-cyan/20 flex items-center justify-center mb-4">
-            <svg className="w-6 h-6 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">120x Faster</h3>
-          <p className="text-truecost-text-secondary">
-            What takes 6+ hours manually, TrueCost completes in 3 minutes.
-            More time for client relationships, less time on spreadsheets.
-          </p>
-        </div>
-
-        <div className="glass-panel p-6">
-          <div className="w-12 h-12 rounded-full bg-truecost-teal/20 flex items-center justify-center mb-4">
-            <svg className="w-6 h-6 text-truecost-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">98.5% Accurate</h3>
-          <p className="text-truecost-text-secondary">
-            Our AI consistently delivers estimates within 1.5% of actual project costs,
-            compared to 20-30% variance with manual estimates.
-          </p>
-        </div>
-
-        <div className="glass-panel p-6">
-          <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
-            <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">Real-Time Pricing</h3>
-          <p className="text-truecost-text-secondary">
-            Live pricing from major suppliers. Compare Home Depot vs Lowe's automatically
-            and optimize your material sourcing.
-          </p>
-        </div>
-
-        <div className="glass-panel p-6">
-          <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
-            <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">CSI MasterFormat</h3>
-          <p className="text-truecost-text-secondary">
-            Industry-standard cost breakdowns following CSI divisions.
-            Professional reports ready for client presentations.
-          </p>
-        </div>
-      </div>
-
-      {/* Comparison Table */}
-      <div className="glass-panel p-6">
-        <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">TrueCost vs Traditional Estimation</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-truecost-glass-border">
-                <th className="text-left py-3 text-truecost-text-secondary">Feature</th>
-                <th className="text-center py-3 text-truecost-text-secondary">Traditional</th>
-                <th className="text-center py-3 text-truecost-cyan">TrueCost</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-truecost-glass-border/50">
-              <tr>
-                <td className="py-3 text-truecost-text-primary">Time to estimate</td>
-                <td className="py-3 text-center text-truecost-text-secondary">4-6 hours</td>
-                <td className="py-3 text-center text-truecost-cyan font-medium">3 minutes</td>
-              </tr>
-              <tr>
-                <td className="py-3 text-truecost-text-primary">Accuracy vs actual</td>
-                <td className="py-3 text-center text-truecost-text-secondary">±20-30%</td>
-                <td className="py-3 text-center text-truecost-cyan font-medium">±1.5%</td>
-              </tr>
-              <tr>
-                <td className="py-3 text-truecost-text-primary">Material pricing</td>
-                <td className="py-3 text-center text-truecost-text-secondary">Manual lookup</td>
-                <td className="py-3 text-center text-truecost-cyan font-medium">Real-time API</td>
-              </tr>
-              <tr>
-                <td className="py-3 text-truecost-text-primary">Labor rates</td>
-                <td className="py-3 text-center text-truecost-text-secondary">Static tables</td>
-                <td className="py-3 text-center text-truecost-cyan font-medium">Regional BLS data</td>
-              </tr>
-              <tr>
-                <td className="py-3 text-truecost-text-primary">Risk analysis</td>
-                <td className="py-3 text-center text-red-400">Not included</td>
-                <td className="py-3 text-center text-truecost-cyan font-medium">AI-powered</td>
-              </tr>
-            </tbody>
-          </table>
+          <blockquote className="text-lg text-truecost-text-primary italic">
+            "We built TrueCost because we were tired of losing money on jobs we under-bid
+            and losing clients on jobs we over-bid. Now our estimates are right, every time."
+          </blockquote>
+          <p className="text-sm text-truecost-cyan mt-4">— TrueCost Founding Team</p>
         </div>
       </div>
     </div>
   );
 
-  // Pricing content renderer
   const renderPricingContent = () => {
     const plans = [
       {
@@ -1609,142 +1364,130 @@ export function DemoPage() {
     ];
 
     return (
-      <div className="space-y-6 animate-fadeIn">
-        {/* Header */}
-        <div className="glass-panel p-6 text-center">
-          <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Simple, Transparent Pricing</h2>
-          <p className="text-truecost-text-secondary">Start free and scale as you grow</p>
-        </div>
+      <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+        <div className="flex-1 max-w-5xl mx-auto w-full space-y-6">
+          {/* Header */}
+          <div className="glass-panel p-6 text-center">
+            <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Simple, Transparent Pricing</h2>
+            <p className="text-truecost-text-secondary">Start free and scale as you grow</p>
+          </div>
 
-        {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`glass-panel p-6 relative ${
-                plan.highlighted ? "border-truecost-cyan ring-1 ring-truecost-cyan/50" : ""
-              }`}
-            >
-              {plan.highlighted && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span className="bg-truecost-cyan text-truecost-bg-primary text-xs font-semibold px-3 py-1 rounded-full">
-                    Most Popular
-                  </span>
-                </div>
-              )}
-
-              <div className="text-center mb-6">
-                <h3 className="text-xl font-bold text-truecost-text-primary mb-1">{plan.name}</h3>
-                <p className="text-sm text-truecost-text-muted mb-3">{plan.description}</p>
-                <div className="flex items-baseline justify-center gap-1">
-                  <span className="text-3xl font-bold text-truecost-text-primary">{plan.price}</span>
-                  {plan.period && <span className="text-truecost-text-muted">{plan.period}</span>}
-                </div>
-              </div>
-
-              <ul className="space-y-3 mb-6">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2">
-                    <svg className="w-5 h-5 text-truecost-cyan flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="text-sm text-truecost-text-secondary">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                to={plan.name === "Enterprise" ? "/contact" : "/signup"}
-                className={`block w-full py-2.5 rounded-lg font-medium text-center transition-colors ${
-                  plan.highlighted
-                    ? "bg-truecost-cyan text-truecost-bg-primary hover:bg-truecost-cyan/90"
-                    : "bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary hover:border-truecost-cyan/50"
+          {/* Pricing Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {plans.map((plan) => (
+              <div
+                key={plan.name}
+                className={`glass-panel p-6 relative ${
+                  plan.highlighted ? "border-truecost-cyan ring-1 ring-truecost-cyan/50" : ""
                 }`}
               >
-                {plan.name === "Enterprise" ? "Contact Sales" : "Start Free Trial"}
-              </Link>
-            </div>
-          ))}
-        </div>
+                {plan.highlighted && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="bg-truecost-cyan text-truecost-bg-primary text-xs font-semibold px-3 py-1 rounded-full">
+                      Most Popular
+                    </span>
+                  </div>
+                )}
 
-        {/* FAQ Link */}
-        <div className="text-center">
-          <p className="text-truecost-text-muted text-sm">
-            Have questions?{" "}
-            <Link to="/contact" className="text-truecost-cyan hover:underline">
-              Contact our team
-            </Link>
-          </p>
+                <div className="text-center mb-6">
+                  <h3 className="text-xl font-bold text-truecost-text-primary mb-1">{plan.name}</h3>
+                  <p className="text-sm text-truecost-text-muted mb-3">{plan.description}</p>
+                  <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-3xl font-bold text-truecost-text-primary">{plan.price}</span>
+                    {plan.period && <span className="text-truecost-text-muted">{plan.period}</span>}
+                  </div>
+                </div>
+
+                <ul className="space-y-3 mb-6">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2">
+                      <svg className="w-5 h-5 text-truecost-cyan flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-sm text-truecost-text-secondary">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <Link
+                  to={plan.name === "Enterprise" ? "/contact" : "/signup"}
+                  className={`block w-full py-2.5 rounded-lg font-medium text-center transition-colors ${
+                    plan.highlighted
+                      ? "bg-truecost-cyan text-truecost-bg-primary hover:bg-truecost-cyan/90"
+                      : "bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary hover:border-truecost-cyan/50"
+                  }`}
+                >
+                  {plan.name === "Enterprise" ? "Contact Sales" : "Start Free Trial"}
+                </Link>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
   };
 
-  // About Us content renderer
   const renderAboutUsContent = () => (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Header */}
-      <div className="glass-panel p-6 text-center">
-        <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Meet the Team</h2>
-        <p className="text-truecost-text-secondary">The people behind TrueCost AI</p>
-      </div>
-
-      {/* Team Grid - 20% larger boxes */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-        {teamMembers.map((member) => (
-          <div key={member.name} className="glass-panel p-5 text-center">
-            <img
-              src={member.image}
-              alt={member.name}
-              className="w-24 h-24 rounded-full mx-auto mb-4 object-cover border-2 border-truecost-glass-border"
-            />
-            <h4 className="font-semibold text-truecost-text-primary text-base">{member.name}</h4>
-            <p className="text-sm text-truecost-cyan">{member.role}</p>
-            {member.desc && (
-              <p className="text-sm text-truecost-text-muted mt-2">{member.desc}</p>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Contact & QR Code */}
-      <div className="glass-panel p-6">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex-1 text-center md:text-left">
-            <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">Get in Touch</h3>
-            <p className="text-truecost-text-secondary mb-4">
-              Ready to transform your estimation workflow? Scan the QR code or reach out directly.
-            </p>
-            <div className="flex flex-wrap gap-3 justify-center md:justify-start">
-              <Link
-                to="/contact"
-                className="px-6 py-2 bg-truecost-cyan text-truecost-bg-primary rounded-lg font-medium hover:bg-truecost-cyan/90 transition-colors"
-              >
-                Contact Us
-              </Link>
-              <Link
-                to="/signup"
-                className="px-6 py-2 bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary rounded-lg font-medium hover:border-truecost-cyan/50 transition-colors"
-              >
-                Start Free Trial
-              </Link>
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+      <div className="flex-1 max-w-5xl mx-auto w-full space-y-6">
+        {/* Header with QR and title at top */}
+        <div className="glass-panel p-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Meet the Team</h2>
+              <p className="text-truecost-text-secondary">The builders behind TrueCost AI</p>
             </div>
-          </div>
-          <div className="flex-shrink-0">
-            <div className="w-36 h-36 bg-white rounded-xl p-2 shadow-lg">
-              <img src={qrCodeImage} alt="QR Code" className="w-full h-full object-contain" />
+            <div className="flex-shrink-0 flex items-center gap-4">
+              <div className="w-28 h-28 bg-white rounded-xl p-2 shadow-lg">
+                <img src={qrCodeImage} alt="QR Code" className="w-full h-full object-contain" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm text-truecost-cyan font-medium">Scan to visit</p>
+                <p className="text-xs text-truecost-text-muted">truecost.ai</p>
+              </div>
             </div>
-            <p className="text-xs text-truecost-text-muted text-center mt-2">Scan to visit TrueCost</p>
           </div>
         </div>
-      </div>
 
-      {/* Company Info */}
-      <div className="glass-panel p-6 text-center">
-        <p className="text-truecost-text-secondary text-sm">
-          TrueCost is on a mission to bring accurate, AI-powered estimation to every contractor.
-          Built by industry veterans who understand the challenges of construction estimation.
-        </p>
+        {/* Team Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+          {teamMembers.map((member) => (
+            <div key={member.name} className="glass-panel p-5 text-center">
+              <img
+                src={member.image}
+                alt={member.name}
+                className="w-24 h-24 rounded-full mx-auto mb-4 object-cover border-2 border-truecost-glass-border"
+              />
+              <h4 className="font-semibold text-truecost-text-primary text-base">{member.name}</h4>
+              <p className="text-sm text-truecost-cyan">{member.role}</p>
+              {member.desc && (
+                <p className="text-sm text-truecost-text-muted mt-2">{member.desc}</p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Contact */}
+        <div className="glass-panel p-6 text-center">
+          <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">Get in Touch</h3>
+          <p className="text-truecost-text-secondary mb-4">
+            Ready to transform your estimation workflow?
+          </p>
+          <div className="flex flex-wrap gap-3 justify-center">
+            <Link
+              to="/contact"
+              className="px-6 py-2 bg-truecost-cyan text-truecost-bg-primary rounded-lg font-medium hover:bg-truecost-cyan/90 transition-colors"
+            >
+              Contact Us
+            </Link>
+            <Link
+              to="/signup"
+              className="px-6 py-2 bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary rounded-lg font-medium hover:border-truecost-cyan/50 transition-colors"
+            >
+              Start Free Trial
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1770,14 +1513,6 @@ export function DemoPage() {
         return renderGeneratingContent();
       case "result-summary":
         return renderResultSummary();
-      case "result-materials":
-        return renderResultMaterials();
-      case "result-labor":
-        return renderResultLabor();
-      case "result-timeline":
-        return renderResultTimeline();
-      case "result-risks":
-        return renderResultRisks();
       case "result-price-compare":
         return renderPriceComparison();
       case "result-pdf":
@@ -1795,106 +1530,75 @@ export function DemoPage() {
     }
   };
 
+  // For home page, render without navigation wrapper
+  if (currentStep.id === "home") {
+    return (
+      <div className="min-h-screen bg-truecost-bg-primary">
+        {renderContent()}
+        <style>{`
+          @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
-    <PublicLayout>
-      <div className="min-h-screen bg-truecost-bg-primary pt-20 pb-12">
-        <div className="container-spacious max-w-6xl mx-auto px-4">
-          {/* Header */}
-          <div className="text-center mb-6">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-truecost-cyan/20 text-truecost-cyan border border-truecost-cyan/30 mb-4">
-              Interactive Demo
-            </span>
-            <h1 className="text-3xl md:text-4xl font-bold text-truecost-text-primary mb-2">
-              TrueCost Estimation Workflow
-            </h1>
-            <p className="text-truecost-text-secondary max-w-2xl mx-auto">
-              See how TrueCost transforms project scope into accurate, detailed construction estimates
-            </p>
-          </div>
+    <div className="min-h-screen bg-truecost-bg-primary">
+      {/* Content */}
+      <div className="animate-fadeIn">
+        {renderContent()}
+      </div>
 
-          {/* Workflow Stepper */}
-          {renderStepper()}
+      {/* Navigation buttons - fixed at bottom */}
+      <div className="fixed bottom-0 left-0 right-0 bg-truecost-bg-primary/95 backdrop-blur-sm border-t border-truecost-glass-border py-4 px-4 z-50">
+        <div className="max-w-4xl mx-auto flex justify-center items-center gap-4">
+          <button
+            onClick={goPrev}
+            disabled={isFirstStep}
+            className={`px-6 py-3 rounded-full font-medium transition-all flex items-center gap-2 ${
+              isFirstStep
+                ? "bg-truecost-glass-bg text-truecost-text-muted cursor-not-allowed"
+                : "bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary hover:border-truecost-cyan/50"
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Previous
+          </button>
 
-          {/* Step indicator dots */}
-          {renderStepDots()}
+          <span className="text-truecost-text-secondary text-sm px-4 min-w-[80px] text-center">
+            {currentStepIndex + 1} / {DEMO_STEPS.length}
+          </span>
 
-          {/* Current step label */}
-          <div className="text-center mb-6">
-            <span className="inline-flex items-center px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border">
-              <span className="text-truecost-text-secondary text-sm mr-2">
-                Step {currentStepIndex + 1} of {DEMO_STEPS.length}:
-              </span>
-              <span className="text-truecost-text-primary font-medium">{currentStep.label}</span>
-            </span>
-          </div>
-
-          {/* Content */}
-          {renderContent()}
-
-          {/* Navigation buttons */}
-          <div className="flex justify-center items-center gap-4 mt-8">
-            <button
-              onClick={goPrev}
-              disabled={isFirstStep}
-              className={`px-6 py-3 rounded-full font-medium transition-all flex items-center gap-2 ${
-                isFirstStep
-                  ? "bg-truecost-glass-bg text-truecost-text-muted cursor-not-allowed"
-                  : "btn-pill-secondary"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Previous
-            </button>
-
-            <span className="text-truecost-text-secondary text-sm px-4">
-              {currentStepIndex + 1} / {DEMO_STEPS.length}
-            </span>
-
-            <button
-              onClick={goNext}
-              disabled={isLastStep}
-              className={`px-6 py-3 rounded-full font-medium transition-all flex items-center gap-2 ${
-                isLastStep
-                  ? "bg-truecost-glass-bg text-truecost-text-muted cursor-not-allowed"
-                  : "btn-pill-primary"
-              }`}
-            >
-              Next
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Keyboard hint */}
-          <p className="text-center text-truecost-text-muted text-xs mt-4">
-            Press <kbd className="px-1.5 py-0.5 bg-truecost-glass-bg rounded border border-truecost-glass-border mx-0.5">→</kbd> or <kbd className="px-1.5 py-0.5 bg-truecost-glass-bg rounded border border-truecost-glass-border mx-0.5">Space</kbd> for next, <kbd className="px-1.5 py-0.5 bg-truecost-glass-bg rounded border border-truecost-glass-border mx-0.5">←</kbd> for previous
-          </p>
+          <button
+            onClick={goNext}
+            disabled={isLastStep}
+            className={`px-6 py-3 rounded-full font-medium transition-all flex items-center gap-2 ${
+              isLastStep
+                ? "bg-truecost-glass-bg text-truecost-text-muted cursor-not-allowed"
+                : "bg-truecost-cyan text-truecost-bg-primary hover:bg-truecost-cyan/90"
+            }`}
+          >
+            Next
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
       </div>
 
-      {/* Keyboard navigation */}
       <style>{`
         @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
-        }
-        .writing-vertical {
-          writing-mode: vertical-rl;
-          text-orientation: mixed;
-        }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
       `}</style>
-    </PublicLayout>
+    </div>
   );
 }
