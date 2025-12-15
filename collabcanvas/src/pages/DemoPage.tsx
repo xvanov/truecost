@@ -5,10 +5,19 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { PublicLayout } from "../components/layouts/PublicLayout";
+
+// Asset imports
+import heroVideo from "../assets/animated_hero.mp4";
+import logo from "../assets/logo.png";
+import floorPlanImage from "../assets/floor_plan.png";
+import qrCodeImage from "../assets/qr-code.png";
+import { teamMembers } from "../assets/team/teamMembers";
 
 // All demo steps in order
 const DEMO_STEPS = [
+  { id: "home", label: "Welcome", phase: "home" },
   { id: "scope", label: "Project Scope", phase: "scope" },
   { id: "annotate-plan", label: "Plan Annotations", phase: "annotate" },
   { id: "annotate-chat", label: "AI Clarification", phase: "annotate" },
@@ -25,7 +34,11 @@ const DEMO_STEPS = [
   { id: "result-timeline", label: "Timeline", phase: "results" },
   { id: "result-risks", label: "Risk Analysis", phase: "results" },
   { id: "result-price-compare", label: "Price Comparison", phase: "results" },
+  { id: "result-pdf", label: "PDF Reports", phase: "results" },
   { id: "result-accuracy", label: "Estimate Accuracy", phase: "results" },
+  { id: "differentiator", label: "Why TrueCost", phase: "about" },
+  { id: "pricing", label: "Pricing", phase: "about" },
+  { id: "about-us", label: "Meet the Team", phase: "about" },
 ] as const;
 
 // Hardcoded demo data
@@ -242,6 +255,30 @@ const ACCURACY_COMPARISON = {
   },
 };
 
+// PDF Demo Data
+const PDF_DEMO_DATA = [
+  { name: "Complete Estimate", description: "Full project breakdown with all line items", pages: 12 },
+  { name: "Executive Summary", description: "High-level overview for stakeholders", pages: 3 },
+  { name: "Material Takeoff", description: "Detailed materials list with quantities", pages: 5 },
+  { name: "Labor Schedule", description: "Trade-by-trade labor breakdown", pages: 4 },
+  { name: "Project Timeline", description: "Gantt chart and milestone schedule", pages: 2 },
+];
+
+// Gantt Schedule Data
+const GANTT_SCHEDULE = [
+  { task: "Demo & Prep", start: 0, duration: 2, color: "bg-red-500" },
+  { task: "Rough-In (Plumbing)", start: 2, duration: 2, color: "bg-blue-500" },
+  { task: "Rough-In (Electrical)", start: 2, duration: 1.5, color: "bg-yellow-500" },
+  { task: "Framing", start: 3, duration: 2, color: "bg-orange-500" },
+  { task: "Drywall", start: 5, duration: 2, color: "bg-purple-500" },
+  { task: "Waterproofing", start: 7, duration: 1, color: "bg-cyan-500" },
+  { task: "Tile - Walls", start: 8, duration: 3, color: "bg-teal-500" },
+  { task: "Tile - Floor", start: 11, duration: 2, color: "bg-teal-400" },
+  { task: "Fixtures", start: 13, duration: 2, color: "bg-green-500" },
+  { task: "Paint & Finish", start: 15, duration: 2, color: "bg-pink-500" },
+  { task: "Final Inspection", start: 17, duration: 1, color: "bg-gray-500" },
+];
+
 export function DemoPage() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
@@ -292,8 +329,10 @@ export function DemoPage() {
 
   // Get current phase for the stepper highlight
   const getCurrentPhase = () => {
+    if (currentStep.phase === "home") return "home";
     if (currentStep.phase === "scope") return "scope";
     if (currentStep.phase === "annotate") return "annotate";
+    if (currentStep.phase === "about") return "about";
     return "estimate";
   };
 
@@ -301,18 +340,21 @@ export function DemoPage() {
   const renderStepper = () => {
     const phase = getCurrentPhase();
     const phases = [
+      { id: "home", label: "Welcome" },
       { id: "scope", label: "Scope" },
       { id: "annotate", label: "Annotate" },
       { id: "estimate", label: "Estimate" },
+      { id: "about", label: "About" },
     ];
 
     return (
       <div className="flex items-center justify-center gap-4 mb-6">
         {phases.map((p, index) => {
           const isActive = p.id === phase;
-          const isCompleted =
-            (p.id === "scope" && (phase === "annotate" || phase === "estimate")) ||
-            (p.id === "annotate" && phase === "estimate");
+          const phaseOrder = ["home", "scope", "annotate", "estimate", "about"];
+          const currentPhaseIndex = phaseOrder.indexOf(phase);
+          const thisPhaseIndex = phaseOrder.indexOf(p.id);
+          const isCompleted = thisPhaseIndex < currentPhaseIndex;
 
           return (
             <div key={p.id} className="flex items-center">
@@ -334,7 +376,7 @@ export function DemoPage() {
                 </span>
                 {p.label}
               </div>
-              {index < 2 && <div className="w-8 h-0.5 bg-truecost-glass-border mx-2" />}
+              {index < phases.length - 1 && <div className="w-8 h-0.5 bg-truecost-glass-border mx-2" />}
             </div>
           );
         })}
@@ -1249,9 +1291,469 @@ export function DemoPage() {
     );
   };
 
+  // Home content renderer
+  const renderHomeContent = () => (
+    <div className="space-y-8 animate-fadeIn">
+      {/* Hero Section */}
+      <div className="glass-panel p-8 text-center">
+        <img src={logo} alt="TrueCost" className="h-16 mx-auto mb-6" />
+        <h2 className="text-3xl md:text-4xl font-bold text-truecost-text-primary mb-4">
+          AI-Powered Construction Estimation
+        </h2>
+        <p className="text-lg text-truecost-text-secondary max-w-2xl mx-auto mb-6">
+          Transform project blueprints into accurate, detailed estimates in minutes, not hours.
+          See how TrueCost revolutionizes construction cost estimation.
+        </p>
+        <div className="flex flex-wrap justify-center gap-4">
+          <div className="flex items-center gap-2 px-4 py-2 bg-truecost-cyan/10 rounded-full border border-truecost-cyan/30">
+            <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span className="text-truecost-cyan text-sm font-medium">3 minutes vs 6 hours</span>
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 bg-truecost-teal/10 rounded-full border border-truecost-teal/30">
+            <svg className="w-5 h-5 text-truecost-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-truecost-teal text-sm font-medium">98.5% Accuracy</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Video Demo */}
+      <div className="glass-panel p-6">
+        <h3 className="text-xl font-semibold text-truecost-text-primary mb-4 text-center">See TrueCost in Action</h3>
+        <div className="relative rounded-xl overflow-hidden bg-truecost-bg-secondary">
+          <video
+            src={heroVideo}
+            className="w-full aspect-video object-cover"
+            autoPlay
+            loop
+            muted
+            playsInline
+          />
+        </div>
+      </div>
+
+      {/* What You'll See */}
+      <div className="glass-panel p-6">
+        <h3 className="text-xl font-semibold text-truecost-text-primary mb-4">In This Demo</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 bg-truecost-glass-bg rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center mb-3">
+              <span className="text-truecost-cyan font-bold">1</span>
+            </div>
+            <h4 className="font-medium text-truecost-text-primary mb-1">Project Scope</h4>
+            <p className="text-sm text-truecost-text-secondary">Define project details and upload blueprints</p>
+          </div>
+          <div className="p-4 bg-truecost-glass-bg rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-truecost-teal/20 flex items-center justify-center mb-3">
+              <span className="text-truecost-teal font-bold">2</span>
+            </div>
+            <h4 className="font-medium text-truecost-text-primary mb-1">AI Analysis</h4>
+            <p className="text-sm text-truecost-text-secondary">Watch AI extract measurements and calculate costs</p>
+          </div>
+          <div className="p-4 bg-truecost-glass-bg rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center mb-3">
+              <span className="text-green-500 font-bold">3</span>
+            </div>
+            <h4 className="font-medium text-truecost-text-primary mb-1">Detailed Estimate</h4>
+            <p className="text-sm text-truecost-text-secondary">Review comprehensive cost breakdowns and reports</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // PDF Reports renderer
+  const renderPDFReports = () => {
+    const totalDays = 18;
+
+    return (
+      <div className="space-y-6 animate-fadeIn">
+        {/* Header */}
+        <div className="glass-panel p-6 text-center">
+          <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">PDF Reports & Timeline</h2>
+          <p className="text-truecost-text-secondary">Export professional reports and visualize your project schedule</p>
+        </div>
+
+        {/* Gantt Chart */}
+        <div className="glass-panel p-6">
+          <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Project Timeline - Gantt Chart</h3>
+          <div className="overflow-x-auto">
+            <div className="min-w-[800px]">
+              {/* Timeline header */}
+              <div className="flex border-b border-truecost-glass-border pb-2 mb-4">
+                <div className="w-40 flex-shrink-0 text-sm text-truecost-text-secondary">Task</div>
+                <div className="flex-1 flex">
+                  {Array.from({ length: totalDays }, (_, i) => (
+                    <div key={i} className="flex-1 text-center text-xs text-truecost-text-muted">
+                      Day {i + 1}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Gantt bars */}
+              <div className="space-y-2">
+                {GANTT_SCHEDULE.map((item, index) => (
+                  <div key={index} className="flex items-center">
+                    <div className="w-40 flex-shrink-0 text-sm text-truecost-text-primary truncate pr-2">
+                      {item.task}
+                    </div>
+                    <div className="flex-1 flex relative h-8">
+                      <div
+                        className={`absolute h-6 ${item.color} rounded opacity-80 top-1`}
+                        style={{
+                          left: `${(item.start / totalDays) * 100}%`,
+                          width: `${(item.duration / totalDays) * 100}%`,
+                        }}
+                      >
+                        <span className="text-xs text-white px-2 leading-6 truncate block">
+                          {item.duration}d
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Legend */}
+              <div className="mt-6 pt-4 border-t border-truecost-glass-border">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-truecost-text-secondary">
+                    Total Duration: <span className="font-semibold text-truecost-text-primary">{totalDays} days</span>
+                  </p>
+                  <p className="text-sm text-truecost-text-secondary">
+                    Start Date: <span className="font-semibold text-truecost-text-primary">Jan 15, 2025</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Available PDF Reports */}
+        <div className="glass-panel p-6">
+          <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Available Reports</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {PDF_DEMO_DATA.map((pdf, index) => (
+              <div key={index} className="p-4 bg-truecost-glass-bg rounded-lg border border-truecost-glass-border hover:border-truecost-cyan/50 transition-colors cursor-pointer">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-12 bg-red-500/20 rounded flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-truecost-text-primary mb-1">{pdf.name}</h4>
+                    <p className="text-xs text-truecost-text-secondary mb-2">{pdf.description}</p>
+                    <span className="text-xs text-truecost-text-muted">{pdf.pages} pages</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Floor Plan Preview */}
+        <div className="glass-panel p-6">
+          <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Annotated Floor Plan</h3>
+          <div className="rounded-xl overflow-hidden border border-truecost-glass-border">
+            <img src={floorPlanImage} alt="Floor Plan" className="w-full object-contain bg-white" />
+          </div>
+          <p className="text-sm text-truecost-text-secondary mt-3 text-center">
+            AI-annotated floor plan included in all reports
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  // Differentiator content renderer
+  const renderDifferentiatorContent = () => (
+    <div className="space-y-6 animate-fadeIn">
+      {/* Header */}
+      <div className="glass-panel p-6 text-center">
+        <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Why Choose TrueCost?</h2>
+        <p className="text-truecost-text-secondary">The AI-powered advantage for construction professionals</p>
+      </div>
+
+      {/* Key Differentiators */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="glass-panel p-6">
+          <div className="w-12 h-12 rounded-full bg-truecost-cyan/20 flex items-center justify-center mb-4">
+            <svg className="w-6 h-6 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">120x Faster</h3>
+          <p className="text-truecost-text-secondary">
+            What takes 6+ hours manually, TrueCost completes in 3 minutes.
+            More time for client relationships, less time on spreadsheets.
+          </p>
+        </div>
+
+        <div className="glass-panel p-6">
+          <div className="w-12 h-12 rounded-full bg-truecost-teal/20 flex items-center justify-center mb-4">
+            <svg className="w-6 h-6 text-truecost-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">98.5% Accurate</h3>
+          <p className="text-truecost-text-secondary">
+            Our AI consistently delivers estimates within 1.5% of actual project costs,
+            compared to 20-30% variance with manual estimates.
+          </p>
+        </div>
+
+        <div className="glass-panel p-6">
+          <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
+            <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">Real-Time Pricing</h3>
+          <p className="text-truecost-text-secondary">
+            Live pricing from major suppliers. Compare Home Depot vs Lowe's automatically
+            and optimize your material sourcing.
+          </p>
+        </div>
+
+        <div className="glass-panel p-6">
+          <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
+            <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">CSI MasterFormat</h3>
+          <p className="text-truecost-text-secondary">
+            Industry-standard cost breakdowns following CSI divisions.
+            Professional reports ready for client presentations.
+          </p>
+        </div>
+      </div>
+
+      {/* Comparison Table */}
+      <div className="glass-panel p-6">
+        <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">TrueCost vs Traditional Estimation</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-truecost-glass-border">
+                <th className="text-left py-3 text-truecost-text-secondary">Feature</th>
+                <th className="text-center py-3 text-truecost-text-secondary">Traditional</th>
+                <th className="text-center py-3 text-truecost-cyan">TrueCost</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-truecost-glass-border/50">
+              <tr>
+                <td className="py-3 text-truecost-text-primary">Time to estimate</td>
+                <td className="py-3 text-center text-truecost-text-secondary">4-6 hours</td>
+                <td className="py-3 text-center text-truecost-cyan font-medium">3 minutes</td>
+              </tr>
+              <tr>
+                <td className="py-3 text-truecost-text-primary">Accuracy vs actual</td>
+                <td className="py-3 text-center text-truecost-text-secondary">±20-30%</td>
+                <td className="py-3 text-center text-truecost-cyan font-medium">±1.5%</td>
+              </tr>
+              <tr>
+                <td className="py-3 text-truecost-text-primary">Material pricing</td>
+                <td className="py-3 text-center text-truecost-text-secondary">Manual lookup</td>
+                <td className="py-3 text-center text-truecost-cyan font-medium">Real-time API</td>
+              </tr>
+              <tr>
+                <td className="py-3 text-truecost-text-primary">Labor rates</td>
+                <td className="py-3 text-center text-truecost-text-secondary">Static tables</td>
+                <td className="py-3 text-center text-truecost-cyan font-medium">Regional BLS data</td>
+              </tr>
+              <tr>
+                <td className="py-3 text-truecost-text-primary">Risk analysis</td>
+                <td className="py-3 text-center text-red-400">Not included</td>
+                <td className="py-3 text-center text-truecost-cyan font-medium">AI-powered</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Pricing content renderer
+  const renderPricingContent = () => {
+    const plans = [
+      {
+        name: "Trial",
+        price: "Free",
+        period: "",
+        description: "Try TrueCost with full capabilities",
+        features: ["1 trial project", "Full AI analysis", "Detailed CSI breakdown", "Export to PDF"],
+        highlighted: false,
+      },
+      {
+        name: "Professional",
+        price: "$399",
+        period: "/month",
+        description: "For contractors and small teams",
+        features: ["Unlimited projects", "Advanced AI analysis", "Priority support", "Detailed CSI breakdown", "Risk assessment", "Timeline generation"],
+        highlighted: true,
+      },
+      {
+        name: "Enterprise",
+        price: "Custom",
+        period: "",
+        description: "For large organizations",
+        features: ["Everything in Professional", "Custom integrations", "Dedicated account manager", "On-premise deployment", "SLA guarantee", "Custom AI training"],
+        highlighted: false,
+      },
+    ];
+
+    return (
+      <div className="space-y-6 animate-fadeIn">
+        {/* Header */}
+        <div className="glass-panel p-6 text-center">
+          <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Simple, Transparent Pricing</h2>
+          <p className="text-truecost-text-secondary">Start free and scale as you grow</p>
+        </div>
+
+        {/* Pricing Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {plans.map((plan) => (
+            <div
+              key={plan.name}
+              className={`glass-panel p-6 relative ${
+                plan.highlighted ? "border-truecost-cyan ring-1 ring-truecost-cyan/50" : ""
+              }`}
+            >
+              {plan.highlighted && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="bg-truecost-cyan text-truecost-bg-primary text-xs font-semibold px-3 py-1 rounded-full">
+                    Most Popular
+                  </span>
+                </div>
+              )}
+
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-bold text-truecost-text-primary mb-1">{plan.name}</h3>
+                <p className="text-sm text-truecost-text-muted mb-3">{plan.description}</p>
+                <div className="flex items-baseline justify-center gap-1">
+                  <span className="text-3xl font-bold text-truecost-text-primary">{plan.price}</span>
+                  {plan.period && <span className="text-truecost-text-muted">{plan.period}</span>}
+                </div>
+              </div>
+
+              <ul className="space-y-3 mb-6">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-2">
+                    <svg className="w-5 h-5 text-truecost-cyan flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-sm text-truecost-text-secondary">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <Link
+                to={plan.name === "Enterprise" ? "/contact" : "/signup"}
+                className={`block w-full py-2.5 rounded-lg font-medium text-center transition-colors ${
+                  plan.highlighted
+                    ? "bg-truecost-cyan text-truecost-bg-primary hover:bg-truecost-cyan/90"
+                    : "bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary hover:border-truecost-cyan/50"
+                }`}
+              >
+                {plan.name === "Enterprise" ? "Contact Sales" : "Start Free Trial"}
+              </Link>
+            </div>
+          ))}
+        </div>
+
+        {/* FAQ Link */}
+        <div className="text-center">
+          <p className="text-truecost-text-muted text-sm">
+            Have questions?{" "}
+            <Link to="/contact" className="text-truecost-cyan hover:underline">
+              Contact our team
+            </Link>
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  // About Us content renderer
+  const renderAboutUsContent = () => (
+    <div className="space-y-6 animate-fadeIn">
+      {/* Header */}
+      <div className="glass-panel p-6 text-center">
+        <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Meet the Team</h2>
+        <p className="text-truecost-text-secondary">The people behind TrueCost AI</p>
+      </div>
+
+      {/* Team Grid - 20% larger boxes */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+        {teamMembers.map((member) => (
+          <div key={member.name} className="glass-panel p-5 text-center">
+            <img
+              src={member.image}
+              alt={member.name}
+              className="w-24 h-24 rounded-full mx-auto mb-4 object-cover border-2 border-truecost-glass-border"
+            />
+            <h4 className="font-semibold text-truecost-text-primary text-base">{member.name}</h4>
+            <p className="text-sm text-truecost-cyan">{member.role}</p>
+            {member.desc && (
+              <p className="text-sm text-truecost-text-muted mt-2">{member.desc}</p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Contact & QR Code */}
+      <div className="glass-panel p-6">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex-1 text-center md:text-left">
+            <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">Get in Touch</h3>
+            <p className="text-truecost-text-secondary mb-4">
+              Ready to transform your estimation workflow? Scan the QR code or reach out directly.
+            </p>
+            <div className="flex flex-wrap gap-3 justify-center md:justify-start">
+              <Link
+                to="/contact"
+                className="px-6 py-2 bg-truecost-cyan text-truecost-bg-primary rounded-lg font-medium hover:bg-truecost-cyan/90 transition-colors"
+              >
+                Contact Us
+              </Link>
+              <Link
+                to="/signup"
+                className="px-6 py-2 bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary rounded-lg font-medium hover:border-truecost-cyan/50 transition-colors"
+              >
+                Start Free Trial
+              </Link>
+            </div>
+          </div>
+          <div className="flex-shrink-0">
+            <div className="w-36 h-36 bg-white rounded-xl p-2 shadow-lg">
+              <img src={qrCodeImage} alt="QR Code" className="w-full h-full object-contain" />
+            </div>
+            <p className="text-xs text-truecost-text-muted text-center mt-2">Scan to visit TrueCost</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Company Info */}
+      <div className="glass-panel p-6 text-center">
+        <p className="text-truecost-text-secondary text-sm">
+          TrueCost is on a mission to bring accurate, AI-powered estimation to every contractor.
+          Built by industry veterans who understand the challenges of construction estimation.
+        </p>
+      </div>
+    </div>
+  );
+
   // Main content renderer based on current step
   const renderContent = () => {
     switch (currentStep.id) {
+      case "home":
+        return renderHomeContent();
       case "scope":
         return renderScopeContent();
       case "annotate-plan":
@@ -1278,8 +1780,16 @@ export function DemoPage() {
         return renderResultRisks();
       case "result-price-compare":
         return renderPriceComparison();
+      case "result-pdf":
+        return renderPDFReports();
       case "result-accuracy":
         return renderAccuracyComparison();
+      case "differentiator":
+        return renderDifferentiatorContent();
+      case "pricing":
+        return renderPricingContent();
+      case "about-us":
+        return renderAboutUsContent();
       default:
         return null;
     }
