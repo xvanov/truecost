@@ -12,6 +12,7 @@ import { HowItWorks } from './pages/HowItWorks';
 import { Pricing } from './pages/Pricing';
 import { AboutUs } from './pages/AboutUs';
 import { ContactUs } from './pages/ContactUs';
+import { DemoPage } from './pages/DemoPage';
 
 // Authenticated pages
 import { Dashboard } from './pages/Dashboard';
@@ -81,6 +82,7 @@ function App() {
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/about" element={<AboutUs />} />
         <Route path="/contact" element={<ContactUs />} />
+        <Route path="/demo" element={<DemoPage />} />
 
         {/* Authenticated app routes */}
         <Route
