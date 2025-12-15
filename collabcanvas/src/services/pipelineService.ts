@@ -45,7 +45,12 @@ export interface AgentOutput {
   agentId: string;
   agentName: string;
   status: 'pending' | 'running' | 'complete' | 'error';
+  inputSummary?: Record<string, unknown>;
+  retryAttempt?: number;
+  hasFeedback?: boolean;
   output?: Record<string, unknown>;
+  summary?: string;
+  score?: number;
   error?: string;
   startedAt: number;
   completedAt?: number;
@@ -179,7 +184,11 @@ function ensureEstimateId(payload: ClarificationOutputPayload, projectId: string
 export async function triggerEstimatePipeline(
   projectId: string,
   userId: string,
-  clarificationOutput: ClarificationOutputPayload
+  clarificationOutput: ClarificationOutputPayload,
+  options?: {
+    inputSource?: 'uploaded' | 'generated' | string | null;
+    inputFilename?: string | null;
+  }
 ): Promise<{ success: boolean; estimateId?: string; error?: string }> {
   try {
     const estimateId = ensureEstimateId(clarificationOutput, projectId);
@@ -202,6 +211,9 @@ export async function triggerEstimatePipeline(
         userId,
         projectId,
         clarificationOutput,
+        // These fields are outside the ClarificationOutput contract and are only used for logging/debug.
+        inputSource: options?.inputSource ?? null,
+        inputFilename: options?.inputFilename ?? null,
       }),
     });
 
@@ -250,6 +262,11 @@ export function subscribeToPipelineProgress(
   onError: (error: Error) => void
 ): () => void {
   const estimateDocRef = doc(firestore, 'estimates', estimateId);
+  // Deduped console logging for stage transitions (avoid noisy logs on every snapshot).
+  let lastLoggedStage: PipelineStageId | null = null;
+  let lastLoggedStatus: PipelineProgress['status'] | null = null;
+  let lastLoggedError: string | undefined = undefined;
+  const loggedCompletedStages = new Set<PipelineStageId>();
 
   return onSnapshot(
     estimateDocRef,
@@ -296,6 +313,39 @@ export function subscribeToPipelineProgress(
         error: pipelineStatus.error || data.error,
       };
 
+      // Console logs per agent/stage (start + completion), deduped.
+      if (progress.status !== lastLoggedStatus) {
+        console.log('[PIPELINE] Status changed', {
+          estimateId,
+          status: progress.status,
+          currentStage: progress.currentStage,
+          progressPercent: progress.progressPercent,
+        });
+        lastLoggedStatus = progress.status;
+      }
+
+      if (progress.currentStage && progress.currentStage !== lastLoggedStage) {
+        console.log('[PIPELINE] Stage started', {
+          estimateId,
+          stage: progress.currentStage,
+          stageName: progress.stageName,
+          progressPercent: progress.progressPercent,
+        });
+        lastLoggedStage = progress.currentStage;
+      }
+
+      for (const stage of progress.completedStages) {
+        if (!loggedCompletedStages.has(stage)) {
+          loggedCompletedStages.add(stage);
+          console.log('[PIPELINE] Stage completed', { estimateId, stage });
+        }
+      }
+
+      if (progress.status === 'error' && progress.error && progress.error !== lastLoggedError) {
+        console.error('[PIPELINE] Pipeline error', { estimateId, error: progress.error });
+        lastLoggedError = progress.error;
+      }
+
       onUpdate(progress);
     },
     (error) => {
@@ -315,6 +365,8 @@ export function subscribeToAgentOutputs(
 ): () => void {
   const outputsRef = collection(firestore, 'estimates', estimateId, 'agentOutputs');
   const q = query(outputsRef, orderBy('startedAt', 'desc'), limit(10));
+  // Deduped per-agent status logging.
+  const lastStatusByAgent = new Map<string, AgentOutput['status']>();
 
   return onSnapshot(
     q,
@@ -326,12 +378,39 @@ export function subscribeToAgentOutputs(
           agentId: docSnapshot.id,
           agentName: data.agentName || docSnapshot.id,
           status: data.status || 'pending',
+          inputSummary: data.inputSummary,
+          retryAttempt: typeof data.retryAttempt === 'number' ? data.retryAttempt : undefined,
+          hasFeedback: typeof data.hasFeedback === 'boolean' ? data.hasFeedback : undefined,
           output: data.output,
+          summary: data.summary,
+          score: data.score,
           error: data.error,
-          startedAt: data.startedAt || Date.now(),
-          completedAt: data.completedAt,
+          startedAt: coerceTimestampToMillis(data.startedAt ?? data.createdAt ?? null) ?? Date.now(),
+          completedAt: coerceTimestampToMillis(data.completedAt ?? null) ?? undefined,
         });
       });
+
+      // Log agent status transitions once (running/completed/failed).
+      for (const out of outputs) {
+        const prev = lastStatusByAgent.get(out.agentName);
+        if (prev !== out.status) {
+          const outputKeys =
+            out.output && typeof out.output === 'object' ? Object.keys(out.output).sort() : [];
+          console.log('[PIPELINE] Agent status', {
+            estimateId,
+            agent: out.agentName,
+            status: out.status,
+            retryAttempt: out.retryAttempt,
+            hasFeedback: out.hasFeedback,
+            inputSummary: out.inputSummary,
+            outputKeys,
+            score: out.score,
+            error: out.error,
+          });
+          lastStatusByAgent.set(out.agentName, out.status);
+        }
+      }
+
       onUpdate(outputs);
     },
     (error) => {

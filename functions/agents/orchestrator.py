@@ -325,6 +325,15 @@ class PipelineOrchestrator:
         while retry_count <= MAX_RETRIES:
             # 1. Run primary agent
             try:
+                # Save a lightweight snapshot of the exact input context for this attempt.
+                await self.firestore.save_agent_input_summary(
+                    estimate_id=estimate_id,
+                    agent_name=agent_name,
+                    input_summary=self._build_agent_input_summary(agent_name, input_data),
+                    retry_attempt=retry_count,
+                    has_feedback=critic_feedback is not None,
+                )
+
                 output = await self._call_primary_agent(
                     estimate_id=estimate_id,
                     agent_name=agent_name,
@@ -433,6 +442,53 @@ class PipelineOrchestrator:
             retry_count += 1
         
         return False, {}
+
+    def _build_agent_input_summary(self, agent_name: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Build a small, log-friendly summary of the agent input (avoid large payloads)."""
+        try:
+            summary: Dict[str, Any] = {
+                "agent": agent_name,
+                "keys": sorted([k for k in input_data.keys() if isinstance(k, str)]),
+            }
+
+            clarification = input_data.get("clarification_output")
+            if isinstance(clarification, dict):
+                project_brief = clarification.get("projectBrief")
+                if isinstance(project_brief, dict):
+                    loc = project_brief.get("location")
+                    if isinstance(loc, dict):
+                        summary["location"] = {
+                            "zipCode": loc.get("zipCode"),
+                            "city": loc.get("city"),
+                            "state": loc.get("state"),
+                        }
+                    scope_summary = project_brief.get("scopeSummary")
+                    if isinstance(scope_summary, dict):
+                        summary["scopeSummary"] = {
+                            "totalSqft": scope_summary.get("totalSqft"),
+                            "finishLevel": scope_summary.get("finishLevel"),
+                        }
+                    summary["projectType"] = project_brief.get("projectType")
+
+                cad = clarification.get("cadData")
+                if isinstance(cad, dict):
+                    space = cad.get("spaceModel")
+                    if isinstance(space, dict):
+                        rooms = space.get("rooms")
+                        walls = space.get("walls")
+                        summary["cad"] = {
+                            "totalSqft": space.get("totalSqft"),
+                            "roomsCount": len(rooms) if isinstance(rooms, list) else None,
+                            "wallsCount": len(walls) if isinstance(walls, list) else None,
+                            "hasFileUrl": bool(cad.get("fileUrl")),
+                        }
+
+            # Include previous agent outputs presence (not contents).
+            output_keys = [k for k in input_data.keys() if isinstance(k, str) and k.endswith("_output")]
+            summary["priorOutputs"] = sorted(output_keys)
+            return summary
+        except Exception:
+            return {"agent": agent_name, "keys": []}
     
     async def _call_primary_agent(
         self,

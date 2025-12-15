@@ -599,11 +599,19 @@ class Opening(BaseModel):
     type: OpeningType = Field(..., description="Type of opening")
     width: float = Field(..., ge=0, description="Opening width")
     height: float = Field(..., ge=0, description="Opening height")
-    inWall: str = Field(..., description="ID of wall containing this opening")
+    # NOTE:
+    # The TypeScript ClarificationOutput producer (Epic 6 estimator) currently does not
+    # emit structural wall linkage for openings. We treat this as optional so the deep
+    # pipeline can run with CAD openings present but not fully attributed.
+    inWall: Optional[str] = Field(
+        None, description="ID of wall containing this opening (optional if not derived)"
+    )
     connectsRooms: List[str] = Field(
         default_factory=list, description="Which rooms this opening connects"
     )
-    position: OpeningPosition = Field(..., description="Position in wall")
+    position: Optional[OpeningPosition] = Field(
+        None, description="Position in wall (optional if not derived)"
+    )
     swing: Optional[SwingDirection] = Field(
         None, description="Door swing direction"
     )

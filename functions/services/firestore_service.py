@@ -150,6 +150,53 @@ class FirestoreService:
         await self.update_estimate(estimate_id, update_data)
         logger.info("agent_status_updated", estimate_id=estimate_id, agent=agent_name, status=status)
 
+    async def save_agent_input_summary(
+        self,
+        estimate_id: str,
+        agent_name: str,
+        input_summary: Dict[str, Any],
+        retry_attempt: int = 0,
+        has_feedback: bool = False,
+    ) -> None:
+        """Persist a lightweight snapshot of the input used for a given agent run.
+
+        This is intentionally kept small to avoid Firestore document size issues.
+        It enables the frontend to log "agent input" alongside outputs.
+
+        Data is stored at:
+          /estimates/{estimateId}/agentOutputs/{agentName}
+        """
+        try:
+            doc_ref = (
+                self.db
+                .collection(self.COLLECTION_ESTIMATES)
+                .document(estimate_id)
+                .collection(self.SUBCOLLECTION_AGENT_OUTPUTS)
+                .document(agent_name)
+            )
+
+            data = {
+                "status": "running",
+                "inputSummary": input_summary,
+                "retryAttempt": int(retry_attempt),
+                "hasFeedback": bool(has_feedback),
+                # Track timestamps to help the frontend show agent runtimes.
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            }
+            # Only set createdAt if the doc doesn't exist yet (best-effort).
+            # Note: Firestore Admin SDK doesn't support conditional server-side set of createdAt;
+            # merge=True avoids clobbering a previously-set createdAt.
+            data["createdAt"] = firestore.SERVER_TIMESTAMP
+
+            await self._maybe_await(doc_ref.set(data, merge=True))
+        except Exception as e:
+            logger.warning(
+                "agent_input_summary_save_failed",
+                estimate_id=estimate_id,
+                agent=agent_name,
+                error=str(e),
+            )
+
     async def sync_to_project_pipeline(
         self,
         project_id: str,

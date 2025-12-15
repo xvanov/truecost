@@ -49,7 +49,26 @@ def _parse_json_strict(content: str) -> Dict[str, Any]:
         raw = raw[3:]
     if raw.endswith("```"):
         raw = raw[:-3]
-    return json.loads(raw.strip() or "{}")
+    cleaned = raw.strip()
+    if not cleaned:
+        return {}
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        # Best-effort recovery: extract the first JSON object/array from the text.
+        # This protects the pipeline from minor model formatting drift (preambles/epilogues).
+        start_candidates = [i for i in (cleaned.find("{"), cleaned.find("[")) if i != -1]
+        if not start_candidates:
+            raise
+        start = min(start_candidates)
+        end_obj = cleaned.rfind("}")
+        end_arr = cleaned.rfind("]")
+        end_candidates = [i for i in (end_obj, end_arr) if i != -1]
+        if not end_candidates:
+            raise
+        end = max(end_candidates)
+        snippet = cleaned[start : end + 1].strip()
+        return json.loads(snippet)
 
 
 async def deep_agent_generate_json(

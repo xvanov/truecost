@@ -356,6 +356,75 @@ class TestCostAgent:
         assert "headline" in result["summary"]
 
     @pytest.mark.asyncio
+    async def test_cost_agent_normalizes_allowance_unit_to_ls(self, mock_services):
+        """If CostDataService returns an allowance/LS unit, CostAgent should not multiply it by SF/LF quantities."""
+        firestore, llm, cost_data = mock_services
+
+        agent = CostAgent(
+            firestore_service=firestore,
+            llm_service=llm,
+            cost_data_service=cost_data,
+        )
+
+        # Force the material lookup to return an allowance unit (lump sum)
+        agent.cost_data_service.get_material_cost = AsyncMock(
+            return_value={
+                "cost_code": "09-2900-0100",
+                "description": "Drywall repair and patching",
+                "unit": "allowance",
+                "unit_cost": CostRange.from_base_cost(200.0),
+                "labor_hours_per_unit": 0.0,
+                "equipment_cost": CostRange.zero(),
+                "primary_trade": TradeCategory.DRYWALL_INSTALLER,
+                "secondary_trades": [],
+                "confidence": CostConfidenceLevel.MEDIUM,
+                "confidence_score": 0.5,
+            }
+        )
+
+        # Keep labor lookup simple
+        agent.cost_data_service.get_labor_rate = AsyncMock(
+            return_value={
+                "trade": TradeCategory.DRYWALL_INSTALLER,
+                "hourly_rate": CostRange.from_base_cost(50.0, p80_multiplier=1.12, p90_multiplier=1.20),
+                "confidence_score": 0.9,
+            }
+        )
+
+        scope_output = {
+            "estimateId": "test-estimate-allowance",
+            "divisions": [
+                {
+                    "divisionCode": "09",
+                    "divisionName": "Finishes",
+                    "status": "included",
+                    "description": "Test division",
+                    "lineItems": [
+                        {
+                            "id": "09-001",
+                            "item": "Drywall - Walls",
+                            "costCode": "09-2900-0100",
+                            "quantity": 688.0,
+                            "unit": "sf",
+                            "primaryTrade": "drywall_installer",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        input_data = {
+            "clarification_output": {},
+            "location_output": get_mock_location_output(),
+            "scope_output": scope_output,
+        }
+
+        result = await agent.run(estimate_id="test-allowance-001", input_data=input_data)
+
+        assert result["divisions"][0]["lineItems"][0]["quantity"] == 1.0
+        assert str(result["divisions"][0]["lineItems"][0]["unit"]).lower() == "ls"
+
+    @pytest.mark.asyncio
     async def test_cost_agent_uses_user_selected_defaults(self, mock_services):
         """User-selected defaults in clarification_output should override CostAgent hardcoded defaults."""
         firestore, llm, cost_data = mock_services

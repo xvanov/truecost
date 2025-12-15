@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { EstimatePage } from './EstimatePage';
+import { useCanvasStore } from '../../store/canvasStore';
 
 // Mock dependencies
 vi.mock('../../hooks/useAuth', () => ({
@@ -224,6 +225,53 @@ describe('EstimatePage', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /back to annotate/i })).toBeInTheDocument();
+    });
+  });
+
+  it('allows uploading ClarificationOutput JSON in generate phase (dev-only) and uses it on Generate Estimate', async () => {
+    // Force generate phase by returning no existing BOM from service + store.
+    const bomService = await import('../../services/bomService');
+    // Some environments can invoke effects more than once; keep this stable for the whole test.
+    (bomService.getBOM as unknown as { mockResolvedValue: (v: unknown) => void }).mockResolvedValue(null);
+
+    (useCanvasStore as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(
+      (selector: (s: any) => any) => selector({ billOfMaterials: null, setBillOfMaterials: vi.fn() })
+    );
+
+    renderWithRouter('test-project-upload-1');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /generate estimate/i })).toBeInTheDocument();
+      expect(screen.getByText(/Ready to Generate Your Estimate/i)).toBeInTheDocument();
+      expect(screen.getByText(/Dev: Use uploaded ClarificationOutput JSON/i)).toBeInTheDocument();
+    });
+
+    const file = new File(
+      [
+        JSON.stringify({
+          schemaVersion: '3.0.0',
+          projectBrief: { location: { zipCode: '78704' }, scopeSummary: { totalSqft: 100 } },
+          csiScope: { div01_general_requirements: {} },
+          cadData: { fileUrl: 'data:image/png;base64,abc', spaceModel: { rooms: [], walls: [], openings: [] } },
+        }),
+      ],
+      'clarification.json',
+      { type: 'application/json' }
+    );
+
+    const input = screen.getByTestId('clarification-json-upload') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Loaded:/i)).toBeInTheDocument();
+      expect(screen.getByText(/clarification\.json/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /generate estimate/i }));
+
+    const pipeline = await import('../../services/pipelineService');
+    await waitFor(() => {
+      expect(pipeline.triggerEstimatePipeline).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -99,6 +99,16 @@ class TimelineScorer(BaseScorer):
             Dict with score and feedback.
         """
         name = criterion.get("name")
+
+        # If TimelineAgent explicitly returned "N/A" due to insufficient input data,
+        # treat that as a valid completion (policy: never invent numbers / no canned templates).
+        # The pipeline should continue and surface the N/A to the UI rather than failing the run.
+        err_code = (output.get("error") or {}).get("code")
+        if err_code == "INSUFFICIENT_DATA":
+            return {
+                "score": 100,
+                "feedback": "Timeline marked N/A (INSUFFICIENT_DATA) - passing scorer so pipeline can complete"
+            }
         
         if name == "tasks_valid":
             return self._check_tasks_valid(output)

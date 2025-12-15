@@ -444,10 +444,39 @@ class ScopeAgent(BaseA2AAgent):
         walls = space_model.get("walls", [])
         
         # Calculate derived values from CAD
-        total_wall_length = sum(w.get("length", 0) for w in walls)
-        wall_height = 9  # Default ceiling height
+        def _coerce_number(value: Any, default: float) -> float:
+            """Coerce JSON values into a float (handles None / strings)."""
+            if value is None:
+                return default
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                try:
+                    return float(value.strip())
+                except Exception:
+                    return default
+            return default
+
+        total_wall_length = sum(_coerce_number(w.get("length"), 0.0) for w in walls)
+        wall_height = 9.0  # Default ceiling height (ft)
         if walls:
-            wall_height = walls[0].get("height", 9)
+            raw_height = walls[0].get("height")
+            if raw_height is None:
+                logger.debug(
+                    "cad_wall_height_missing_defaulted",
+                    default_height_ft=wall_height,
+                    estimate_id=getattr(self, "estimate_id", None),
+                )
+            wall_height = _coerce_number(raw_height, wall_height)
+        if wall_height <= 0:
+            logger.debug(
+                "cad_wall_height_invalid_defaulted",
+                wall_height=wall_height,
+                default_height_ft=9.0,
+                estimate_id=getattr(self, "estimate_id", None),
+            )
+            wall_height = 9.0
+
         wall_sqft = total_wall_length * wall_height
         
         for division in divisions:

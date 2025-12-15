@@ -117,21 +117,34 @@ class CodeComplianceAgent(BaseA2AAgent):
 
         from services.deep_agent_factory import deep_agent_generate_json
 
-        llm = await deep_agent_generate_json(
-            estimate_id=estimate_id,
-            agent_name=self.name,
-            system_prompt=ICC_CODE_COMPLIANCE_PROMPT,
-            user_message=(
-                "CODE_COMPLIANCE_REQUEST\n\n"
-                "Generate ICC code compliance warnings for this project context:\n"
-                f"{context}"
-            ),
-            firestore_service=self.firestore,
-            max_tokens=1200,
-        )
+        content: Dict[str, Any] = {}
+        try:
+            llm = await deep_agent_generate_json(
+                estimate_id=estimate_id,
+                agent_name=self.name,
+                system_prompt=ICC_CODE_COMPLIANCE_PROMPT,
+                user_message=(
+                    "CODE_COMPLIANCE_REQUEST\n\n"
+                    "Generate ICC code compliance warnings for this project context:\n"
+                    f"{context}"
+                ),
+                firestore_service=self.firestore,
+                max_tokens=1200,
+            )
+            content = llm.get("content", {}) or {}
+        except Exception as e:
+            # Fail-open: code compliance is informational and should not block the whole pipeline
+            # when the LLM returns non-JSON or is unavailable in local dev.
+            logger.warning(
+                "code_compliance_agent_fallback",
+                estimate_id=estimate_id,
+                error=str(e),
+            )
+            content = {}
 
-        content = llm.get("content", {}) or {}
         warnings: List[Dict[str, Any]] = content.get("warnings") or []
+        if not isinstance(warnings, list):
+            warnings = []
 
         return {
             "estimateId": estimate_id,

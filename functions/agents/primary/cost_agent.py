@@ -215,6 +215,23 @@ class CostAgent(BaseA2AAgent):
         
         location_factor = location_output.get("locationFactor", 1.0)
         zip_code = location_output.get("zipCode", "00000")
+        # If LocationAgent didn't provide a usable zip (common in emulator/mocks),
+        # fall back to ClarificationOutput.projectBrief.location.zipCode so downstream
+        # services (price comparison, labor/weather) are still location-aware.
+        try:
+            if (not zip_code) or str(zip_code).strip() in ("", "00000", "null", "None"):
+                if isinstance(clarification, dict):
+                    zip_from_clarification = (
+                        (((clarification.get("projectBrief") or {}).get("location") or {}).get("zipCode"))
+                        or (((clarification.get("projectBrief") or {}).get("location") or {}).get("zip_code"))
+                        or ((clarification.get("location") or {}).get("zipCode"))
+                        or ((clarification.get("location") or {}).get("zip_code"))
+                    )
+                    if zip_from_clarification:
+                        zip_code = str(zip_from_clarification).strip()
+        except Exception:
+            # Non-fatal; keep the original zip_code
+            pass
         
         # Extract project_id for price comparison service
         # Try from clarification first, then use estimate_id as fallback
@@ -572,6 +589,39 @@ class CostAgent(BaseA2AAgent):
                 project_id=project_id,
                 zip_code=zip_code
             )
+
+            # Normalize unit/quantity when the cost lookup returns an allowance/lump-sum unit.
+            # Without this, an "allowance" cost (intended as a single LS) can be accidentally
+            # multiplied by large SF/LF quantities from the takeoff, producing nonsensical totals.
+            unit_for_calc = str(material_data.get("unit") or unit)
+            try:
+                item_unit_norm = str(unit or "").strip().lower()
+                cost_unit_norm = str(material_data.get("unit") or "").strip().lower()
+                allowance_units = {"allowance", "ls", "lump_sum", "lumpsum", "lump sum"}
+
+                if cost_unit_norm in allowance_units and item_unit_norm not in allowance_units:
+                    logger.info(
+                        "cost_agent_unit_mismatch_normalized",
+                        line_item_id=line_item_id,
+                        cost_code=cost_code,
+                        description=str(description)[:80],
+                        original_quantity=quantity,
+                        original_unit=item_unit_norm,
+                        cost_unit=cost_unit_norm,
+                        normalized_quantity=1.0,
+                        normalized_unit="ls",
+                    )
+                    quantity = 1.0
+                    unit = "ls"
+                    unit_for_calc = "ls"
+                elif cost_unit_norm and item_unit_norm in allowance_units and cost_unit_norm not in allowance_units:
+                    # If the takeoff calls something an allowance but the cost lookup is unitized (SF/LF/EA),
+                    # prefer the cost unit to avoid treating a unitized item as a single LS.
+                    unit = str(material_data.get("unit") or unit)
+                    unit_for_calc = str(material_data.get("unit") or unit)
+            except Exception:
+                # Non-fatal; keep original quantity/unit
+                pass
             
             is_exact = material_data.get("confidence_score", 0) >= 0.85
             
@@ -587,7 +637,7 @@ class CostAgent(BaseA2AAgent):
                 cost_code=material_data.get("cost_code", cost_code),
                 description=description,
                 quantity=quantity,
-                unit=unit,
+                unit=unit_for_calc,
                 unit_material_cost=material_data.get("unit_cost", CostRange.from_base_cost(50.0)),
                 unit_labor_hours=material_data.get("labor_hours_per_unit", 0.5),
                 labor_rate=labor_data.get("hourly_rate", CostRange.from_base_cost(40.0)),

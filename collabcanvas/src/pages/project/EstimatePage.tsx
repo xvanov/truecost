@@ -34,6 +34,7 @@ import { functions, firestore } from "../../services/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { getProjectCanvasStoreApi } from "../../store/projectCanvasStore";
 import {
+  subscribeToAgentOutputs,
   subscribeToPipelineProgress,
   triggerEstimatePipeline,
   type PipelineProgress,
@@ -377,7 +378,257 @@ export function EstimatePage() {
   // Clarification JSON payload shared between Generate JSON + pipeline trigger
   const [clarificationPayload, setClarificationPayload] =
     useState<ClarificationOutputPayload | null>(null);
+  // Dev-only helpers for uploading a fixed ClarificationOutput payload during testing.
+  const [clarificationPayloadSource, setClarificationPayloadSource] = useState<
+    "uploaded" | "generated" | null
+  >(null);
+  const [clarificationPayloadFilename, setClarificationPayloadFilename] =
+    useState<string | null>(null);
+  const [clarificationUploadError, setClarificationUploadError] =
+    useState<string | null>(null);
   const [estimateId, setEstimateId] = useState<string | null>(null);
+
+  const isDevUploadEnabled = import.meta.env.MODE !== "production";
+
+  const sanitizeClarificationPayloadForPipeline = useCallback(
+    (rawPayload: Record<string, unknown>): Record<string, unknown> => {
+      // NOTE: ClarificationOutputPayload is intentionally loose (dev convenience + cross-lang boundary).
+      // This sanitizer makes uploaded/generated payloads more likely to pass the Python deep pipeline
+      // without bloating request size (e.g., base64 CAD images) and without obvious semantic mismatches.
+
+      const payload = { ...rawPayload } as Record<string, unknown>;
+
+      // Normalize cadData key
+      if (!payload.cadData && payload.cad_data) {
+        payload.cadData = payload.cad_data;
+        delete payload.cad_data;
+      }
+
+      // Strip non-contract extras to reduce payload size/noise
+      delete payload.computedQuantities;
+      delete payload.inferenceMetadata;
+      delete payload.projectScope;
+      delete payload.estimateConfiguration;
+
+      const projectBrief =
+        typeof payload.projectBrief === "object" && payload.projectBrief !== null
+          ? (payload.projectBrief as Record<string, unknown>)
+          : null;
+      const scopeSummary =
+        projectBrief &&
+        typeof projectBrief.scopeSummary === "object" &&
+        projectBrief.scopeSummary !== null
+          ? (projectBrief.scopeSummary as Record<string, unknown>)
+          : null;
+      const cadData =
+        typeof payload.cadData === "object" && payload.cadData !== null
+          ? (payload.cadData as Record<string, unknown>)
+          : null;
+
+      // If the uploaded JSON inlines a CAD image in fileUrl, replace with a tiny sentinel.
+      // Deep pipeline agents do not need the raw base64 blob; they use derived `spaceModel`.
+      if (cadData && typeof cadData.fileUrl === "string") {
+        const url = cadData.fileUrl;
+        if (url.startsWith("data:image/")) {
+          cadData.fileUrl = "inline://cadData.fileUrl_omitted";
+        }
+      }
+
+      // Heuristic projectType correction (prevents ScopeScorer from expecting whole-house item counts)
+      // Your failing run was "whole_house_remodel" with a single bathroom-sized scope.
+      if (projectBrief) {
+        const currentType = String(projectBrief.projectType ?? "");
+        const desc =
+          scopeSummary && typeof scopeSummary.description === "string"
+            ? scopeSummary.description
+            : "";
+        const totalSqft =
+          scopeSummary && typeof scopeSummary.totalSqft === "number"
+            ? scopeSummary.totalSqft
+            : null;
+
+        const hasBathroomSpecific =
+          cadData &&
+          typeof cadData.bathroomSpecific === "object" &&
+          cadData.bathroomSpecific !== null;
+        const looksLikeBathroom =
+          hasBathroomSpecific ||
+          /bath(room)?/i.test(desc) ||
+          (Array.isArray(scopeSummary?.rooms) &&
+            (scopeSummary?.rooms as unknown[]).some(
+              (r) => typeof r === "string" && /shower|toilet|bath/i.test(r)
+            ));
+
+        // Only override when the current type is clearly too broad.
+        if (
+          looksLikeBathroom &&
+          (currentType === "whole_house_remodel" || currentType === "other") &&
+          (totalSqft === null || totalSqft < 500)
+        ) {
+          projectBrief.projectType = "bathroom_remodel";
+        }
+
+        // Normalize rooms list to a human label (optional, but reduces downstream confusion)
+        if (looksLikeBathroom && scopeSummary && Array.isArray(scopeSummary.rooms)) {
+          scopeSummary.rooms = ["primary bathroom"];
+        }
+      }
+
+      return payload;
+    },
+    []
+  );
+
+  const normalizeUploadedClarificationPayload = useCallback(
+    (raw: unknown): ClarificationOutputPayload | null => {
+      if (!raw || typeof raw !== "object") return null;
+
+      // Common wrappers we might upload:
+      // - ClarificationOutput itself
+      // - { clarificationOutput: {...} } (callable response shape)
+      // - { data: { clarificationOutput: {...} } } (exported estimate doc)
+      const asRec = raw as Record<string, unknown>;
+      const nested =
+        (asRec.clarificationOutput as Record<string, unknown> | undefined) ??
+        ((asRec.data as Record<string, unknown> | undefined)
+          ?.clarificationOutput as Record<string, unknown> | undefined);
+      const payload = (nested ?? asRec) as Record<string, unknown>;
+
+      // Minimal plausibility checks (keep loose; this is a dev-only convenience).
+      const hasProjectBrief =
+        typeof payload.projectBrief === "object" && payload.projectBrief !== null;
+      const hasCsiScope =
+        typeof payload.csiScope === "object" && payload.csiScope !== null;
+      const cad =
+        (payload.cadData as unknown) ?? (payload.cad_data as unknown);
+      const hasCad = typeof cad === "object" && cad !== null;
+
+      if (!hasProjectBrief || !hasCsiScope || !hasCad) return null;
+
+      const sanitized = sanitizeClarificationPayloadForPipeline(payload);
+      return sanitized as unknown as ClarificationOutputPayload;
+    },
+    [sanitizeClarificationPayloadForPipeline]
+  );
+
+  const handleUploadClarificationJson = useCallback(
+    async (file: File | null) => {
+      if (!file) return;
+      setClarificationUploadError(null);
+
+      try {
+        const readText = async (f: File): Promise<string> => {
+          // Prefer the modern File.text() API when available (browser).
+          const anyFile = f as unknown as { text?: () => Promise<string> };
+          if (typeof anyFile.text === "function") {
+            return await anyFile.text();
+          }
+          // Fallback for some test environments / older runtimes.
+          return await new Promise<string>((resolve, reject) => {
+            try {
+              const reader = new FileReader();
+              reader.onerror = () =>
+                reject(reader.error ?? new Error("Failed to read file"));
+              reader.onload = () => resolve(String(reader.result ?? ""));
+              reader.readAsText(f);
+            } catch (e) {
+              reject(e);
+            }
+          });
+        };
+
+        const text = await readText(file);
+        const parsed = JSON.parse(text) as unknown;
+        const normalized = normalizeUploadedClarificationPayload(parsed);
+        if (!normalized) {
+          throw new Error(
+            "JSON doesn't look like a ClarificationOutput. Expected at least { projectBrief, csiScope, cadData/cad_data } (or a wrapper containing those)."
+          );
+        }
+
+        // Never keep a fixed estimateId in cached payload; we generate a fresh one per run.
+        const cachePayload = {
+          ...(normalized as Record<string, unknown>),
+        } as Record<string, unknown>;
+        delete (cachePayload as { estimateId?: unknown }).estimateId;
+
+        // Make sure the cached payload is already sanitized (e.g., no base64 fileUrl).
+        const sanitized = sanitizeClarificationPayloadForPipeline(cachePayload);
+
+        setClarificationPayload(sanitized as unknown as ClarificationOutputPayload);
+        setClarificationPayloadSource("uploaded");
+        setClarificationPayloadFilename(file.name);
+        console.log("[FLOW][Estimate] Uploaded ClarificationOutput JSON selected.", {
+          projectId,
+          filename: file.name,
+          source: "uploaded",
+          keys: Object.keys(sanitized).sort(),
+        });
+
+        // Best-effort session persistence (avoid localStorage size limits with base64 CAD images).
+        try {
+          const json = JSON.stringify(sanitized);
+          if (projectId && json.length < 750_000) {
+            sessionStorage.setItem(
+              `truecost:clarificationUpload:${projectId}`,
+              json
+            );
+            sessionStorage.setItem(
+              `truecost:clarificationUploadFilename:${projectId}`,
+              file.name
+            );
+          }
+        } catch {
+          // Non-fatal
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to parse JSON";
+        setClarificationUploadError(msg);
+        console.error(
+          "[FLOW][Estimate] Failed to upload clarification JSON:",
+          err
+        );
+      }
+    },
+    [normalizeUploadedClarificationPayload, projectId, sanitizeClarificationPayloadForPipeline]
+  );
+
+  const clearUploadedClarificationJson = useCallback(() => {
+    setClarificationPayload(null);
+    setClarificationPayloadSource(null);
+    setClarificationPayloadFilename(null);
+    setClarificationUploadError(null);
+    try {
+      if (projectId) {
+        sessionStorage.removeItem(`truecost:clarificationUpload:${projectId}`);
+        sessionStorage.removeItem(
+          `truecost:clarificationUploadFilename:${projectId}`
+        );
+      }
+    } catch {
+      // Non-fatal
+    }
+  }, [projectId]);
+
+  // Restore any uploaded clarification payload for this project from session storage.
+  useEffect(() => {
+    if (!isDevUploadEnabled || !projectId) return;
+    try {
+      const raw = sessionStorage.getItem(`truecost:clarificationUpload:${projectId}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as unknown;
+      const normalized = normalizeUploadedClarificationPayload(parsed);
+      if (!normalized) return;
+      setClarificationPayload(normalized);
+      setClarificationPayloadSource("uploaded");
+      const filename = sessionStorage.getItem(
+        `truecost:clarificationUploadFilename:${projectId}`
+      );
+      setClarificationPayloadFilename(filename);
+    } catch {
+      // Non-fatal
+    }
+  }, [isDevUploadEnabled, normalizeUploadedClarificationPayload, projectId]);
 
   // BOM state from store
   const billOfMaterials = useCanvasStore((state) => state.billOfMaterials);
@@ -733,6 +984,27 @@ export function EstimatePage() {
     return () => unsubscribe();
   }, [projectId, estimateId, phase, isGenerating, setBillOfMaterials]);
 
+  // Subscribe to per-agent outputs for input/output console logs.
+  // NOTE: The logging itself is done in `subscribeToAgentOutputs` (pipelineService.ts).
+  useEffect(() => {
+    if (!projectId || !estimateId || phase !== "generate") return;
+
+    console.log(
+      "[FLOW][Estimate] Subscribing to agent outputs for estimate:",
+      estimateId
+    );
+
+    const unsubscribe = subscribeToAgentOutputs(
+      estimateId,
+      () => {},
+      (err) => {
+        console.error("[FLOW][Estimate] Agent outputs subscription error:", err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [projectId, estimateId, phase]);
+
   const buildClarificationOutput =
     useCallback(async (): Promise<ClarificationOutputPayload | null> => {
       if (!projectId || !user) {
@@ -903,7 +1175,13 @@ export function EstimatePage() {
         );
         payload = await buildClarificationOutput();
         if (payload) {
-          setClarificationPayload(payload);
+          // Never cache a fixed estimateId. Each "Generate Estimate" run should start a fresh pipeline run.
+          const cachePayload = { ...(payload as Record<string, unknown>) } as Record<string, unknown>;
+          delete (cachePayload as { estimateId?: unknown }).estimateId;
+          setClarificationPayload(cachePayload as unknown as ClarificationOutputPayload);
+          setClarificationPayloadSource("generated");
+          setClarificationPayloadFilename(null);
+          payload = cachePayload as unknown as ClarificationOutputPayload;
         }
       }
 
@@ -913,15 +1191,55 @@ export function EstimatePage() {
         );
       }
 
+      // Important: force a new estimateId for each pipeline run (avoid reusing a previously-failed estimate doc).
+      let payloadForRun = { ...(payload as Record<string, unknown>) } as Record<
+        string,
+        unknown
+      >;
+      delete (payloadForRun as { estimateId?: unknown }).estimateId;
+
+      // Final sanitize + inject current UI estimate config into the contract the Python pipeline actually reads.
+      payloadForRun = sanitizeClarificationPayloadForPipeline(payloadForRun);
+
+      // Inject costPreferences + desiredStart into projectBrief for the deep pipeline (decimals, not percentages).
+      const projectBrief =
+        typeof payloadForRun.projectBrief === "object" &&
+        payloadForRun.projectBrief !== null
+          ? (payloadForRun.projectBrief as Record<string, unknown>)
+          : null;
+      if (projectBrief) {
+        const timeline =
+          typeof projectBrief.timeline === "object" && projectBrief.timeline !== null
+            ? (projectBrief.timeline as Record<string, unknown>)
+            : null;
+        if (timeline && typeof estimateConfig.startDate === "string") {
+          timeline.desiredStart = estimateConfig.startDate;
+        }
+
+        projectBrief.costPreferences = {
+          overheadPct: estimateConfig.overheadPercent / 100,
+          profitPct: estimateConfig.profitPercent / 100,
+          contingencyPct: estimateConfig.contingencyPercent / 100,
+          wasteFactor: 1 + estimateConfig.wasteFactorPercent / 100,
+        };
+      }
+
       console.log("[FLOW][Estimate] Triggering pipeline with payload.", {
         projectId,
         userId: user.uid,
-        estimateIdHint: payload.estimateId,
+        estimateIdHint: (payloadForRun as { estimateId?: unknown }).estimateId,
+        clarificationPayloadSource,
+        clarificationPayloadFilename,
+        usingUploadedPayload: clarificationPayloadSource === "uploaded",
       });
       const result = await triggerEstimatePipeline(
         projectId,
         user.uid,
-        payload
+        payloadForRun as unknown as ClarificationOutputPayload,
+        {
+          inputSource: clarificationPayloadSource,
+          inputFilename: clarificationPayloadFilename,
+        }
       );
 
       if (!result.success || !result.estimateId) {
@@ -939,7 +1257,14 @@ export function EstimatePage() {
       setIsGenerating(false);
       console.error("[FLOW][Estimate] Failed to trigger pipeline:", err);
     }
-  }, [projectId, user, clarificationPayload, buildClarificationOutput]);
+  }, [
+    projectId,
+    user,
+    clarificationPayload,
+    buildClarificationOutput,
+    estimateConfig,
+    sanitizeClarificationPayloadForPipeline,
+  ]);
 
   // Handle generate JSON button click - always recalculates fresh, no caching
   const handleGenerateJSON = useCallback(async () => {
@@ -1130,6 +1455,69 @@ export function EstimatePage() {
           >
             Generate Estimate
           </button>
+
+          {/* Dev-only: upload a ClarificationOutput JSON to reuse input and skip annotation during testing */}
+          {isDevUploadEnabled && (
+            <div className="mt-6 w-full max-w-xl mx-auto text-left">
+              <div className="p-4 rounded-lg border border-truecost-glass-border bg-truecost-glass-bg/60">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-body font-semibold text-truecost-text-primary">
+                      Dev: Use uploaded ClarificationOutput JSON
+                    </p>
+                    <p className="text-body-meta text-truecost-text-secondary">
+                      Upload a saved ClarificationOutput to reuse the same input each run (skips annotation).
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="btn-pill-secondary cursor-pointer">
+                      Upload JSON
+                      <input
+                        data-testid="clarification-json-upload"
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        onChange={(e) =>
+                          void handleUploadClarificationJson(
+                            e.target.files?.[0] ?? null
+                          )
+                        }
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="btn-pill-secondary"
+                      onClick={clearUploadedClarificationJson}
+                      disabled={!clarificationPayload}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {clarificationPayload && (
+                  <div className="mt-3 text-body-meta text-truecost-text-secondary">
+                    <span className="font-semibold text-truecost-text-primary">
+                      Loaded:
+                    </span>{" "}
+                    {clarificationPayloadFilename ?? "(in-memory)"}{" "}
+                    {clarificationPayloadSource ? (
+                      <span className="ml-2 text-truecost-cyan">
+                        ({clarificationPayloadSource})
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+
+                {clarificationUploadError && (
+                  <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400">
+                    <p className="font-semibold mb-1">Upload error</p>
+                    <p className="text-body-meta">{clarificationUploadError}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

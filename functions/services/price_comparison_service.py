@@ -72,7 +72,8 @@ def _build_function_url(function_name: str) -> str:
 async def _call_cloud_function(
     function_name: str,
     data: Dict[str, Any],
-    timeout: float = FUNCTION_TIMEOUT_SECONDS
+    timeout: float = FUNCTION_TIMEOUT_SECONDS,
+    is_callable: bool = True,
 ) -> Dict[str, Any]:
     """Call Firebase Cloud Function via HTTP.
     
@@ -97,11 +98,14 @@ async def _call_cloud_function(
         data_keys=list(data.keys())
     )
     
+    # Firebase callable functions (onCall) expect the body shape: {"data": <payload>}
+    payload: Dict[str, Any] = {"data": data} if is_callable else data
+
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             url,
-            json=data,
-            headers={"Content-Type": "application/json"}
+            json=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"}
         )
         response.raise_for_status()
         return response.json()
@@ -283,6 +287,7 @@ async def get_material_prices(
     
     try:
         # 1. Call Cloud Function to trigger price comparison
+        # comparePrices is a Firebase callable function (onCall) and expects req.data.request
         function_data = {
             "request": {
                 "projectId": project_id,
@@ -302,7 +307,8 @@ async def get_material_prices(
         response = await _call_cloud_function(
             COMPARE_PRICES_FUNCTION,
             function_data,
-            timeout=30.0  # Short timeout for trigger call
+            timeout=30.0,  # Short timeout for trigger call
+            is_callable=True,
         )
         
         # Check if cached results were returned immediately

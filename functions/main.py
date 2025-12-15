@@ -66,6 +66,10 @@ def get_request_json(req: https_fn.Request) -> Dict[str, Any]:
         ValidationError: If JSON is invalid.
     """
     try:
+        # Some runtimes/emulators probe endpoints with GET /__/health (no body).
+        # Don't treat that as an error; return an empty payload.
+        if req.method == "GET" or getattr(req, "content_length", 0) in (None, 0):
+            return {}
         return req.get_json(force=True) or {}
     except Exception as e:
         raise ValidationError(
@@ -143,6 +147,8 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
         user_id = data.get("userId")
         project_id = data.get("projectId")  # Optional: for UI sync
         clarification_output = data.get("clarificationOutput")
+        input_source = data.get("inputSource")
+        input_filename = data.get("inputFilename")
 
         # Validate required fields
         if not user_id:
@@ -182,7 +188,9 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
             "pipeline_request_received",
             user_id=user_id,
             project_id=project_id,
-            estimate_id=estimate_id
+            estimate_id=estimate_id,
+            input_source=input_source,
+            input_filename=input_filename,
         )
 
         # Create estimate document and start pipeline
