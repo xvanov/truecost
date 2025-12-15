@@ -9,4 +9,4 @@ export const ankit_desc = "";
 
 export const kishor_desc = "";
 
-export const atharva_desc = "Ash has been looking for him since 2025";
+export const atharva_desc = "";

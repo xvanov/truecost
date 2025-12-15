@@ -34,7 +34,7 @@ const DEMO_STEPS = [
   { id: "result-accuracy", label: "Estimate Accuracy", phase: "results" },
   { id: "differentiator", label: "Why TrueCost", phase: "about" },
   { id: "pricing", label: "Pricing", phase: "about" },
-  { id: "about-us", label: "Meet the Team", phase: "about" },
+  { id: "about-us", label: "Contact Us", phase: "about" },
 ] as const;
 
 // Hardcoded demo data
@@ -215,7 +215,7 @@ const ACCURACY_COMPARISON = {
     overhead: 2445,
     contingency: 1225,
     total: 28750,
-    timeToCreate: "3 minutes",
+    timeToCreate: "30 minutes",
     features: [
       "Auto-detected all scope items from description",
       "Current pricing from multiple vendors",
@@ -290,6 +290,8 @@ export function DemoPage() {
     return DEFAULT_AUTO_LABELS;
   });
   const [draggingLabel, setDraggingLabel] = useState<string | null>(null);
+  const [spotlightEnabled, setSpotlightEnabled] = useState(true);
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const planContainerRef = useRef<HTMLDivElement>(null);
@@ -325,10 +327,22 @@ export function DemoPage() {
       } else if (e.key === "End") {
         e.preventDefault();
         setCurrentStepIndex(DEMO_STEPS.length - 1);
+      } else if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        setSpotlightEnabled((prev) => !prev);
       }
     },
     [goNext, goPrev]
   );
+
+  // Track mouse position for cursor spotlight
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setCursorPos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -1119,7 +1133,7 @@ export function DemoPage() {
                     <p className="text-sm text-truecost-text-primary">{mat.item}</p>
                     <p className="text-xs text-truecost-text-muted">{mat.qty} {mat.unit}</p>
                   </div>
-                  <span className="font-mono text-truecost-cyan">${mat.total}</span>
+                  <span className="font-mono text-truecost-cyan">${mat.total.toLocaleString()}</span>
                 </div>
               ))}
             </div>
@@ -1256,7 +1270,7 @@ export function DemoPage() {
                 </thead>
                 <tbody className="divide-y divide-truecost-glass-border/50">
                   {PRICE_COMPARISON.map((item, index) => (
-                    <tr key={index} className="hover:bg-truecost-glass-bg/50">
+                    <tr key={index}>
                       <td className="py-3 pr-4">
                         <p className="text-truecost-text-primary font-medium">{item.item}</p>
                       </td>
@@ -1281,7 +1295,7 @@ export function DemoPage() {
                       </td>
                       <td className="py-3 text-center">
                         <p className="font-mono font-bold text-truecost-cyan">
-                          ${((item.selected === "homeDepot" ? item.homeDepot.price : item.lowes.price) * item.qty).toFixed(2)}
+                          ${((item.selected === "homeDepot" ? item.homeDepot.price : item.lowes.price) * item.qty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                       </td>
                     </tr>
@@ -1505,31 +1519,6 @@ export function DemoPage() {
               <h4 className="font-semibold text-truecost-text-primary mb-2">{manualEstimate.label}</h4>
               <p className="text-xs text-truecost-text-secondary mb-4">{manualEstimate.description}</p>
 
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Materials</span>
-                  <span className="text-truecost-text-primary">${manualEstimate.materials.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Labor</span>
-                  <span className="text-truecost-text-primary">${manualEstimate.labor.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Overhead</span>
-                  <span className="text-truecost-text-primary">${manualEstimate.overhead.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Contingency</span>
-                  <span className="text-truecost-text-primary">${manualEstimate.contingency.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm font-bold border-t border-truecost-glass-border pt-2">
-                  <span className="text-truecost-text-primary">Total</span>
-                  <span className="text-truecost-text-primary">${manualEstimate.total.toLocaleString()}</span>
-                </div>
-              </div>
-
-              <p className="text-xs text-truecost-text-muted mb-2">Time: {manualEstimate.timeToCreate}</p>
-
               <p className="text-xs text-red-400 font-medium mb-2">Issues Found:</p>
               <ul className="space-y-1">
                 {manualEstimate.issues.map((issue, idx) => (
@@ -1545,31 +1534,6 @@ export function DemoPage() {
               <h4 className="font-semibold text-truecost-text-primary mb-2">{trueCostEstimate.label}</h4>
               <p className="text-xs text-truecost-text-secondary mb-4">{trueCostEstimate.description}</p>
 
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Materials</span>
-                  <span className="text-truecost-text-primary">${trueCostEstimate.materials.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Labor</span>
-                  <span className="text-truecost-text-primary">${trueCostEstimate.labor.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Overhead</span>
-                  <span className="text-truecost-text-primary">${trueCostEstimate.overhead.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Contingency</span>
-                  <span className="text-truecost-text-primary">${trueCostEstimate.contingency.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm font-bold border-t border-truecost-glass-border pt-2">
-                  <span className="text-truecost-text-primary">Total</span>
-                  <span className="text-truecost-cyan">${trueCostEstimate.total.toLocaleString()}</span>
-                </div>
-              </div>
-
-              <p className="text-xs text-truecost-cyan mb-2">Time: {trueCostEstimate.timeToCreate}</p>
-
               <p className="text-xs text-truecost-cyan font-medium mb-2">Key Features:</p>
               <ul className="space-y-1">
                 {trueCostEstimate.features.map((feature, idx) => (
@@ -1584,29 +1548,6 @@ export function DemoPage() {
             <div className="glass-panel p-6 border-l-4 border-green-500">
               <h4 className="font-semibold text-truecost-text-primary mb-2">{actualCost.label}</h4>
               <p className="text-xs text-truecost-text-secondary mb-4">{actualCost.description}</p>
-
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Materials</span>
-                  <span className="text-truecost-text-primary">${actualCost.materials.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Labor</span>
-                  <span className="text-truecost-text-primary">${actualCost.labor.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Overhead</span>
-                  <span className="text-truecost-text-primary">${actualCost.overhead.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-truecost-text-secondary">Contingency Used</span>
-                  <span className="text-truecost-text-primary">${actualCost.contingency.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm font-bold border-t border-truecost-glass-border pt-2">
-                  <span className="text-truecost-text-primary">Total</span>
-                  <span className="text-green-400">${actualCost.total.toLocaleString()}</span>
-                </div>
-              </div>
 
               <p className="text-xs text-green-400 font-medium mb-2">Project Notes:</p>
               <ul className="space-y-1">
@@ -1656,20 +1597,6 @@ export function DemoPage() {
         <div className="glass-panel p-6 text-center">
           <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Why Choose TrueCost?</h2>
           <p className="text-truecost-text-secondary">Built by contractors, for contractors</p>
-        </div>
-
-        {/* Key differentiator - Field Experience */}
-        <div className="glass-panel p-8 bg-gradient-to-r from-truecost-cyan/10 to-truecost-teal/10 border border-truecost-cyan/30">
-          <h3 className="text-xl font-bold text-truecost-text-primary mb-4">
-            We're Builders First, Tech Company Second
-          </h3>
-          <p className="text-truecost-text-secondary leading-relaxed">
-            TrueCost was founded by <span className="text-truecost-cyan font-semibold">licensed general contractors</span> with
-            decades of field experience. We're not a Silicon Valley AI company trying to "disrupt" construction —
-            we're <span className="text-truecost-cyan font-semibold">builders who got frustrated</span> with inaccurate estimates
-            and decided to do something about it. Every feature, every calculation, every assumption in our system comes
-            from <span className="text-truecost-cyan font-semibold">real-world experience</span> on job sites, not textbooks.
-          </p>
         </div>
 
         {/* Comparison Table */}
@@ -1731,7 +1658,7 @@ export function DemoPage() {
               <h4 className="font-semibold text-truecost-cyan mb-4">TrueCost AI</h4>
               <ul className="space-y-3">
                 <li className="text-sm text-truecost-text-secondary flex items-start gap-2">
-                  <span className="text-truecost-cyan">✓</span> 3 minutes per estimate
+                  <span className="text-truecost-cyan">✓</span> 30 minutes per estimate
                 </li>
                 <li className="text-sm text-truecost-text-secondary flex items-start gap-2">
                   <span className="text-truecost-cyan">✓</span> Built by licensed GCs
@@ -1754,14 +1681,10 @@ export function DemoPage() {
         </div>
 
         {/* Key Stats */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div className="glass-panel p-6 text-center">
-            <p className="text-3xl font-bold text-truecost-cyan">120x</p>
+            <p className="text-3xl font-bold text-truecost-cyan">12x</p>
             <p className="text-sm text-truecost-text-secondary">Faster</p>
-          </div>
-          <div className="glass-panel p-6 text-center">
-            <p className="text-3xl font-bold text-truecost-teal">98%</p>
-            <p className="text-sm text-truecost-text-secondary">Accuracy</p>
           </div>
           <div className="glass-panel p-6 text-center">
             <p className="text-3xl font-bold text-green-400">$0</p>
@@ -1899,7 +1822,7 @@ export function DemoPage() {
                   </div>
                   {showYearlySavings && (
                     <p className="text-green-400 text-sm mt-2">
-                      Billed annually (${319 * 12}/year)
+                      Billed annually (${(319 * 12).toLocaleString()}/year)
                     </p>
                   )}
                 </div>
@@ -1953,56 +1876,36 @@ export function DemoPage() {
     );
   };
 
-  // Meet the Team - styled like About Us page
+  // Contact Us - styled like About Us page
   const renderAboutUsContent = () => (
     <div className="min-h-screen bg-truecost-bg-primary py-6 px-4">
-      {/* Hero Section with QR */}
+      {/* Contact Us Header */}
       <section className="relative pb-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="text-center md:text-left">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border mb-3">
-                <span className="text-truecost-cyan text-sm font-medium">Our Story</span>
-              </div>
+        <div className="max-w-5xl mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-heading font-bold text-truecost-text-primary mb-8">
+            Contact <span className="text-truecost-cyan">us</span>
+          </h2>
 
-              <h1 className="text-4xl md:text-5xl font-heading font-bold text-truecost-text-primary mb-3">
-                About <span className="text-truecost-cyan">TrueCost</span>
-              </h1>
-
-              <p className="text-lg text-truecost-text-secondary max-w-xl">
-                We're on a mission to bring accuracy, speed, and transparency to construction
-                cost estimation through the power of artificial intelligence.
-              </p>
-            </div>
-
-            <div className="flex-shrink-0">
-              <div className="w-48 h-48 bg-white rounded-xl p-3 shadow-lg">
-                <img src={qrCodeImage} alt="QR Code" className="w-full h-full object-contain" />
-              </div>
+          {/* Large Centered QR Code */}
+          <div className="flex justify-center mb-4">
+            <div className="w-72 h-72 md:w-[28rem] md:h-[28rem] lg:w-[34rem] lg:h-[34rem] bg-white rounded-2xl p-6 shadow-xl">
+              <img src={qrCodeImage} alt="QR Code" className="w-full h-full object-contain" />
             </div>
           </div>
         </div>
       </section>
 
       {/* Team Section */}
-      <section className="py-4">
+      <section className="py-2">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-4">
-            <h2 className="text-2xl font-heading font-bold text-truecost-text-primary mb-1">
-              Meet the Team
-            </h2>
-            <p className="text-truecost-text-secondary text-sm">
-              The people behind TrueCost
-            </p>
-          </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             {teamMembers.map((member, index) => (
               <div
                 key={index}
-                className="glass-panel p-4 rounded-xl hover:border-truecost-cyan/50 transition-colors"
+                className="glass-panel p-5 rounded-xl hover:border-truecost-cyan/50 transition-colors"
               >
-                <div className="w-20 h-20 mx-auto mb-3 rounded-full bg-truecost-glass-bg border-2 border-truecost-glass-border flex items-center justify-center overflow-hidden">
+                <div className="w-28 h-28 mx-auto mb-3 rounded-full bg-truecost-glass-bg border-2 border-truecost-glass-border flex items-center justify-center overflow-hidden">
                   {member.image ? (
                     <img
                       src={member.image}
@@ -2010,7 +1913,7 @@ export function DemoPage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <svg className="w-10 h-10 text-truecost-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-16 h-16 text-truecost-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   )}
@@ -2127,6 +2030,22 @@ export function DemoPage() {
       <div className="animate-fadeIn">
         {renderContent()}
       </div>
+
+      {/* Cursor Spotlight for presentations - Toggle with 'S' key */}
+      {spotlightEnabled && (
+        <div
+          className="pointer-events-none fixed z-[9999] rounded-full"
+          style={{
+            left: cursorPos.x - 50,
+            top: cursorPos.y - 50,
+            width: 100,
+            height: 100,
+            background: "radial-gradient(circle, rgba(255,220,0,0.5) 0%, rgba(255,220,0,0.3) 30%, rgba(255,220,0,0.1) 50%, transparent 70%)",
+            boxShadow: "0 0 40px 15px rgba(255,220,0,0.35)",
+            transition: "left 0.05s ease-out, top 0.05s ease-out",
+          }}
+        />
+      )}
 
       <style>{`
         @keyframes fadeIn {
