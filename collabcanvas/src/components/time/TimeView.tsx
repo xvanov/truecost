@@ -156,12 +156,12 @@ export function TimeView({ projectId, userId = 'system' }: TimeViewProps) {
     });
 
     // Enhance tasks with calculated values
-    // Note: isCritical can be manually overridden - if task.isCritical is explicitly set, use it
+    // isCritical is always computed from CPM algorithm based on duration and dependencies
     const enhancedTasks: (CPMTask & { startDay: number; isCritical: boolean })[] = editableTasks.map(
       (task) => ({
         ...task,
         startDay: taskStartDates.get(task.id) || 0,
-        isCritical: task.isCritical !== undefined ? task.isCritical : criticalPath.includes(task.id),
+        isCritical: criticalPath.includes(task.id),
       })
     );
 
@@ -514,17 +514,12 @@ function TaskListView({
     setLocalDeps([]);
   };
 
-  // Critical toggle handler
-  const handleToggleCritical = (task: CPMTask & { isCritical: boolean }) => {
-    if (!onUpdateTask) return;
-    onUpdateTask(task.id, { isCritical: !task.isCritical });
-  };
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
       {/* Edit hint */}
       <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 text-sm text-blue-700">
-        Click on Duration, Dependencies, or Critical to edit. Changes update Gantt and CPM in real-time.
+        Click on Duration or Dependencies to edit. Critical path updates automatically via CPM algorithm.
       </div>
       <table className="w-full">
         <thead>
@@ -543,7 +538,7 @@ function TaskListView({
             </th>
             <th className="text-center py-3 px-4 font-semibold text-gray-600">
               Critical
-              <span className="ml-1 text-xs font-normal text-blue-500">(toggle)</span>
+              <span className="ml-1 text-xs font-normal text-gray-400">(auto)</span>
             </th>
           </tr>
         </thead>
@@ -680,19 +675,18 @@ function TaskListView({
                 </button>
               </td>
 
-              {/* Toggleable Critical Cell */}
+              {/* Critical Cell - Auto-calculated via CPM */}
               <td className="py-3 px-4 text-center">
-                <button
-                  onClick={() => handleToggleCritical(task)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                <span
+                  className={`px-3 py-1 rounded-full text-sm font-medium ${
                     task.isCritical
-                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-gray-100 text-gray-500'
                   }`}
-                  title="Click to toggle critical path"
+                  title="Automatically calculated from duration and dependencies"
                 >
                   {task.isCritical ? '★ Critical' : 'Normal'}
-                </button>
+                </span>
               </td>
             </tr>
           ))}
