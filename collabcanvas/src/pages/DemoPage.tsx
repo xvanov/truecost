@@ -250,6 +250,25 @@ type Annotation = {
   color: string;
 };
 
+// Auto-label type
+type AutoLabel = {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  color: string;
+};
+
+// Default auto-detected labels for the floor plan
+const DEFAULT_AUTO_LABELS: AutoLabel[] = [
+  { id: "shower", label: "Shower Pan", x: 25, y: 35, color: "#00D4FF" },
+  { id: "bathtub", label: "Bathtub", x: 60, y: 35, color: "#10B981" },
+  { id: "door1", label: "Entry Door", x: 85, y: 75, color: "#F59E0B" },
+  { id: "window1", label: "Window", x: 15, y: 60, color: "#8B5CF6" },
+  { id: "toilet", label: "Toilet", x: 75, y: 55, color: "#EF4444" },
+  { id: "vanity", label: "Vanity", x: 45, y: 70, color: "#EC4899" },
+];
+
 export function DemoPage() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -257,8 +276,23 @@ export function DemoPage() {
   const [annotationMode, setAnnotationMode] = useState<"polyline" | "polygon" | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfsGenerated, setPdfsGenerated] = useState(false);
+  const [isYearly, setIsYearly] = useState(false);
+  const [autoLabels, setAutoLabels] = useState<AutoLabel[]>(() => {
+    // Load from localStorage on init
+    const saved = localStorage.getItem("demo-auto-labels");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return DEFAULT_AUTO_LABELS;
+      }
+    }
+    return DEFAULT_AUTO_LABELS;
+  });
+  const [draggingLabel, setDraggingLabel] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  const planContainerRef = useRef<HTMLDivElement>(null);
 
   const currentStep = DEMO_STEPS[currentStepIndex];
   const isFirstStep = currentStepIndex === 0;
@@ -456,8 +490,15 @@ export function DemoPage() {
   );
 
   const renderScopeContent = () => (
-    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-8 pb-8 px-4">
       <div className="flex-1 max-w-6xl mx-auto w-full space-y-4">
+        {/* Badge */}
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border mb-4">
+            <span className="text-truecost-cyan text-sm font-medium">Scope Definition</span>
+          </div>
+        </div>
+
         {/* Project Details */}
         <div className="glass-panel p-6">
           <h2 className="text-xl font-semibold text-truecost-text-primary mb-4">Project Details</h2>
@@ -555,15 +596,53 @@ export function DemoPage() {
     </div>
   );
 
-  // Auto-detected labels for the floor plan
-  const autoLabels = [
-    { id: "shower", label: "Shower Pan", x: 25, y: 35, color: "#00D4FF" },
-    { id: "bathtub", label: "Bathtub", x: 60, y: 35, color: "#10B981" },
-    { id: "door1", label: "Entry Door", x: 85, y: 75, color: "#F59E0B" },
-    { id: "window1", label: "Window", x: 15, y: 60, color: "#8B5CF6" },
-    { id: "toilet", label: "Toilet", x: 75, y: 55, color: "#EF4444" },
-    { id: "vanity", label: "Vanity", x: 45, y: 70, color: "#EC4899" },
-  ];
+  // Drag handlers for auto-labels
+  const handleLabelDragStart = (labelId: string) => {
+    if (!annotationMode) {
+      setDraggingLabel(labelId);
+    }
+  };
+
+  const handleLabelDrag = (e: React.MouseEvent | React.TouchEvent, labelId: string) => {
+    if (draggingLabel !== labelId || !planContainerRef.current) return;
+
+    const container = planContainerRef.current;
+    const rect = container.getBoundingClientRect();
+
+    let clientX: number, clientY: number;
+    if ('touches' in e) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+
+    const x = ((clientX - rect.left) / rect.width) * 100;
+    const y = ((clientY - rect.top) / rect.height) * 100;
+
+    // Clamp to container bounds
+    const clampedX = Math.max(5, Math.min(95, x));
+    const clampedY = Math.max(5, Math.min(95, y));
+
+    setAutoLabels(prev => {
+      const updated = prev.map(label =>
+        label.id === labelId ? { ...label, x: clampedX, y: clampedY } : label
+      );
+      // Save to localStorage
+      localStorage.setItem("demo-auto-labels", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleLabelDragEnd = () => {
+    setDraggingLabel(null);
+  };
+
+  const resetLabelPositions = () => {
+    setAutoLabels(DEFAULT_AUTO_LABELS);
+    localStorage.removeItem("demo-auto-labels");
+  };
 
   // Full-screen Plan Annotations with professional toolbar
   const renderAnnotatePlanContent = () => (
@@ -679,7 +758,15 @@ export function DemoPage() {
       {/* Main content area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Canvas area */}
-        <div className="flex-1 relative bg-gray-900 overflow-hidden">
+        <div
+          ref={planContainerRef}
+          className="flex-1 relative bg-gray-900 overflow-hidden"
+          onMouseMove={(e) => draggingLabel && handleLabelDrag(e, draggingLabel)}
+          onMouseUp={handleLabelDragEnd}
+          onMouseLeave={handleLabelDragEnd}
+          onTouchMove={(e) => draggingLabel && handleLabelDrag(e, draggingLabel)}
+          onTouchEnd={handleLabelDragEnd}
+        >
           <img
             ref={imageRef}
             src={floorPlanGemini}
@@ -699,15 +786,21 @@ export function DemoPage() {
             style={{ pointerEvents: annotationMode ? "auto" : "none" }}
           />
 
-          {/* Auto-detected labels overlay */}
+          {/* Auto-detected labels overlay - draggable */}
           {autoLabels.map((label) => (
             <div
               key={label.id}
-              className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+              className={`absolute transform -translate-x-1/2 -translate-y-1/2 ${
+                !annotationMode ? "cursor-grab active:cursor-grabbing" : "pointer-events-none"
+              } ${draggingLabel === label.id ? "z-50 scale-110" : "z-10"} transition-transform`}
               style={{ left: `${label.x}%`, top: `${label.y}%` }}
+              onMouseDown={() => handleLabelDragStart(label.id)}
+              onTouchStart={() => handleLabelDragStart(label.id)}
             >
               <div
-                className="px-2 py-1 rounded text-xs font-medium text-white shadow-lg"
+                className={`px-2 py-1 rounded text-xs font-medium text-white shadow-lg select-none ${
+                  draggingLabel === label.id ? "ring-2 ring-white/50" : ""
+                }`}
                 style={{ backgroundColor: label.color }}
               >
                 {label.label}
@@ -726,7 +819,12 @@ export function DemoPage() {
             </div>
           )}
 
-          {/* Keyboard hint */}
+          {/* Hints */}
+          {!annotationMode && (
+            <div className="absolute top-4 left-4 px-3 py-2 bg-truecost-bg-primary/90 rounded-lg border border-truecost-glass-border text-truecost-text-secondary text-sm">
+              Drag labels to reposition them
+            </div>
+          )}
           <div className="absolute bottom-4 right-4 text-truecost-text-muted text-xs bg-truecost-bg-primary/80 px-2 py-1 rounded">
             Arrow keys to navigate
           </div>
@@ -735,8 +833,17 @@ export function DemoPage() {
         {/* Right sidebar - Layers/Annotations panel */}
         <div className="w-64 bg-truecost-bg-secondary/50 border-l border-truecost-glass-border flex flex-col">
           <div className="p-3 border-b border-truecost-glass-border">
-            <h3 className="text-sm font-semibold text-truecost-text-primary">Auto-Detected Elements</h3>
-            <p className="text-xs text-truecost-text-muted mt-1">AI identified these from the plan</p>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-truecost-text-primary">Auto-Detected Elements</h3>
+              <button
+                onClick={resetLabelPositions}
+                className="text-xs text-truecost-text-muted hover:text-truecost-cyan transition-colors"
+                title="Reset label positions"
+              >
+                Reset
+              </button>
+            </div>
+            <p className="text-xs text-truecost-text-muted mt-1">Drag to reposition labels</p>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {autoLabels.map((label) => (
@@ -966,8 +1073,15 @@ export function DemoPage() {
 
   // Fixed Result Summary - no emojis, dark background tables
   const renderResultSummary = () => (
-    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-8 pb-8 px-4">
       <div className="flex-1 max-w-6xl mx-auto w-full space-y-6">
+        {/* Badge */}
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border">
+            <span className="text-truecost-cyan text-sm font-medium">Estimate Summary</span>
+          </div>
+        </div>
+
         {/* Cost Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="glass-panel p-6 text-center">
@@ -998,8 +1112,8 @@ export function DemoPage() {
                 ${DEMO_ESTIMATE.costBreakdown.materials.toLocaleString()}
               </span>
             </h3>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {DEMO_ESTIMATE.materials.slice(0, 10).map((mat) => (
+            <div className="space-y-2">
+              {DEMO_ESTIMATE.materials.slice(0, 8).map((mat) => (
                 <div key={mat.id} className="flex justify-between items-center p-3 rounded border border-truecost-glass-border">
                   <div>
                     <p className="text-sm text-truecost-text-primary">{mat.item}</p>
@@ -1008,7 +1122,6 @@ export function DemoPage() {
                   <span className="font-mono text-truecost-cyan">${mat.total}</span>
                 </div>
               ))}
-              <p className="text-xs text-truecost-text-muted text-center">+ {DEMO_ESTIMATE.materials.length - 10} more items</p>
             </div>
           </div>
 
@@ -1078,8 +1191,15 @@ export function DemoPage() {
     const savings = Math.min(hdTotal, lowesTotal) - bestTotal;
 
     return (
-      <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+      <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-8 pb-8 px-4">
         <div className="flex-1 max-w-6xl mx-auto w-full space-y-6">
+          {/* Badge */}
+          <div className="text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border">
+              <span className="text-truecost-cyan text-sm font-medium">Price Comparison</span>
+            </div>
+          </div>
+
           {/* Summary cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="glass-panel p-4">
@@ -1177,8 +1297,15 @@ export function DemoPage() {
 
   // PDF Reports - using object tag to avoid sidebar
   const renderPDFReports = () => (
-    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-8 pb-8 px-4">
       <div className="flex-1 max-w-7xl mx-auto w-full">
+        {/* Badge */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border">
+            <span className="text-truecost-cyan text-sm font-medium">Reports</span>
+          </div>
+        </div>
+
         <div className="glass-panel p-6 text-center mb-6">
           <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">PDF Reports</h2>
           <p className="text-truecost-text-secondary">
@@ -1284,8 +1411,15 @@ export function DemoPage() {
     const actualPos = scale(actualCost.total);
 
     return (
-      <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+      <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-8 pb-8 px-4">
         <div className="flex-1 max-w-6xl mx-auto w-full space-y-6">
+          {/* Badge */}
+          <div className="text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border">
+              <span className="text-truecost-cyan text-sm font-medium">Accuracy Comparison</span>
+            </div>
+          </div>
+
           {/* Header */}
           <div className="glass-panel p-6 text-center">
             <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Estimate Accuracy Comparison</h2>
@@ -1509,8 +1643,15 @@ export function DemoPage() {
 
   // Why Choose TrueCost - no emojis, with comparison
   const renderDifferentiatorContent = () => (
-    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
+    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-8 pb-8 px-4">
       <div className="flex-1 max-w-6xl mx-auto w-full space-y-6">
+        {/* Badge */}
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border">
+            <span className="text-truecost-cyan text-sm font-medium">Why TrueCost</span>
+          </div>
+        </div>
+
         {/* Header */}
         <div className="glass-panel p-6 text-center">
           <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Why Choose TrueCost?</h2>
@@ -1536,8 +1677,8 @@ export function DemoPage() {
           <h3 className="text-lg font-semibold text-truecost-text-primary mb-6">How We Compare</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Manual/Excel Method */}
-            <div className="p-6 rounded-lg border border-red-500/30">
-              <h4 className="font-semibold text-truecost-text-primary mb-4">Manual / Excel</h4>
+            <div className="p-6 rounded-lg border border-red-500/40 bg-red-500/10">
+              <h4 className="font-semibold text-red-400 mb-4">Manual / Excel</h4>
               <ul className="space-y-3">
                 <li className="text-sm text-truecost-text-secondary flex items-start gap-2">
                   <span className="text-red-400">×</span> 4-6 hours per estimate
@@ -1560,9 +1701,9 @@ export function DemoPage() {
               </ul>
             </div>
 
-            {/* Other AI Solutions */}
-            <div className="p-6 rounded-lg border border-yellow-500/30">
-              <h4 className="font-semibold text-truecost-text-primary mb-4">Other AI Solutions</h4>
+            {/* Other Solutions */}
+            <div className="p-6 rounded-lg border border-yellow-500/40 bg-yellow-500/10">
+              <h4 className="font-semibold text-yellow-400 mb-4">Other Solutions</h4>
               <ul className="space-y-3">
                 <li className="text-sm text-truecost-text-secondary flex items-start gap-2">
                   <span className="text-yellow-400">~</span> Built by tech companies
@@ -1586,7 +1727,7 @@ export function DemoPage() {
             </div>
 
             {/* TrueCost */}
-            <div className="p-6 rounded-lg border-2 border-truecost-cyan/50 bg-truecost-cyan/5">
+            <div className="p-6 rounded-lg border-2 border-truecost-cyan/60 bg-truecost-cyan/15">
               <h4 className="font-semibold text-truecost-cyan mb-4">TrueCost AI</h4>
               <ul className="space-y-3">
                 <li className="text-sm text-truecost-text-secondary flex items-start gap-2">
@@ -1613,7 +1754,7 @@ export function DemoPage() {
         </div>
 
         {/* Key Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div className="glass-panel p-6 text-center">
             <p className="text-3xl font-bold text-truecost-cyan">120x</p>
             <p className="text-sm text-truecost-text-secondary">Faster</p>
@@ -1621,10 +1762,6 @@ export function DemoPage() {
           <div className="glass-panel p-6 text-center">
             <p className="text-3xl font-bold text-truecost-teal">98%</p>
             <p className="text-sm text-truecost-text-secondary">Accuracy</p>
-          </div>
-          <div className="glass-panel p-6 text-center">
-            <p className="text-3xl font-bold text-truecost-text-primary">50+</p>
-            <p className="text-sm text-truecost-text-secondary">Years Experience</p>
           </div>
           <div className="glass-panel p-6 text-center">
             <p className="text-3xl font-bold text-green-400">$0</p>
@@ -1648,89 +1785,169 @@ export function DemoPage() {
     const plans = [
       {
         name: "Trial",
-        price: "Free",
+        monthlyPrice: "Free",
+        yearlyPrice: "Free",
         period: "",
         description: "Try TrueCost with full capabilities",
         features: ["1 trial project", "Full AI analysis", "Detailed CSI breakdown", "Export to PDF"],
+        cta: "Start Trial",
         highlighted: false,
       },
       {
         name: "Professional",
-        price: "$399",
+        monthlyPrice: "$399",
+        yearlyPrice: "$319",
         period: "/month",
         description: "For contractors and small teams",
         features: ["Unlimited projects", "Advanced AI analysis", "Priority support", "Detailed CSI breakdown", "Risk assessment", "Timeline generation"],
+        cta: "Start Free Trial",
         highlighted: true,
       },
       {
         name: "Enterprise",
-        price: "Custom",
+        monthlyPrice: "Custom",
+        yearlyPrice: "Custom",
         period: "",
         description: "For large organizations",
         features: ["Everything in Professional", "Custom integrations", "Dedicated account manager", "On-premise deployment", "SLA guarantee", "Custom AI training"],
+        cta: "Contact Sales",
         highlighted: false,
       },
     ];
 
     return (
-      <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
-        <div className="flex-1 max-w-5xl mx-auto w-full space-y-6">
-          {/* Header */}
-          <div className="glass-panel p-6 text-center">
-            <h2 className="text-2xl font-bold text-truecost-text-primary mb-2">Simple, Transparent Pricing</h2>
-            <p className="text-truecost-text-secondary">Start free and scale as you grow</p>
+      <div className="min-h-screen bg-truecost-bg-primary py-12 px-4">
+        {/* Hero Section */}
+        <div className="text-center max-w-4xl mx-auto mb-12">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border mb-5">
+            <span className="text-truecost-cyan text-sm font-medium">Simple Pricing</span>
           </div>
 
-          {/* Pricing Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {plans.map((plan) => (
+          <h1 className="text-4xl md:text-5xl font-heading font-bold text-truecost-text-primary mb-4">
+            Choose Your <span className="text-truecost-cyan">Plan</span>
+          </h1>
+
+          <p className="text-lg text-truecost-text-secondary max-w-2xl mx-auto mb-8">
+            Start free and scale as you grow. All plans include our core AI-powered estimation features.
+          </p>
+
+          {/* Monthly/Yearly Toggle */}
+          <div className="inline-flex items-center gap-4 p-1.5 rounded-full bg-truecost-glass-bg border border-truecost-glass-border">
+            <button
+              onClick={() => setIsYearly(false)}
+              className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                !isYearly
+                  ? "bg-truecost-cyan text-truecost-bg-primary"
+                  : "text-truecost-text-secondary hover:text-truecost-text-primary"
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setIsYearly(true)}
+              className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
+                isYearly
+                  ? "bg-truecost-cyan text-truecost-bg-primary"
+                  : "text-truecost-text-secondary hover:text-truecost-text-primary"
+              }`}
+            >
+              Yearly
+              <span className={`text-xs px-2 py-0.5 rounded-full ${isYearly ? "bg-truecost-bg-primary/20" : "bg-green-500/20 text-green-400"}`}>
+                Save 20%
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Pricing Cards */}
+        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          {plans.map((plan) => {
+            const displayPrice = isYearly ? plan.yearlyPrice : plan.monthlyPrice;
+            const showYearlySavings = isYearly && plan.name === "Professional";
+
+            return (
               <div
                 key={plan.name}
-                className={`glass-panel p-6 relative ${
-                  plan.highlighted ? "border-truecost-cyan ring-1 ring-truecost-cyan/50" : ""
+                className={`glass-panel p-8 rounded-2xl relative transition-all duration-300 ${
+                  plan.highlighted
+                    ? "border-truecost-cyan ring-1 ring-truecost-cyan/50"
+                    : "hover:border-truecost-glass-border/80"
                 }`}
               >
                 {plan.highlighted && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="bg-truecost-cyan text-truecost-bg-primary text-xs font-semibold px-3 py-1 rounded-full">
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                    <span className="bg-truecost-cyan text-truecost-bg-primary text-sm font-semibold px-4 py-1 rounded-full">
                       Most Popular
                     </span>
                   </div>
                 )}
 
-                <div className="text-center mb-6">
-                  <h3 className="text-xl font-bold text-truecost-text-primary mb-1">{plan.name}</h3>
-                  <p className="text-sm text-truecost-text-muted mb-3">{plan.description}</p>
+                <div className="text-center mb-8">
+                  <h3 className="text-2xl font-heading font-bold text-truecost-text-primary mb-2">
+                    {plan.name}
+                  </h3>
+                  <p className="text-truecost-text-muted text-sm mb-4">
+                    {plan.description}
+                  </p>
                   <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-3xl font-bold text-truecost-text-primary">{plan.price}</span>
-                    {plan.period && <span className="text-truecost-text-muted">{plan.period}</span>}
+                    <span className="text-4xl font-heading font-bold text-truecost-text-primary">
+                      {displayPrice}
+                    </span>
+                    {plan.period && (
+                      <span className="text-truecost-text-muted">{plan.period}</span>
+                    )}
                   </div>
+                  {showYearlySavings && (
+                    <p className="text-green-400 text-sm mt-2">
+                      Billed annually (${319 * 12}/year)
+                    </p>
+                  )}
                 </div>
 
-                <ul className="space-y-3 mb-6">
+                <ul className="space-y-4 mb-8">
                   {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <svg className="w-5 h-5 text-truecost-cyan flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    <li key={feature} className="flex items-start gap-3">
+                      <svg
+                        className="w-5 h-5 text-truecost-cyan flex-shrink-0 mt-0.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
                       </svg>
-                      <span className="text-sm text-truecost-text-secondary">{feature}</span>
+                      <span className="text-truecost-text-secondary">{feature}</span>
                     </li>
                   ))}
                 </ul>
 
                 <Link
                   to={plan.name === "Enterprise" ? "/contact" : "/signup"}
-                  className={`block w-full py-2.5 rounded-lg font-medium text-center transition-colors ${
+                  className={`block w-full py-3 rounded-xl font-semibold text-center transition-colors ${
                     plan.highlighted
                       ? "bg-truecost-cyan text-truecost-bg-primary hover:bg-truecost-cyan/90"
                       : "bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary hover:border-truecost-cyan/50"
                   }`}
                 >
-                  {plan.name === "Enterprise" ? "Contact Sales" : "Start Free Trial"}
+                  {plan.cta}
                 </Link>
               </div>
-            ))}
-          </div>
+            );
+          })}
+        </div>
+
+        {/* FAQ */}
+        <div className="text-center mt-12">
+          <p className="text-truecost-text-muted">
+            Have questions about our pricing?{" "}
+            <Link to="/contact" className="text-truecost-cyan hover:underline">
+              Contact our sales team
+            </Link>
+          </p>
         </div>
       </div>
     );
@@ -1738,19 +1955,17 @@ export function DemoPage() {
 
   // Meet the Team - styled like About Us page
   const renderAboutUsContent = () => (
-    <div className="min-h-screen bg-truecost-bg-primary">
+    <div className="min-h-screen bg-truecost-bg-primary py-6 px-4">
       {/* Hero Section with QR */}
-      <section className="relative pt-16 pb-8 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-truecost-cyan/5 via-transparent to-transparent pointer-events-none" />
-
-        <div className="container-spacious relative z-10 px-4">
-          <div className="flex flex-col md:flex-row items-center justify-between max-w-5xl mx-auto">
-            <div className="text-center md:text-left mb-6 md:mb-0">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border mb-4">
+      <section className="relative pb-4">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border mb-3">
                 <span className="text-truecost-cyan text-sm font-medium">Our Story</span>
               </div>
 
-              <h1 className="text-4xl md:text-5xl font-heading font-bold text-truecost-text-primary mb-4">
+              <h1 className="text-4xl md:text-5xl font-heading font-bold text-truecost-text-primary mb-3">
                 About <span className="text-truecost-cyan">TrueCost</span>
               </h1>
 
@@ -1760,59 +1975,34 @@ export function DemoPage() {
               </p>
             </div>
 
-            <div className="flex-shrink-0 flex items-center gap-4">
-              <div className="w-32 h-32 bg-white rounded-xl p-2 shadow-lg">
+            <div className="flex-shrink-0">
+              <div className="w-48 h-48 bg-white rounded-xl p-3 shadow-lg">
                 <img src={qrCodeImage} alt="QR Code" className="w-full h-full object-contain" />
-              </div>
-              <div className="text-left">
-                <p className="text-sm text-truecost-cyan font-medium">Scan to visit</p>
-                <p className="text-xs text-truecost-text-muted">truecost.ai</p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Mission Section */}
-      <section className="py-8 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="glass-panel p-8 rounded-2xl">
-            <h2 className="text-2xl font-heading font-bold text-truecost-text-primary mb-4">
-              Our Mission
-            </h2>
-            <p className="text-truecost-text-secondary leading-relaxed mb-4">
-              Construction cost estimation has long been a time-consuming, error-prone process
-              that relies heavily on experience and guesswork. We founded TrueCost to change that.
-            </p>
-            <p className="text-truecost-text-secondary leading-relaxed">
-              By combining deep construction industry expertise with cutting-edge AI technology,
-              we've created a platform that generates accurate, detailed estimates in minutes
-              instead of days. Our goal is to empower contractors, architects, and project owners
-              with the information they need to make confident decisions.
-            </p>
-          </div>
-        </div>
-      </section>
-
       {/* Team Section */}
-      <section className="py-8 px-4">
+      <section className="py-4">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-heading font-bold text-truecost-text-primary mb-2">
+          <div className="text-center mb-4">
+            <h2 className="text-2xl font-heading font-bold text-truecost-text-primary mb-1">
               Meet the Team
             </h2>
-            <p className="text-truecost-text-secondary">
+            <p className="text-truecost-text-secondary text-sm">
               The people behind TrueCost
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {teamMembers.map((member, index) => (
               <div
                 key={index}
-                className="glass-panel p-6 rounded-2xl hover:border-truecost-cyan/50 transition-colors"
+                className="glass-panel p-4 rounded-xl hover:border-truecost-cyan/50 transition-colors"
               >
-                <div className="w-28 h-28 mx-auto mb-4 rounded-full bg-truecost-glass-bg border-2 border-truecost-glass-border flex items-center justify-center overflow-hidden">
+                <div className="w-20 h-20 mx-auto mb-3 rounded-full bg-truecost-glass-bg border-2 border-truecost-glass-border flex items-center justify-center overflow-hidden">
                   {member.image ? (
                     <img
                       src={member.image}
@@ -1820,21 +2010,21 @@ export function DemoPage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <svg className="w-14 h-14 text-truecost-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-10 h-10 text-truecost-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   )}
                 </div>
 
                 <div className="text-center">
-                  <h3 className="text-lg font-heading font-semibold text-truecost-text-primary mb-1">
+                  <h3 className="text-base font-heading font-semibold text-truecost-text-primary mb-0.5">
                     {member.name}
                   </h3>
-                  <p className={`text-truecost-cyan font-medium${member.desc ? ' mb-3' : ''}`}>
+                  <p className={`text-truecost-cyan text-sm font-medium${member.desc ? ' mb-2' : ''}`}>
                     {member.role}
                   </p>
                   {member.desc && (
-                    <p className="text-truecost-text-secondary text-sm leading-relaxed">
+                    <p className="text-truecost-text-secondary text-xs leading-relaxed">
                       {member.desc}
                     </p>
                   )}
@@ -1845,24 +2035,44 @@ export function DemoPage() {
         </div>
       </section>
 
+      {/* Mission Section */}
+      <section className="py-4">
+        <div className="max-w-5xl mx-auto">
+          <div className="glass-panel p-5 rounded-xl">
+            <h2 className="text-xl font-heading font-bold text-truecost-text-primary mb-3">
+              Our Mission
+            </h2>
+            <p className="text-truecost-text-secondary text-sm leading-relaxed mb-3">
+              Construction cost estimation has long been a time-consuming, error-prone process
+              that relies heavily on experience and guesswork. We founded TrueCost to change that.
+            </p>
+            <p className="text-truecost-text-secondary text-sm leading-relaxed">
+              By combining deep construction industry expertise with cutting-edge AI technology,
+              we've created a platform that generates accurate, detailed estimates in minutes
+              instead of days.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Contact CTA */}
-      <section className="py-8 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="glass-panel p-8 text-center rounded-2xl">
-            <h3 className="text-xl font-semibold text-truecost-text-primary mb-2">Get in Touch</h3>
-            <p className="text-truecost-text-secondary mb-6">
+      <section className="py-4">
+        <div className="max-w-5xl mx-auto">
+          <div className="glass-panel p-5 text-center rounded-xl">
+            <h3 className="text-lg font-semibold text-truecost-text-primary mb-1">Get in Touch</h3>
+            <p className="text-truecost-text-secondary text-sm mb-4">
               Ready to transform your estimation workflow?
             </p>
-            <div className="flex flex-wrap gap-4 justify-center">
+            <div className="flex flex-wrap gap-3 justify-center">
               <Link
                 to="/contact"
-                className="px-6 py-3 bg-truecost-cyan text-truecost-bg-primary rounded-lg font-medium hover:bg-truecost-cyan/90 transition-colors"
+                className="px-5 py-2 bg-truecost-cyan text-truecost-bg-primary rounded-lg font-medium hover:bg-truecost-cyan/90 transition-colors"
               >
                 Contact Us
               </Link>
               <Link
                 to="/signup"
-                className="px-6 py-3 bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary rounded-lg font-medium hover:border-truecost-cyan/50 transition-colors"
+                className="px-5 py-2 bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary rounded-lg font-medium hover:border-truecost-cyan/50 transition-colors"
               >
                 Start Free Trial
               </Link>
@@ -1911,67 +2121,11 @@ export function DemoPage() {
     }
   };
 
-  // For pages that need no nav bar at all
-  const noNavPages = ["home", "annotate-plan"];
-  if (noNavPages.includes(currentStep.id)) {
-    return (
-      <div className="min-h-screen bg-truecost-bg-primary">
-        {renderContent()}
-        <style>{`
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
-        `}</style>
-      </div>
-    );
-  }
-
+  // All pages now use arrow key navigation only
   return (
-    <div className="min-h-screen bg-truecost-bg-primary pb-20">
-      {/* Content */}
+    <div className="min-h-screen bg-truecost-bg-primary">
       <div className="animate-fadeIn">
         {renderContent()}
-      </div>
-
-      {/* Navigation buttons - fixed at bottom */}
-      <div className="fixed bottom-0 left-0 right-0 bg-truecost-bg-primary/95 backdrop-blur-sm border-t border-truecost-glass-border py-4 px-4 z-50">
-        <div className="max-w-4xl mx-auto flex justify-center items-center gap-4">
-          <button
-            onClick={goPrev}
-            disabled={isFirstStep}
-            className={`px-6 py-3 rounded-full font-medium transition-all flex items-center gap-2 ${
-              isFirstStep
-                ? "bg-truecost-glass-bg text-truecost-text-muted cursor-not-allowed"
-                : "bg-truecost-glass-bg border border-truecost-glass-border text-truecost-text-primary hover:border-truecost-cyan/50"
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Previous
-          </button>
-
-          <span className="text-truecost-text-secondary text-sm px-4 min-w-[80px] text-center">
-            {currentStepIndex + 1} / {DEMO_STEPS.length}
-          </span>
-
-          <button
-            onClick={goNext}
-            disabled={isLastStep}
-            className={`px-6 py-3 rounded-full font-medium transition-all flex items-center gap-2 ${
-              isLastStep
-                ? "bg-truecost-glass-bg text-truecost-text-muted cursor-not-allowed"
-                : "bg-truecost-cyan text-truecost-bg-primary hover:bg-truecost-cyan/90"
-            }`}
-          >
-            Next
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
       </div>
 
       <style>{`
