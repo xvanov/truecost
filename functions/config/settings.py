@@ -17,7 +17,7 @@ class Settings:
     """Application settings loaded from environment variables."""
     
     # LLM Configuration
-    llm_model: str = os.getenv("LLM_MODEL", "gpt-4o")
+    llm_model: str = os.getenv("LLM_MODEL", "gpt-5.2")
     llm_temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
     

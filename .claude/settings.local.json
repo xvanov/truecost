@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(python demo_pipeline.py:*)",
+      "Bash(python debug_costs.py:*)",
+      "Bash(python debug_full_pipeline.py:*)"
+    ]
+  }
+}

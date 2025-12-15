@@ -8,6 +8,7 @@ localized and makes unit tests easy to patch (mock this function).
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Dict, List, Optional
 
 import structlog
@@ -19,6 +20,27 @@ from services.firestore_service import FirestoreService
 from services.deep_agents_backend import FirestoreAgentFsBackend
 
 logger = structlog.get_logger(__name__)
+
+# Enable verbose LLM logging via environment variable
+VERBOSE_LLM_LOGGING = os.environ.get("TRUECOST_VERBOSE_LLM", "false").lower() in ("true", "1", "yes")
+
+
+def _truncate(text: str, max_len: int = 500) -> str:
+    """Truncate text for logging."""
+    if not text:
+        return ""
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + f"... [truncated, {len(text)} chars total]"
+
+
+def _format_json_for_log(data: Any, indent: int = 2, max_len: int = 1500) -> str:
+    """Format JSON data for logging with truncation."""
+    try:
+        formatted = json.dumps(data, indent=indent, ensure_ascii=False)
+        return _truncate(formatted, max_len)
+    except Exception:
+        return str(data)[:max_len]
 
 
 class _TokenCountingCallback(BaseCallbackHandler):
@@ -85,6 +107,27 @@ async def deep_agent_generate_json(
 
     This is the drop-in replacement for `LLMService.generate_json`.
     """
+    import time
+    from datetime import datetime
+    start_time = time.time()
+
+    # Console log: LLM call starting
+    print("\n" + "=" * 80)
+    print(f"LLM CALL: {agent_name.upper()} AGENT")
+    print("=" * 80)
+    print(f"Estimate ID: {estimate_id}")
+    print(f"Model: {settings.llm_model}")
+    print(f"Max Tokens: {max_tokens or 'default'}")
+    print("-" * 40)
+    print("SYSTEM PROMPT:")
+    print("-" * 40)
+    print(_truncate(system_prompt, 800))
+    print("-" * 40)
+    print("USER MESSAGE:")
+    print("-" * 40)
+    print(_truncate(user_message, 1200))
+    print("-" * 40)
+
     # Import here so tests can patch this module even when deepagents isn't installed.
     from deepagents import create_deep_agent
 
@@ -131,9 +174,82 @@ async def deep_agent_generate_json(
             content_text = getattr(result, "content", None) if result is not None else None
 
         parsed = _parse_json_strict(content_text or "")
-        return {"content": parsed, "tokens_used": int(token_cb.total_tokens or 0)}
+
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        tokens_used = int(token_cb.total_tokens or 0)
+
+        # Console log: LLM response
+        print("LLM RESPONSE:")
+        print("-" * 40)
+        print(_format_json_for_log(parsed, max_len=2000))
+        print("-" * 40)
+        print(f"Tokens Used: {tokens_used}")
+        print(f"Duration: {elapsed_ms}ms")
+        print("=" * 80 + "\n")
+
+        # Save LLM log to Firestore for frontend visibility
+        try:
+            await _save_llm_log(
+                firestore_service=firestore_service,
+                estimate_id=estimate_id,
+                agent_name=agent_name,
+                log_data={
+                    "type": "llm_call",
+                    "agent": agent_name,
+                    "model": settings.llm_model,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "durationMs": elapsed_ms,
+                    "tokensUsed": tokens_used,
+                    "systemPrompt": _truncate(system_prompt, 500),
+                    "userMessage": _truncate(user_message, 1000),
+                    "response": parsed,
+                    "status": "success",
+                }
+            )
+        except Exception as log_err:
+            # Non-fatal: don't fail the agent if logging fails
+            logger.debug("llm_log_save_failed", error=str(log_err))
+
+        logger.info(
+            "llm_call_completed",
+            agent=agent_name,
+            estimate_id=estimate_id,
+            tokens_used=tokens_used,
+            duration_ms=elapsed_ms,
+        )
+
+        return {"content": parsed, "tokens_used": tokens_used}
 
     except Exception as e:
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        print("LLM ERROR:")
+        print("-" * 40)
+        print(f"Error: {str(e)}")
+        print(f"Duration: {elapsed_ms}ms")
+        print("=" * 80 + "\n")
+
+        # Save error log to Firestore
+        try:
+            from datetime import datetime
+            await _save_llm_log(
+                firestore_service=firestore_service,
+                estimate_id=estimate_id,
+                agent_name=agent_name,
+                log_data={
+                    "type": "llm_call",
+                    "agent": agent_name,
+                    "model": settings.llm_model,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "durationMs": elapsed_ms,
+                    "systemPrompt": _truncate(system_prompt, 500),
+                    "userMessage": _truncate(user_message, 1000),
+                    "error": str(e),
+                    "status": "error",
+                }
+            )
+        except Exception:
+            pass
+
         logger.warning(
             "deep_agent_generate_json_failed",
             estimate_id=estimate_id,
@@ -141,5 +257,30 @@ async def deep_agent_generate_json(
             error=str(e),
         )
         raise
+
+
+async def _save_llm_log(
+    firestore_service: FirestoreService,
+    estimate_id: str,
+    agent_name: str,
+    log_data: Dict[str, Any],
+) -> None:
+    """Save LLM call log to Firestore for frontend visibility.
+
+    Saves to /estimates/{estimateId}/llmLogs/{logId}
+    """
+    import uuid
+    try:
+        log_id = f"{agent_name}-{uuid.uuid4().hex[:8]}"
+        log_ref = (
+            firestore_service.db
+            .collection("estimates")
+            .document(estimate_id)
+            .collection("llmLogs")
+            .document(log_id)
+        )
+        log_ref.set(log_data)
+    except Exception as e:
+        logger.debug("save_llm_log_failed", error=str(e))
 
 

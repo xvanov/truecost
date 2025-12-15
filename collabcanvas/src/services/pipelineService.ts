@@ -488,6 +488,94 @@ export async function getPipelineStatus(estimateId: string): Promise<PipelinePro
 }
 
 /**
+ * LLM Log entry stored in Firestore subcollection
+ */
+export interface LLMLog {
+  id: string;
+  type: 'llm_call';
+  agent: string;
+  model: string;
+  timestamp: string;
+  durationMs: number;
+  tokensUsed?: number;
+  systemPrompt: string;
+  userMessage: string;
+  response?: Record<string, unknown>;
+  error?: string;
+  status: 'success' | 'error';
+}
+
+/**
+ * Subscribe to LLM logs for detailed debugging in browser console.
+ * Listens to /estimates/{estimateId}/llmLogs collection.
+ */
+export function subscribeToLLMLogs(
+  estimateId: string,
+  onLog?: (log: LLMLog) => void
+): () => void {
+  const logsRef = collection(firestore, 'estimates', estimateId, 'llmLogs');
+  const q = query(logsRef, orderBy('timestamp', 'asc'));
+  const loggedIds = new Set<string>();
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const docId = change.doc.id;
+          if (loggedIds.has(docId)) return;
+          loggedIds.add(docId);
+
+          const data = change.doc.data() as Omit<LLMLog, 'id'>;
+          const log: LLMLog = { id: docId, ...data };
+
+          // Print to browser console with formatting
+          const isError = log.status === 'error';
+          const consoleMethod = isError ? console.error : console.log;
+          const statusEmoji = isError ? '❌' : '✅';
+
+          console.group(`${statusEmoji} [LLM] ${log.agent.toUpperCase()} Agent`);
+          console.log('%cModel:', 'font-weight: bold', log.model);
+          console.log('%cDuration:', 'font-weight: bold', `${log.durationMs}ms`);
+          if (log.tokensUsed) {
+            console.log('%cTokens:', 'font-weight: bold', log.tokensUsed);
+          }
+          console.log('%cTimestamp:', 'font-weight: bold', log.timestamp);
+
+          console.groupCollapsed('System Prompt');
+          console.log(log.systemPrompt);
+          console.groupEnd();
+
+          console.groupCollapsed('User Message');
+          console.log(log.userMessage);
+          console.groupEnd();
+
+          if (log.response) {
+            console.groupCollapsed('Response');
+            console.log(log.response);
+            console.groupEnd();
+          }
+
+          if (log.error) {
+            console.error('%cError:', 'font-weight: bold; color: red', log.error);
+          }
+
+          console.groupEnd();
+
+          // Call optional callback
+          if (onLog) {
+            onLog(log);
+          }
+        }
+      });
+    },
+    (error) => {
+      console.error('[LLM LOGS] Subscription error:', error);
+    }
+  );
+}
+
+/**
  * Build a placeholder ClarificationOutput for debugging flows
  */
 export function buildFallbackClarificationOutput(params: {

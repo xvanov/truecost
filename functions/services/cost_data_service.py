@@ -1249,18 +1249,20 @@ class CostDataService:
         self,
         item_description: str,
         division_code: str,
-        subdivision_code: Optional[str] = None
+        subdivision_code: Optional[str] = None,
+        input_unit: Optional[str] = None
     ) -> Dict[str, any]:
         """Get cost code and unit costs for an item.
-        
+
         Uses fuzzy matching on item description to find the best matching
-        cost code from the mock database.
-        
+        cost code from the mock database. Prefers codes with matching units.
+
         Args:
             item_description: Description of the line item.
             division_code: CSI division code (e.g., '06', '22').
             subdivision_code: Optional CSI subdivision code (e.g., '06 41 00').
-            
+            input_unit: Optional input unit for unit compatibility matching.
+
         Returns:
             Dict with cost_code, description, material_cost_per_unit,
             labor_hours_per_unit, primary_trade, and confidence.
@@ -1271,67 +1273,147 @@ class CostDataService:
             division=division_code,
             subdivision=subdivision_code
         )
-        
+
         # Normalize description for matching
         desc_lower = item_description.lower()
-        
-        # Try subdivision code match first
+        input_unit_norm = (input_unit or "").strip().upper()
+
+        # Unit compatibility groups
+        area_units = {"SF", "SQFT", "SQ FT", "SQUARE FEET"}
+        linear_units = {"LF", "LIN FT", "LINEAR FEET"}
+        each_units = {"EA", "EACH", "PC", "PIECE"}
+        lump_units = {"LS", "LUMP SUM", "ALLOWANCE", "DAY"}
+
+        def units_compatible(code_unit: str, input_unit: str) -> bool:
+            """Check if code unit is compatible with input unit."""
+            code_norm = code_unit.strip().upper()
+            input_norm = input_unit.strip().upper()
+
+            if code_norm == input_norm:
+                return True
+            if code_norm in area_units and input_norm in area_units:
+                return True
+            if code_norm in linear_units and input_norm in linear_units:
+                return True
+            if code_norm in each_units and input_norm in each_units:
+                return True
+            if code_norm in lump_units and input_norm in lump_units:
+                return True
+            return False
+
+        # Try subdivision code match first - but prefer unit-compatible and keyword-matched codes
         if subdivision_code:
             normalized_sub = subdivision_code.replace(" ", "")
-            for code_data in MOCK_COST_CODES:
-                if code_data.get("subdivision", "").replace(" ", "") == normalized_sub:
-                    return self._build_cost_code_result(code_data, 0.95)
-        
+            matching_codes = [
+                c for c in MOCK_COST_CODES
+                if c.get("subdivision", "").replace(" ", "") == normalized_sub
+            ]
+
+            if matching_codes:
+                # Score each matching code by keyword relevance and unit compatibility
+                best_match = None
+                best_combined_score = -1.0
+
+                for code_data in matching_codes:
+                    keyword_score = self._calculate_fuzzy_score(desc_lower, code_data, input_unit_norm)
+                    code_unit = code_data.get("unit", "EA")
+                    unit_bonus = 0.3 if units_compatible(code_unit, input_unit_norm) else 0.0
+                    combined = keyword_score + unit_bonus
+
+                    if combined > best_combined_score:
+                        best_combined_score = combined
+                        best_match = code_data
+
+                if best_match:
+                    code_unit = best_match.get("unit", "EA")
+                    unit_compatible = not input_unit_norm or units_compatible(code_unit, input_unit_norm)
+                    confidence = 0.95 if unit_compatible else 0.70
+                    return self._build_cost_code_result(best_match, confidence)
+
         # Try fuzzy keyword matching within division
         division_codes = [c for c in MOCK_COST_CODES if c["division"] == division_code]
-        
+
         best_match = None
         best_score = 0.0
-        
+
         for code_data in division_codes:
-            score = self._calculate_fuzzy_score(desc_lower, code_data)
+            score = self._calculate_fuzzy_score(desc_lower, code_data, input_unit_norm)
             if score > best_score:
                 best_score = score
                 best_match = code_data
-        
+
         # If no good match in division, try global search
         if best_score < 0.3:
             for code_data in MOCK_COST_CODES:
-                score = self._calculate_fuzzy_score(desc_lower, code_data)
+                score = self._calculate_fuzzy_score(desc_lower, code_data, input_unit_norm)
                 if score > best_score:
                     best_score = score
                     best_match = code_data
-        
+
         # If still no match, return generic based on division
         if best_match is None or best_score < 0.2:
             return self._get_default_cost_code(division_code, item_description)
-        
+
         return self._build_cost_code_result(best_match, min(0.95, best_score + 0.3))
     
     def _calculate_fuzzy_score(
         self,
         description: str,
-        code_data: Dict[str, any]
+        code_data: Dict[str, any],
+        input_unit: str = ""
     ) -> float:
         """Calculate fuzzy match score between description and cost code.
-        
+
         Args:
             description: Normalized item description (lowercase).
             code_data: Cost code data from mock database.
-            
+            input_unit: Optional input unit for compatibility bonus.
+
         Returns:
             Match score from 0.0 to 1.0.
         """
         keywords = code_data.get("keywords", [])
         if not keywords:
             return 0.0
-        
+
         matches = 0
         for keyword in keywords:
             if keyword.lower() in description:
                 matches += 1
-        
-        return matches / len(keywords) if keywords else 0.0
+
+        base_score = matches / len(keywords) if keywords else 0.0
+
+        # Apply unit compatibility bonus/penalty
+        if input_unit and base_score > 0:
+            code_unit = code_data.get("unit", "EA").strip().upper()
+            input_norm = input_unit.strip().upper()
+
+            # Unit compatibility groups
+            area_units = {"SF", "SQFT", "SQ FT", "SQUARE FEET"}
+            linear_units = {"LF", "LIN FT", "LINEAR FEET"}
+            each_units = {"EA", "EACH", "PC", "PIECE"}
+            lump_units = {"LS", "LUMP SUM", "ALLOWANCE", "DAY"}
+
+            units_match = False
+            if code_unit == input_norm:
+                units_match = True
+            elif code_unit in area_units and input_norm in area_units:
+                units_match = True
+            elif code_unit in linear_units and input_norm in linear_units:
+                units_match = True
+            elif code_unit in each_units and input_norm in each_units:
+                units_match = True
+            elif code_unit in lump_units and input_norm in lump_units:
+                units_match = True
+
+            if units_match:
+                # Boost score for compatible units
+                base_score = min(1.0, base_score + 0.2)
+            else:
+                # Penalty for incompatible units (but don't eliminate)
+                base_score = max(0.0, base_score - 0.15)
+
+        return base_score
     
     def _build_cost_code_result(
         self,
@@ -1531,7 +1613,40 @@ MOCK_COST_CODES: List[Dict[str, any]] = [
         "primary_trade": "general_labor",
         "unit": "EA"
     },
-    
+    {
+        "code": "02-4119-0500",
+        "subdivision": "02 41 19",
+        "division": "02",
+        "description": "Wall finish demolition and removal",
+        "keywords": ["wall", "demolition", "wall finish", "wall demo", "drywall removal", "wall removal"],
+        "material_cost_per_unit": 0.25,
+        "labor_hours_per_unit": 0.03,
+        "primary_trade": "demolition",
+        "unit": "SF"
+    },
+    {
+        "code": "02-4119-0600",
+        "subdivision": "02 41 19",
+        "division": "02",
+        "description": "Ceiling demolition and removal",
+        "keywords": ["ceiling", "demolition", "ceiling removal", "ceiling demo"],
+        "material_cost_per_unit": 0.30,
+        "labor_hours_per_unit": 0.04,
+        "primary_trade": "demolition",
+        "unit": "SF"
+    },
+    {
+        "code": "02-4119-0700",
+        "subdivision": "02 41 19",
+        "division": "02",
+        "description": "Door demolition and removal",
+        "keywords": ["door", "demolition", "door removal", "door demo"],
+        "material_cost_per_unit": 0.0,
+        "labor_hours_per_unit": 0.5,
+        "primary_trade": "demolition",
+        "unit": "EA"
+    },
+
     # Division 06 - Wood, Plastics, Composites (Cabinets, Trim)
     {
         "code": "06-4100-0100",
@@ -1610,7 +1725,97 @@ MOCK_COST_CODES: List[Dict[str, any]] = [
         "primary_trade": "carpenter",
         "unit": "LF"
     },
-    
+    {
+        "code": "06-1110-0100",
+        "subdivision": "06 11 10",
+        "division": "06",
+        "description": "Wall framing - 2x4 studs",
+        "keywords": ["framing", "stud", "wall framing", "studs", "2x4"],
+        "material_cost_per_unit": 3.50,
+        "labor_hours_per_unit": 0.15,
+        "primary_trade": "carpenter",
+        "unit": "LF"
+    },
+    {
+        "code": "06-1110-0200",
+        "subdivision": "06 11 10",
+        "division": "06",
+        "description": "Wall framing - 2x6 studs",
+        "keywords": ["framing", "stud", "wall framing", "studs", "2x6"],
+        "material_cost_per_unit": 4.50,
+        "labor_hours_per_unit": 0.18,
+        "primary_trade": "carpenter",
+        "unit": "LF"
+    },
+    {
+        "code": "06-1110-0300",
+        "subdivision": "06 11 10",
+        "division": "06",
+        "description": "Knee wall framing",
+        "keywords": ["knee wall", "half wall", "pony wall", "short wall"],
+        "material_cost_per_unit": 4.00,
+        "labor_hours_per_unit": 0.20,
+        "primary_trade": "carpenter",
+        "unit": "LF"
+    },
+
+    # Division 07 - Thermal and Moisture Protection
+    {
+        "code": "07-2100-0100",
+        "subdivision": "07 21 00",
+        "division": "07",
+        "description": "Wall insulation - R-13 batt",
+        "keywords": ["insulation", "wall insulation", "batt", "fiberglass", "R-13", "thermal"],
+        "material_cost_per_unit": 0.85,
+        "labor_hours_per_unit": 0.012,
+        "primary_trade": "insulation_installer",
+        "unit": "SF"
+    },
+    {
+        "code": "07-2100-0200",
+        "subdivision": "07 21 00",
+        "division": "07",
+        "description": "Wall insulation - R-19 batt",
+        "keywords": ["insulation", "wall insulation", "batt", "fiberglass", "R-19", "thermal"],
+        "material_cost_per_unit": 1.10,
+        "labor_hours_per_unit": 0.015,
+        "primary_trade": "insulation_installer",
+        "unit": "SF"
+    },
+    {
+        "code": "07-2100-0300",
+        "subdivision": "07 21 00",
+        "division": "07",
+        "description": "Ceiling insulation - blown-in",
+        "keywords": ["insulation", "ceiling insulation", "blown", "attic"],
+        "material_cost_per_unit": 1.25,
+        "labor_hours_per_unit": 0.02,
+        "primary_trade": "insulation_installer",
+        "unit": "SF"
+    },
+    {
+        "code": "07-2600-0100",
+        "subdivision": "07 26 00",
+        "division": "07",
+        "description": "Vapor barrier - 6 mil poly",
+        "keywords": ["vapor barrier", "moisture barrier", "poly", "plastic sheeting"],
+        "material_cost_per_unit": 0.15,
+        "labor_hours_per_unit": 0.005,
+        "primary_trade": "insulation_installer",
+        "unit": "SF"
+    },
+    {
+        "code": "07-4600-0100",
+        "subdivision": "07 46 00",
+        "division": "07",
+        "description": "Shower waterproofing membrane",
+        "keywords": ["waterproofing", "membrane", "shower", "kerdi", "redgard"],
+        "material_cost_per_unit": 2.50,
+        "labor_hours_per_unit": 0.05,
+        "primary_trade": "tile_setter",
+        "unit": "SF"
+    },
+
     # Division 08 - Openings (Hardware)
     {
         "code": "08-7100-0100",
@@ -1701,6 +1906,39 @@ MOCK_COST_CODES: List[Dict[str, any]] = [
         "labor_hours_per_unit": 4.0,
         "primary_trade": "drywall_installer",
         "unit": "allowance"
+    },
+    {
+        "code": "09-2900-0200",
+        "subdivision": "09 29 00",
+        "division": "09",
+        "description": "Drywall installation - walls",
+        "keywords": ["drywall", "gypsum", "sheetrock", "wall drywall", "drywall walls"],
+        "material_cost_per_unit": 1.25,
+        "labor_hours_per_unit": 0.025,
+        "primary_trade": "drywall_installer",
+        "unit": "SF"
+    },
+    {
+        "code": "09-2900-0300",
+        "subdivision": "09 29 00",
+        "division": "09",
+        "description": "Drywall installation - ceiling",
+        "keywords": ["drywall", "gypsum", "sheetrock", "ceiling drywall", "drywall ceiling"],
+        "material_cost_per_unit": 1.35,
+        "labor_hours_per_unit": 0.03,
+        "primary_trade": "drywall_installer",
+        "unit": "SF"
+    },
+    {
+        "code": "09-2900-0400",
+        "subdivision": "09 29 00",
+        "division": "09",
+        "description": "Drywall finishing - tape and mud",
+        "keywords": ["tape", "mud", "finish", "drywall finish", "joint compound"],
+        "material_cost_per_unit": 0.45,
+        "labor_hours_per_unit": 0.02,
+        "primary_trade": "drywall_installer",
+        "unit": "SF"
     },
     {
         "code": "09-3000-0100",

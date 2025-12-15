@@ -36,6 +36,7 @@ import { getProjectCanvasStoreApi } from "../../store/projectCanvasStore";
 import {
   subscribeToAgentOutputs,
   subscribeToPipelineProgress,
+  subscribeToLLMLogs,
   triggerEstimatePipeline,
   type PipelineProgress,
   type ClarificationOutputPayload,
@@ -1001,6 +1002,21 @@ export function EstimatePage() {
         console.error("[FLOW][Estimate] Agent outputs subscription error:", err);
       }
     );
+
+    return () => unsubscribe();
+  }, [projectId, estimateId, phase]);
+
+  // Subscribe to LLM logs for browser console debugging.
+  // This shows detailed LLM call information (prompts, responses, tokens, timing).
+  useEffect(() => {
+    if (!projectId || !estimateId || phase !== "generate") return;
+
+    console.log(
+      "[FLOW][Estimate] Subscribing to LLM logs for estimate:",
+      estimateId
+    );
+
+    const unsubscribe = subscribeToLLMLogs(estimateId);
 
     return () => unsubscribe();
   }, [projectId, estimateId, phase]);
