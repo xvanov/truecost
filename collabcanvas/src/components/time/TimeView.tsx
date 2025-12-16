@@ -387,8 +387,6 @@ function GanttChart({
 
           {/* Task rows */}
           {tasks.map((task, index) => {
-            const colors = CATEGORY_COLORS[task.category || 'prep'] || CATEGORY_COLORS.prep;
-
             return (
               <div
                 key={task.id}
@@ -888,7 +886,6 @@ function CPMNetworkDiagram({
             const pos = nodePositions.positions.get(task.id);
             if (!pos) return null;
 
-            const colors = CATEGORY_COLORS[task.category || 'prep'] || CATEGORY_COLORS.prep;
             const ES = task.startDay; // Early Start
             const EF = task.startDay + task.duration; // Early Finish
             // For simplicity, LS/LF = ES/EF for critical tasks, otherwise calculate slack
