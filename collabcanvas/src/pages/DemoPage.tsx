@@ -74,9 +74,9 @@ const DEMO_ESTIMATE = {
     riskLevel: "medium",
   },
   costBreakdown: {
-    // Base: materials (10,200) + labor (7,902) + equipment (750) = 18,852
-    materials: 10200,
-    labor: 7902,
+    // Base: materials (7,336) + labor (10,766) + equipment (750) = 18,852
+    materials: 7336,
+    labor: 10766,
     equipment: 750,
     overhead: 1885,      // 10% of 18,852
     profit: 2828,        // 15% of 18,852
@@ -115,19 +115,19 @@ const DEMO_ESTIMATE = {
     { id: 27, category: "Tile & Stone", item: "Grout Sealer", qty: 1, unit: "bottle", unitCost: 65, total: 65 },
     { id: 28, category: "Supplies", item: "Caulk, Backer Rod & Sealants", qty: 1, unit: "kit", unitCost: 95, total: 95 },
   ],
-  // Total materials: 7,336 + 2,864 = 10,200
+  // Price Comparison items total: 7,336 (items 1-11)
   labor: [
-    // Total labor: 7,902
-    { id: 1, trade: "Tile Setter", hours: 36, rate: 50, total: 1800 },
-    { id: 2, trade: "Plumber", hours: 24, rate: 55, total: 1320 },
-    { id: 3, trade: "Electrician", hours: 12, rate: 68, total: 816 },
-    { id: 4, trade: "Carpenter (Framing)", hours: 18, rate: 42, total: 756 },
-    { id: 5, trade: "Drywall Installer", hours: 16, rate: 36, total: 576 },
-    { id: 6, trade: "Painter", hours: 14, rate: 23, total: 322 },
-    { id: 7, trade: "General Labor", hours: 32, rate: 20, total: 640 },
-    { id: 8, trade: "Project Supervision", hours: 24, rate: 38, total: 912 },
-    { id: 9, trade: "Demolition", hours: 16, rate: 24, total: 384 },
-    { id: 10, trade: "Bathtub Installation", hours: 8, rate: 47, total: 376 },
+    // Total labor: 10,766
+    { id: 1, trade: "Tile Setter", hours: 48, rate: 50, total: 2400 },
+    { id: 2, trade: "Plumber", hours: 30, rate: 55, total: 1650 },
+    { id: 3, trade: "Electrician", hours: 16, rate: 68, total: 1088 },
+    { id: 4, trade: "Carpenter (Framing)", hours: 24, rate: 42, total: 1008 },
+    { id: 5, trade: "Drywall Installer", hours: 20, rate: 36, total: 720 },
+    { id: 6, trade: "Painter", hours: 16, rate: 23, total: 368 },
+    { id: 7, trade: "General Labor", hours: 45, rate: 20, total: 900 },
+    { id: 8, trade: "Project Supervision", hours: 30, rate: 38, total: 1140 },
+    { id: 9, trade: "Demolition", hours: 23, rate: 24, total: 552 },
+    { id: 10, trade: "Bathtub Installation", hours: 20, rate: 47, total: 940 },
   ],
 };
 
@@ -145,15 +145,6 @@ const PIPELINE_STAGES = [
 // Price comparison data - Home Depot vs Lowes vs Local Vendor
 const PRICE_COMPARISON = [
   {
-    item: "Large Format Porcelain Tile (24x48)",
-    qty: 150,
-    unit: "sq ft",
-    homeDepot: { price: 7.97, sku: "HD-PT24X48-GRY", inStock: true },
-    lowes: { price: 7.49, sku: "LW-1045892", inStock: true },
-    localVendor: { price: 7.25, name: "Triangle Tile & Stone", inStock: true },
-    selected: "localVendor" as const,
-  },
-  {
     item: "Floor Tile (12x24)",
     qty: 85,
     unit: "sq ft",
@@ -161,6 +152,15 @@ const PRICE_COMPARISON = [
     lowes: { price: 5.49, sku: "LW-1045893", inStock: true },
     localVendor: { price: 5.75, name: "Triangle Tile & Stone", inStock: true },
     selected: "lowes" as const,
+  },
+  {
+    item: "Large Format Porcelain Tile (24x48)",
+    qty: 150,
+    unit: "sq ft",
+    homeDepot: { price: 7.97, sku: "HD-PT24X48-GRY", inStock: true },
+    lowes: { price: 7.49, sku: "LW-1045892", inStock: true },
+    localVendor: { price: 7.25, name: "Triangle Tile & Stone", inStock: true },
+    selected: "localVendor" as const,
   },
   {
     item: "Tile Adhesive (Modified Thinset) 50lb",
@@ -190,15 +190,6 @@ const PRICE_COMPARISON = [
     selected: "homeDepot" as const,
   },
   {
-    item: "Cement Board (1/2\")",
-    qty: 10,
-    unit: "sheets",
-    homeDepot: { price: 14.48, sku: "HD-DUROCK-12", inStock: true },
-    lowes: { price: 13.98, sku: "LW-8827364", inStock: true },
-    localVendor: null,
-    selected: "lowes" as const,
-  },
-  {
     item: "6\" LED Recessed Light Kit",
     qty: 6,
     unit: "units",
@@ -206,6 +197,15 @@ const PRICE_COMPARISON = [
     lowes: { price: 42.98, sku: "LW-8273645", inStock: true },
     localVendor: null,
     selected: "homeDepot" as const,
+  },
+  {
+    item: "Cement Board (1/2\")",
+    qty: 10,
+    unit: "sheets",
+    homeDepot: { price: 14.48, sku: "HD-DUROCK-12", inStock: true },
+    lowes: { price: 13.98, sku: "LW-8827364", inStock: true },
+    localVendor: null,
+    selected: "lowes" as const,
   },
   {
     item: "Toilet - Elongated Comfort Height",
@@ -269,8 +269,8 @@ const ACCURACY_COMPARISON = {
     label: "TrueCost AI Estimate",
     description: "AI-powered estimate with real-time pricing",
     // Matches DEMO_ESTIMATE breakdown
-    materials: 10200,
-    labor: 7902,
+    materials: 7336,
+    labor: 10766,
     overhead: 1885,
     contingency: 943,
     total: 24508,
@@ -285,12 +285,12 @@ const ACCURACY_COMPARISON = {
   actualCost: {
     label: "Actual Project Cost",
     description: "Final invoiced amount after project completion",
-    materials: 10450,
-    labor: 8150,
-    overhead: 1860,
-    contingency: 740,
-    total: 24850,
-    // TrueCost variance: $342 (1.4%)
+    materials: 12500,
+    labor: 9200,
+    overhead: 2384,
+    contingency: 1500,
+    total: 25584,
+    // TrueCost variance: $1,076 (4.2%)
     notes: [
       "Minor tile overage due to cuts (+$250)",
       "Plumber needed extra 4 hours for pipe rerouting (+$220)",
@@ -1178,16 +1178,12 @@ export function DemoPage() {
   // Mobile App slide - shows web and mobile side by side
   const renderMobileApp = () => (
     <div className="min-h-screen flex flex-col items-center justify-center bg-truecost-bg-primary p-8">
-      <div className="text-center mb-12">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border mb-4">
-          <span className="text-truecost-cyan text-sm font-medium">Available Everywhere</span>
-        </div>
-        <h2 className="text-4xl font-bold text-truecost-text-primary mb-3">Web & Mobile</h2>
-        <p className="text-truecost-text-secondary text-lg">Access TrueCost from any device - desktop, tablet, or phone</p>
+      <div className="text-center mb-8">
+        <h2 className="text-5xl font-bold text-truecost-text-primary">Web & Mobile</h2>
       </div>
 
       {/* Side by side screenshots */}
-      <div className="flex items-center justify-center gap-12 max-w-6xl">
+      <div className="flex items-center justify-center gap-16">
         {/* Web screenshot */}
         <div className="flex flex-col items-center">
           <div className="relative">
@@ -1208,7 +1204,7 @@ export function DemoPage() {
               <img
                 src="/demo-webpage.png"
                 alt="TrueCost Web App"
-                className="w-[600px] h-auto"
+                className="h-[700px] w-auto"
               />
             </div>
           </div>
@@ -1219,7 +1215,6 @@ export function DemoPage() {
               </svg>
               <span className="text-truecost-text-primary font-medium">Web Application</span>
             </div>
-            <p className="text-truecost-text-muted text-sm mt-2">Full-featured desktop experience</p>
           </div>
         </div>
 
@@ -1234,7 +1229,7 @@ export function DemoPage() {
                 <img
                   src="/demo-mobile.png"
                   alt="TrueCost Mobile App"
-                  className="w-[280px] h-auto"
+                  className="w-[340px] h-auto"
                 />
               </div>
             </div>
@@ -1246,30 +1241,7 @@ export function DemoPage() {
               </svg>
               <span className="text-truecost-text-primary font-medium">Mobile App</span>
             </div>
-            <p className="text-truecost-text-muted text-sm mt-2">Estimate on the go</p>
           </div>
-        </div>
-      </div>
-
-      {/* Feature highlights */}
-      <div className="mt-12 flex gap-8">
-        <div className="flex items-center gap-3 text-truecost-text-secondary">
-          <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Synced across devices</span>
-        </div>
-        <div className="flex items-center gap-3 text-truecost-text-secondary">
-          <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-          <span>AR Room Scanning</span>
-        </div>
-        <div className="flex items-center gap-3 text-truecost-text-secondary">
-          <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Offline capable</span>
         </div>
       </div>
     </div>
@@ -1497,7 +1469,7 @@ export function DemoPage() {
               </span>
             </h3>
             <div className="space-y-2">
-              {DEMO_ESTIMATE.materials.slice(0, 8).map((mat) => (
+              {DEMO_ESTIMATE.materials.slice(0, 11).map((mat) => (
                 <div key={mat.id} className="flex justify-between items-center p-3 rounded border border-truecost-glass-border">
                   <div>
                     <p className="text-sm text-truecost-text-primary">{mat.item}</p>
@@ -1928,19 +1900,16 @@ export function DemoPage() {
 
           {/* Bottom line */}
           <div className="glass-panel p-6 bg-gradient-to-r from-truecost-cyan/10 to-truecost-teal/10 border border-truecost-cyan/30">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <div>
-                <h4 className="font-semibold text-truecost-text-primary mb-1">Bottom Line</h4>
-                <p className="text-sm text-truecost-text-secondary">
-                  TrueCost was within <span className="text-truecost-cyan font-semibold">{Math.abs(trueCostVariance).toFixed(1)}%</span> of actual costs,
-                  while the manual estimate was off by <span className="text-red-400 font-semibold">{Math.abs(manualVariance).toFixed(1)}%</span> —
-                  a difference of <span className="text-green-400 font-semibold">${(actualCost.total - manualEstimate.total).toLocaleString()}</span> that would have impacted profitability.
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-3xl font-bold text-truecost-cyan">{(Math.abs(manualVariance) / Math.abs(trueCostVariance)).toFixed(1)}x</p>
-                <p className="text-xs text-truecost-text-secondary">More Accurate</p>
-              </div>
+            <div>
+              <h4 className="font-semibold text-truecost-text-primary mb-2">Bottom Line</h4>
+              <p className="text-sm text-truecost-text-secondary mb-2">
+                TrueCost was within <span className="text-truecost-cyan font-semibold">{Math.abs(trueCostVariance).toFixed(1)}%</span> of actual costs,
+                while the manual estimate was off by <span className="text-red-400 font-semibold">{Math.abs(manualVariance).toFixed(1)}%</span> —
+                a difference of <span className="text-green-400 font-semibold">${(actualCost.total - manualEstimate.total).toLocaleString()}</span> that would have impacted profitability.
+              </p>
+              <p className="text-sm text-truecost-text-secondary">
+                <span className="text-truecost-cyan font-semibold">More accurate estimates mean contractors can bid confidently, protect their margins, and stay profitable on every job.</span>
+              </p>
             </div>
           </div>
         </div>
@@ -2049,8 +2018,8 @@ export function DemoPage() {
         {/* Key Stats */}
         <div className="grid grid-cols-2 gap-4">
           <div className="glass-panel p-6 text-center">
-            <p className="text-3xl font-bold text-truecost-cyan">12x</p>
-            <p className="text-sm text-truecost-text-secondary">Faster</p>
+            <p className="text-xl font-bold text-truecost-cyan">Generate Multiple Estimates</p>
+            <p className="text-sm text-truecost-text-secondary">Quickly & Automatically</p>
           </div>
           <div className="glass-panel p-6 text-center">
             <p className="text-3xl font-bold text-green-400">$0</p>
