@@ -13,7 +13,7 @@ import {
   doc,
   setDoc,
   getDoc,
-  updateDoc,
+  runTransaction,
   serverTimestamp,
 } from 'firebase/firestore';
 import type {
@@ -122,23 +122,25 @@ export async function addRoomToProject(
 ): Promise<void> {
   const scanProjectId = `${projectId}_scan`;
   const docRef = doc(firestore, SCAN_PROJECTS_COLLECTION, scanProjectId);
-  const docSnap = await getDoc(docRef);
 
-  if (!docSnap.exists()) {
-    throw new Error('Scan project not found');
-  }
+  await runTransaction(firestore, async (transaction) => {
+    const docSnap = await transaction.get(docRef);
+    if (!docSnap.exists()) {
+      throw new Error('Scan project not found');
+    }
 
-  const data = docSnap.data();
-  const rooms = [...(data.rooms || []), room];
-  const totalSqFt = rooms.reduce(
-    (sum: number, r: ScannedRoom) => sum + r.dimensions.area,
-    0
-  );
+    const data = docSnap.data();
+    const rooms = [...(data.rooms || []), room];
+    const totalSqFt = rooms.reduce(
+      (sum: number, r: ScannedRoom) => sum + r.dimensions.area,
+      0
+    );
 
-  await updateDoc(docRef, {
-    rooms,
-    totalSqFt,
-    updatedAt: serverTimestamp(),
+    transaction.update(docRef, {
+      rooms,
+      totalSqFt,
+      updatedAt: serverTimestamp(),
+    });
   });
 }
 
@@ -152,25 +154,27 @@ export async function updateRoom(
 ): Promise<void> {
   const scanProjectId = `${projectId}_scan`;
   const docRef = doc(firestore, SCAN_PROJECTS_COLLECTION, scanProjectId);
-  const docSnap = await getDoc(docRef);
 
-  if (!docSnap.exists()) {
-    throw new Error('Scan project not found');
-  }
+  await runTransaction(firestore, async (transaction) => {
+    const docSnap = await transaction.get(docRef);
+    if (!docSnap.exists()) {
+      throw new Error('Scan project not found');
+    }
 
-  const data = docSnap.data();
-  const rooms = data.rooms.map((r: ScannedRoom) =>
-    r.id === roomId ? { ...r, ...updates } : r
-  );
-  const totalSqFt = rooms.reduce(
-    (sum: number, r: ScannedRoom) => sum + r.dimensions.area,
-    0
-  );
+    const data = docSnap.data();
+    const rooms = data.rooms.map((r: ScannedRoom) =>
+      r.id === roomId ? { ...r, ...updates } : r
+    );
+    const totalSqFt = rooms.reduce(
+      (sum: number, r: ScannedRoom) => sum + r.dimensions.area,
+      0
+    );
 
-  await updateDoc(docRef, {
-    rooms,
-    totalSqFt,
-    updatedAt: serverTimestamp(),
+    transaction.update(docRef, {
+      rooms,
+      totalSqFt,
+      updatedAt: serverTimestamp(),
+    });
   });
 }
 
@@ -183,23 +187,25 @@ export async function deleteRoom(
 ): Promise<void> {
   const scanProjectId = `${projectId}_scan`;
   const docRef = doc(firestore, SCAN_PROJECTS_COLLECTION, scanProjectId);
-  const docSnap = await getDoc(docRef);
 
-  if (!docSnap.exists()) {
-    throw new Error('Scan project not found');
-  }
+  await runTransaction(firestore, async (transaction) => {
+    const docSnap = await transaction.get(docRef);
+    if (!docSnap.exists()) {
+      throw new Error('Scan project not found');
+    }
 
-  const data = docSnap.data();
-  const rooms = data.rooms.filter((r: ScannedRoom) => r.id !== roomId);
-  const totalSqFt = rooms.reduce(
-    (sum: number, r: ScannedRoom) => sum + r.dimensions.area,
-    0
-  );
+    const data = docSnap.data();
+    const rooms = data.rooms.filter((r: ScannedRoom) => r.id !== roomId);
+    const totalSqFt = rooms.reduce(
+      (sum: number, r: ScannedRoom) => sum + r.dimensions.area,
+      0
+    );
 
-  await updateDoc(docRef, {
-    rooms,
-    totalSqFt,
-    updatedAt: serverTimestamp(),
+    transaction.update(docRef, {
+      rooms,
+      totalSqFt,
+      updatedAt: serverTimestamp(),
+    });
   });
 }
 

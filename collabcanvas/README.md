@@ -136,6 +136,22 @@ npm run dev
 
 ### Cloud Functions Setup
 
+#### Secrets Management
+
+All secrets are stored in **Firebase Secrets Manager** (single source of truth):
+
+```bash
+# Set secrets (you'll be prompted for the value)
+firebase functions:secrets:set OPENAI_API_KEY
+firebase functions:secrets:set SERP_API_KEY
+firebase functions:secrets:set BLS_API_KEY
+
+# View current secrets
+firebase functions:secrets:list
+```
+
+See [docs/firebase-configuration.md](docs/firebase-configuration.md) for detailed documentation.
+
 #### Node.js Functions (collabcanvas/functions/)
 
 ```bash
@@ -144,17 +160,7 @@ npm install
 npm run build
 ```
 
-**Local secrets** are in `functions/.env.local` (not committed):
-```
-OPENAI_API_KEY=sk-...
-SERP_API_KEY=...
-```
-
-**Production secrets** are managed via Firebase:
-```bash
-firebase functions:secrets:set OPENAI_API_KEY
-firebase functions:secrets:set SERP_API_KEY
-```
+Node.js functions automatically get secrets from Firebase Secrets Manager (both in emulator and production).
 
 #### Python Functions (gauntletai/functions/)
 
@@ -165,7 +171,13 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Note:** Firebase emulators do NOT run Python functions. The `serve_local.py` Flask server is required for local development. In production, Python functions deploy to Cloud Functions normally.
+For local development, set secrets as environment variables:
+```bash
+export OPENAI_API_KEY='sk-proj-...'  # Get via: firebase functions:secrets:access OPENAI_API_KEY
+python serve_local.py
+```
+
+**Note:** Firebase emulators do NOT run Python functions. The `serve_local.py` Flask server is required for local development. In production, Python functions deploy to Cloud Functions and use Firebase Secrets Manager.
 
 ### Deploying Functions
 

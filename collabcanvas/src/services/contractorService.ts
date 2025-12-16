@@ -118,13 +118,20 @@ export function subscribeToContractorProfile(
   callback: (profile: ContractorProfile | null) => void
 ): Unsubscribe {
   const docRef = getContractorDoc(userId);
-  return onSnapshot(docRef, (docSnap) => {
-    if (docSnap.exists()) {
-      callback(docSnap.data() as ContractorProfile);
-    } else {
+  return onSnapshot(
+    docRef,
+    (docSnap) => {
+      if (docSnap.exists()) {
+        callback(docSnap.data() as ContractorProfile);
+      } else {
+        callback(null);
+      }
+    },
+    (error) => {
+      console.error('Error subscribing to contractor profile:', error);
       callback(null);
     }
-  });
+  );
 }
 
 // =============================================================================
@@ -211,12 +218,19 @@ export function subscribeToCrewTemplates(
 ): Unsubscribe {
   const colRef = getCrewsCollection(userId);
   const q = query(colRef, orderBy('name'));
-  return onSnapshot(q, (snapshot) => {
-    const crews = snapshot.docs.map(
-      (doc) => ({ id: doc.id, ...doc.data() } as CrewTemplate)
-    );
-    callback(crews);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const crews = snapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() } as CrewTemplate)
+      );
+      callback(crews);
+    },
+    (error) => {
+      console.error('Error subscribing to crew templates:', error);
+      callback([]);
+    }
+  );
 }
 
 // =============================================================================
@@ -279,10 +293,17 @@ export function subscribeToLaborRateOverrides(
   callback: (rates: LaborRateOverride[]) => void
 ): Unsubscribe {
   const colRef = getLaborRatesCollection(userId);
-  return onSnapshot(colRef, (snapshot) => {
-    const rates = snapshot.docs.map((doc) => doc.data() as LaborRateOverride);
-    callback(rates);
-  });
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const rates = snapshot.docs.map((doc) => doc.data() as LaborRateOverride);
+      callback(rates);
+    },
+    (error) => {
+      console.error('Error subscribing to labor rate overrides:', error);
+      callback([]);
+    }
+  );
 }
 
 // =============================================================================
@@ -388,12 +409,19 @@ export function subscribeToContractorMaterials(
 ): Unsubscribe {
   const colRef = getMaterialsCollection(userId);
   const q = query(colRef, orderBy('name'));
-  return onSnapshot(q, (snapshot) => {
-    const materials = snapshot.docs.map(
-      (doc) => ({ id: doc.id, ...doc.data() } as ContractorMaterial)
-    );
-    callback(materials);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const materials = snapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() } as ContractorMaterial)
+      );
+      callback(materials);
+    },
+    (error) => {
+      console.error('Error subscribing to contractor materials:', error);
+      callback([]);
+    }
+  );
 }
 
 // =============================================================================
@@ -480,12 +508,19 @@ export function subscribeToSuppliers(
 ): Unsubscribe {
   const colRef = getSuppliersCollection(userId);
   const q = query(colRef, orderBy('name'));
-  return onSnapshot(q, (snapshot) => {
-    const suppliers = snapshot.docs.map(
-      (doc) => ({ id: doc.id, ...doc.data() } as Supplier)
-    );
-    callback(suppliers);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const suppliers = snapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() } as Supplier)
+      );
+      callback(suppliers);
+    },
+    (error) => {
+      console.error('Error subscribing to suppliers:', error);
+      callback([]);
+    }
+  );
 }
 
 // =============================================================================

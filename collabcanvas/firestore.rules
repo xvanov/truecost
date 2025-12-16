@@ -747,8 +747,9 @@ service cloud.firestore {
     // Structure: scanProjects/{projectId}_scan
     match /scanProjects/{scanProjectId} {
       // Only the owner can read/write their scan project data
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      // create uses request.resource (incoming data), post-creation rules use resource (existing doc)
       allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
     }
 
     // Deny all other paths

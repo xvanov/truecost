@@ -88,12 +88,32 @@ After deployment, Firebase will provide a URL like:
 3. Follow the verification steps
 4. Update DNS records as instructed
 
+### Step 7: Configure Cloud Functions Secrets
+
+All API keys for Cloud Functions are stored in Firebase Secrets Manager:
+
+```bash
+# Set required secrets
+firebase functions:secrets:set OPENAI_API_KEY
+firebase functions:secrets:set SERP_API_KEY
+
+# Verify secrets are configured
+firebase functions:secrets:list
+
+# Deploy functions with secrets
+firebase deploy --only functions
+```
+
+See [docs/firebase-configuration.md](docs/firebase-configuration.md) for detailed documentation.
+
 ### Production Checklist
 
 - [ ] Firebase project created and configured
 - [ ] Environment variables set in `.env.production`
+- [ ] **Secrets configured in Firebase Secrets Manager**
 - [ ] Firebase services enabled (Auth, Firestore, RTDB)
 - [ ] Security rules deployed (`firebase deploy --only firestore:rules,database:rules`)
+- [ ] Cloud Functions deployed (`firebase deploy --only functions`)
 - [ ] Production build successful (`npm run build`)
 - [ ] Deployment successful (`firebase deploy --only hosting`)
 - [ ] Authentication works on production URL
