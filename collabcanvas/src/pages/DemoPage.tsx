@@ -67,21 +67,24 @@ const CSI_DIVISIONS = [
 
 const DEMO_ESTIMATE = {
   summary: {
-    totalCost: 24850,
-    costPerSqft: 292,
+    // Total = Base (18,852) + overhead + profit + contingency = 24,508
+    totalCost: 24508,
+    costPerSqft: 288,
     duration: "3-4 weeks",
     riskLevel: "medium",
   },
   costBreakdown: {
-    materials: 10340,
-    labor: 7456,
-    equipment: 650,
-    overhead: 1845,
-    profit: 2768,
-    contingency: 923,
+    // Base: materials (10,200) + labor (7,902) + equipment (750) = 18,852
+    materials: 10200,
+    labor: 7902,
+    equipment: 750,
+    overhead: 1885,      // 10% of 18,852
+    profit: 2828,        // 15% of 18,852
+    contingency: 943,    // 5% of 18,852
+    // Total: 18,852 + 1,885 + 2,828 + 943 = 24,508
   },
   materials: [
-    // Items from Price Comparison (matched exactly)
+    // Items from Price Comparison - subtotal: 7,336
     { id: 1, category: "Tile & Stone", item: "Large Format Porcelain Tile (24x48)", qty: 150, unit: "sq ft", unitCost: 7.25, total: 1088 },
     { id: 2, category: "Tile & Stone", item: "Floor Tile (12x24)", qty: 85, unit: "sq ft", unitCost: 5.49, total: 467 },
     { id: 3, category: "Tile & Stone", item: "Tile Adhesive (Modified Thinset) 50lb", qty: 6, unit: "bags", unitCost: 38.98, total: 234 },
@@ -92,31 +95,39 @@ const DEMO_ESTIMATE = {
     { id: 8, category: "Plumbing", item: "Toilet - Elongated Comfort Height", qty: 1, unit: "unit", unitCost: 345, total: 345 },
     { id: 9, category: "Plumbing", item: "Ceiling Mount Rain Shower Head", qty: 1, unit: "unit", unitCost: 259, total: 259 },
     { id: 10, category: "Framing", item: "Pressure Treated 2x4 Studs 8ft", qty: 24, unit: "pcs", unitCost: 6.75, total: 162 },
-    { id: 11, category: "Plumbing", item: "Standing Bathtub", qty: 1, unit: "unit", unitCost: 1850, total: 1850 },
-    // Additional items not in price comparison
-    { id: 12, category: "Waterproofing", item: "Waterproofing Corners & Bands", qty: 1, unit: "kit", unitCost: 115, total: 115 },
-    { id: 13, category: "Framing", item: "Construction Screws", qty: 2, unit: "boxes", unitCost: 16, total: 32 },
-    { id: 14, category: "Framing", item: "Subfloor Patch Material", qty: 1, unit: "kit", unitCost: 45, total: 45 },
-    { id: 15, category: "Electrical", item: "Dimmer Switch", qty: 1, unit: "unit", unitCost: 55, total: 55 },
-    { id: 16, category: "Electrical", item: "Romex 12/2 Wire", qty: 50, unit: "ft", unitCost: 1.10, total: 55 },
-    { id: 17, category: "Plumbing", item: "Copper Pipe (3/4\")", qty: 20, unit: "ft", unitCost: 7.50, total: 150 },
-    { id: 18, category: "Plumbing", item: "Wax Ring & Bolts", qty: 1, unit: "kit", unitCost: 12, total: 12 },
-    { id: 19, category: "Plumbing", item: "Bathtub Drain Kit", qty: 1, unit: "kit", unitCost: 85, total: 85 },
-    { id: 20, category: "Paint", item: "Cabinet Paint (Semi-Gloss)", qty: 2, unit: "gal", unitCost: 48, total: 96 },
-    { id: 21, category: "Paint", item: "Primer (Bonding)", qty: 1, unit: "gal", unitCost: 38, total: 38 },
-    { id: 22, category: "Demolition", item: "Disposal & Hauling", qty: 1, unit: "load", unitCost: 350, total: 350 },
+    { id: 11, category: "Plumbing", item: "Standing Bathtub", qty: 1, unit: "unit", unitCost: 4000, total: 4000 },
+    // Additional items - subtotal: 2,864
+    { id: 12, category: "Waterproofing", item: "Waterproofing Corners & Bands", qty: 1, unit: "kit", unitCost: 145, total: 145 },
+    { id: 13, category: "Framing", item: "Construction Screws & Fasteners", qty: 1, unit: "kit", unitCost: 65, total: 65 },
+    { id: 14, category: "Framing", item: "Subfloor Patch Material", qty: 1, unit: "kit", unitCost: 125, total: 125 },
+    { id: 15, category: "Electrical", item: "Dimmer Switch", qty: 1, unit: "unit", unitCost: 65, total: 65 },
+    { id: 16, category: "Electrical", item: "Romex 12/2 Wire", qty: 75, unit: "ft", unitCost: 1.25, total: 94 },
+    { id: 17, category: "Electrical", item: "GFCI Outlets", qty: 2, unit: "units", unitCost: 35, total: 70 },
+    { id: 18, category: "Plumbing", item: "Copper Pipe (3/4\")", qty: 25, unit: "ft", unitCost: 8.50, total: 213 },
+    { id: 19, category: "Plumbing", item: "Shower Valve & Trim Kit", qty: 1, unit: "unit", unitCost: 285, total: 285 },
+    { id: 20, category: "Plumbing", item: "Wax Ring & Bolts", qty: 1, unit: "kit", unitCost: 18, total: 18 },
+    { id: 21, category: "Plumbing", item: "Bathtub Drain Kit", qty: 1, unit: "kit", unitCost: 115, total: 115 },
+    { id: 22, category: "Paint", item: "Cabinet Paint (Semi-Gloss)", qty: 3, unit: "gal", unitCost: 52, total: 156 },
+    { id: 23, category: "Paint", item: "Primer (Bonding)", qty: 2, unit: "gal", unitCost: 42, total: 84 },
+    { id: 24, category: "Demolition", item: "Disposal & Hauling", qty: 1, unit: "load", unitCost: 550, total: 550 },
+    { id: 25, category: "Permits", item: "Building Permit", qty: 1, unit: "permit", unitCost: 525, total: 525 },
+    { id: 26, category: "Tile & Stone", item: "Tile Trim & Edging", qty: 1, unit: "kit", unitCost: 194, total: 194 },
+    { id: 27, category: "Tile & Stone", item: "Grout Sealer", qty: 1, unit: "bottle", unitCost: 65, total: 65 },
+    { id: 28, category: "Supplies", item: "Caulk, Backer Rod & Sealants", qty: 1, unit: "kit", unitCost: 95, total: 95 },
   ],
+  // Total materials: 7,336 + 2,864 = 10,200
   labor: [
-    { id: 1, trade: "Tile Setter", hours: 36, rate: 48, total: 1728 },
-    { id: 2, trade: "Plumber", hours: 24, rate: 52, total: 1248 },
-    { id: 3, trade: "Electrician", hours: 12, rate: 65, total: 780 },
-    { id: 4, trade: "Carpenter (Framing)", hours: 18, rate: 40, total: 720 },
-    { id: 5, trade: "Drywall Installer", hours: 16, rate: 35, total: 560 },
+    // Total labor: 7,902
+    { id: 1, trade: "Tile Setter", hours: 36, rate: 50, total: 1800 },
+    { id: 2, trade: "Plumber", hours: 24, rate: 55, total: 1320 },
+    { id: 3, trade: "Electrician", hours: 12, rate: 68, total: 816 },
+    { id: 4, trade: "Carpenter (Framing)", hours: 18, rate: 42, total: 756 },
+    { id: 5, trade: "Drywall Installer", hours: 16, rate: 36, total: 576 },
     { id: 6, trade: "Painter", hours: 14, rate: 23, total: 322 },
     { id: 7, trade: "General Labor", hours: 32, rate: 20, total: 640 },
-    { id: 8, trade: "Project Supervision", hours: 22, rate: 35, total: 770 },
-    { id: 9, trade: "Demolition", hours: 16, rate: 22, total: 352 },
-    { id: 10, trade: "Bathtub Installation", hours: 6, rate: 56, total: 336 },
+    { id: 8, trade: "Project Supervision", hours: 24, rate: 38, total: 912 },
+    { id: 9, trade: "Demolition", hours: 16, rate: 24, total: 384 },
+    { id: 10, trade: "Bathtub Installation", hours: 8, rate: 47, total: 376 },
   ],
 };
 
@@ -227,9 +238,9 @@ const PRICE_COMPARISON = [
     item: "Standing Bathtub",
     qty: 1,
     unit: "unit",
-    homeDepot: { price: 1899.00, sku: "HD-STBTUB-60", inStock: true },
-    lowes: { price: 1949.00, sku: "LW-9988776", inStock: false },
-    localVendor: { price: 1850.00, name: "Ferguson Bath & Kitchen", inStock: true },
+    homeDepot: { price: 4199.00, sku: "HD-STBTUB-60", inStock: true },
+    lowes: { price: 4349.00, sku: "LW-9988776", inStock: false },
+    localVendor: { price: 4000.00, name: "Ferguson Bath & Kitchen", inStock: true },
     selected: "localVendor" as const,
   },
 ];
@@ -239,27 +250,31 @@ const ACCURACY_COMPARISON = {
   manualEstimate: {
     label: "Manual Estimate",
     description: "Traditional spreadsheet-based estimate by junior estimator",
-    materials: 8200,
-    labor: 6100,
-    overhead: 1430,
-    contingency: 715,
-    total: 16445,
+    // Underestimate: missed bathtub value, used wrong labor rates
+    materials: 9628,
+    labor: 7216,
+    overhead: 1686,
+    contingency: 840,
+    total: 19370,
+    // Difference from actual: $4,675 (23% underestimate)
     timeToCreate: "4-6 hours",
     issues: [
-      "Missed waterproofing and cement board materials",
-      "Forgot standing bathtub in materials list",
-      "Used outdated labor rates from 2023",
-      "Underestimated demolition time",
+      "Used generic $1,850 bathtub instead of specified $4,000 model",
+      "Missed permit fees and disposal costs",
+      "Used outdated 2023 labor rates",
+      "Underestimated tile setter and plumber hours",
     ],
   },
   trueCostEstimate: {
     label: "TrueCost AI Estimate",
     description: "AI-powered estimate with real-time pricing",
-    materials: 10340,
-    labor: 7456,
-    overhead: 1845,
-    contingency: 923,
-    total: 24850,
+    // Matches DEMO_ESTIMATE breakdown
+    materials: 10200,
+    labor: 7902,
+    overhead: 1885,
+    contingency: 943,
+    total: 24508,
+    // Within 1.4% of actual cost
     timeToCreate: "30 minutes",
     features: [
       "Auto-detected all scope items from description",
@@ -270,15 +285,16 @@ const ACCURACY_COMPARISON = {
   actualCost: {
     label: "Actual Project Cost",
     description: "Final invoiced amount after project completion",
-    materials: 10580,
-    labor: 7820,
-    overhead: 1840,
-    contingency: 760,
-    total: 25280,
+    materials: 10450,
+    labor: 8150,
+    overhead: 1860,
+    contingency: 740,
+    total: 24850,
+    // TrueCost variance: $342 (1.4%)
     notes: [
-      "Minor tile overage due to cuts",
-      "Plumber needed extra 3 hours for pipe rerouting",
-      "Contingency partially used for subfloor repair",
+      "Minor tile overage due to cuts (+$250)",
+      "Plumber needed extra 4 hours for pipe rerouting (+$220)",
+      "Contingency partially used for unexpected subfloor damage",
     ],
   },
 };
@@ -1159,102 +1175,101 @@ export function DemoPage() {
     </div>
   );
 
-  // Mobile App slide - shows mobile version of the app
+  // Mobile App slide - shows web and mobile side by side
   const renderMobileApp = () => (
     <div className="min-h-screen flex flex-col items-center justify-center bg-truecost-bg-primary p-8">
-      <div className="text-center mb-8">
+      <div className="text-center mb-12">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border mb-4">
-          <span className="text-truecost-cyan text-sm font-medium">Mobile Experience</span>
+          <span className="text-truecost-cyan text-sm font-medium">Available Everywhere</span>
         </div>
-        <h2 className="text-3xl font-bold text-truecost-text-primary mb-2">TrueCost Mobile App</h2>
-        <p className="text-truecost-text-secondary">Capture photos and get estimates on the go</p>
+        <h2 className="text-4xl font-bold text-truecost-text-primary mb-3">Web & Mobile</h2>
+        <p className="text-truecost-text-secondary text-lg">Access TrueCost from any device - desktop, tablet, or phone</p>
       </div>
 
-      {/* Phone mockup */}
-      <div className="relative">
-        <div className="w-[380px] h-[780px] bg-black rounded-[3.5rem] p-4 shadow-2xl">
-          <div className="w-full h-full bg-truecost-bg-primary rounded-[3rem] overflow-hidden relative">
-            {/* Notch */}
-            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-36 h-8 bg-black rounded-b-3xl z-10" />
-
-            {/* Status bar */}
-            <div className="pt-12 px-6 pb-5 bg-truecost-bg-secondary/50">
-              <div className="flex items-center justify-between">
-                <img src={logo} alt="TrueCost" className="h-8 w-8" />
-                <span className="text-truecost-text-primary font-semibold text-base">TrueCost</span>
-                <div className="w-8" />
+      {/* Side by side screenshots */}
+      <div className="flex items-center justify-center gap-12 max-w-6xl">
+        {/* Web screenshot */}
+        <div className="flex flex-col items-center">
+          <div className="relative">
+            {/* Browser chrome mockup */}
+            <div className="bg-gray-800 rounded-t-xl px-4 py-3 flex items-center gap-2">
+              <div className="flex gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-red-500" />
+                <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                <div className="w-3 h-3 rounded-full bg-green-500" />
+              </div>
+              <div className="flex-1 ml-4">
+                <div className="bg-gray-700 rounded-md px-3 py-1 text-xs text-gray-400 max-w-xs">
+                  app.truecost.ai
+                </div>
               </div>
             </div>
-
-            {/* App content */}
-            <div className="px-5 py-4 space-y-4">
-              {/* Camera capture card */}
-              <div className="bg-truecost-glass-bg rounded-2xl p-5 border border-truecost-glass-border">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-truecost-cyan/20 flex items-center justify-center">
-                    <svg className="w-6 h-6 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-truecost-text-primary font-medium text-base">Capture Photos</h3>
-                    <p className="text-truecost-text-muted text-sm">Take photos of the job site</p>
-                  </div>
-                </div>
-                <div className="h-36 bg-truecost-bg-primary rounded-xl flex items-center justify-center border border-dashed border-truecost-glass-border">
-                  <span className="text-truecost-text-muted text-sm">Tap to capture</span>
-                </div>
-              </div>
-
-              {/* Recent project */}
-              <div className="bg-truecost-glass-bg rounded-2xl p-5 border border-truecost-glass-border">
-                <h3 className="text-truecost-text-primary font-medium text-base mb-3">Recent Project</h3>
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-xl bg-truecost-cyan/20" />
-                  <div className="flex-1">
-                    <p className="text-truecost-text-primary text-base font-medium">Bathroom Remodel</p>
-                    <p className="text-truecost-text-muted text-sm">$24,847 estimate</p>
-                  </div>
-                  <svg className="w-5 h-5 text-truecost-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Quick actions */}
-              <div className="grid grid-cols-2 gap-3">
-                <button className="bg-truecost-cyan text-truecost-bg-primary rounded-xl py-4 text-base font-medium">
-                  New Estimate
-                </button>
-                <button className="bg-truecost-glass-bg text-truecost-text-primary rounded-xl py-4 text-base font-medium border border-truecost-glass-border">
-                  View All
-                </button>
-              </div>
+            <div className="bg-gray-900 rounded-b-xl overflow-hidden shadow-2xl border border-gray-700">
+              <img
+                src="/demo-webpage.png"
+                alt="TrueCost Web App"
+                className="w-[600px] h-auto"
+              />
             </div>
+          </div>
+          <div className="mt-6 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border">
+              <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <span className="text-truecost-text-primary font-medium">Web Application</span>
+            </div>
+            <p className="text-truecost-text-muted text-sm mt-2">Full-featured desktop experience</p>
+          </div>
+        </div>
 
-            {/* Bottom nav */}
-            <div className="absolute bottom-0 left-0 right-0 h-20 bg-truecost-bg-secondary/80 backdrop-blur-md border-t border-truecost-glass-border flex items-center justify-around px-10">
-              <div className="flex flex-col items-center gap-1">
-                <svg className="w-6 h-6 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-                <span className="text-truecost-cyan text-xs">Home</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <svg className="w-6 h-6 text-truecost-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span className="text-truecost-text-muted text-xs">Projects</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <svg className="w-6 h-6 text-truecost-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span className="text-truecost-text-muted text-xs">Profile</span>
+        {/* Mobile screenshot */}
+        <div className="flex flex-col items-center">
+          <div className="relative">
+            {/* Phone mockup frame */}
+            <div className="bg-black rounded-[3rem] p-3 shadow-2xl">
+              <div className="bg-black rounded-[2.5rem] overflow-hidden relative">
+                {/* Notch */}
+                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-28 h-7 bg-black rounded-b-2xl z-10" />
+                <img
+                  src="/demo-mobile.png"
+                  alt="TrueCost Mobile App"
+                  className="w-[280px] h-auto"
+                />
               </div>
             </div>
           </div>
+          <div className="mt-6 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border">
+              <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              <span className="text-truecost-text-primary font-medium">Mobile App</span>
+            </div>
+            <p className="text-truecost-text-muted text-sm mt-2">Estimate on the go</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Feature highlights */}
+      <div className="mt-12 flex gap-8">
+        <div className="flex items-center gap-3 text-truecost-text-secondary">
+          <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span>Synced across devices</span>
+        </div>
+        <div className="flex items-center gap-3 text-truecost-text-secondary">
+          <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span>AR Room Scanning</span>
+        </div>
+        <div className="flex items-center gap-3 text-truecost-text-secondary">
+          <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span>Offline capable</span>
         </div>
       </div>
     </div>
@@ -1842,7 +1857,7 @@ export function DemoPage() {
           {/* Visual comparison bar */}
           <div className="glass-panel p-6">
             <h3 className="text-lg font-semibold text-truecost-text-primary mb-8">Total Cost Comparison</h3>
-            <div className="relative h-32 mb-4">
+            <div className="relative h-48 mb-4">
               {/* Scale line */}
               <div className="absolute top-12 left-0 right-0 h-2 bg-truecost-glass-border rounded-full" />
 
@@ -1908,54 +1923,6 @@ export function DemoPage() {
                 <p className="text-xs text-truecost-text-secondary">TrueCost Variance</p>
                 <p className="text-lg font-bold text-truecost-text-primary mt-1">${trueCostEstimate.total.toLocaleString()}</p>
               </div>
-            </div>
-          </div>
-
-          {/* Detailed breakdown panels */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Manual Estimate */}
-            <div className="glass-panel p-6 border-l-4 border-red-500">
-              <h4 className="font-semibold text-truecost-text-primary mb-2">{manualEstimate.label}</h4>
-              <p className="text-xs text-truecost-text-secondary mb-4">{manualEstimate.description}</p>
-
-              <p className="text-xs text-red-400 font-medium mb-2">Issues Found:</p>
-              <ul className="space-y-1">
-                {manualEstimate.issues.map((issue, idx) => (
-                  <li key={idx} className="text-xs text-truecost-text-secondary flex items-start gap-1">
-                    <span className="text-red-400">×</span> {issue}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Actual Project Cost */}
-            <div className="glass-panel p-6 border-l-4 border-green-500">
-              <h4 className="font-semibold text-truecost-text-primary mb-2">{actualCost.label}</h4>
-              <p className="text-xs text-truecost-text-secondary mb-4">{actualCost.description}</p>
-
-              <p className="text-xs text-green-400 font-medium mb-2">Project Notes:</p>
-              <ul className="space-y-1">
-                {actualCost.notes.map((note, idx) => (
-                  <li key={idx} className="text-xs text-truecost-text-secondary flex items-start gap-1">
-                    <span className="text-green-400">•</span> {note}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* TrueCost Estimate */}
-            <div className="glass-panel p-6 border-l-4 border-truecost-cyan">
-              <h4 className="font-semibold text-truecost-text-primary mb-2">{trueCostEstimate.label}</h4>
-              <p className="text-xs text-truecost-text-secondary mb-4">{trueCostEstimate.description}</p>
-
-              <p className="text-xs text-truecost-cyan font-medium mb-2">Key Features:</p>
-              <ul className="space-y-1">
-                {trueCostEstimate.features.map((feature, idx) => (
-                  <li key={idx} className="text-xs text-truecost-text-secondary flex items-start gap-1">
-                    <span className="text-truecost-cyan">✓</span> {feature}
-                  </li>
-                ))}
-              </ul>
             </div>
           </div>
 
