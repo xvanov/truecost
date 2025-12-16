@@ -85,6 +85,115 @@ You MUST respond with valid JSON only. No markdown, no explanation.
 """
 
 
+GENERATE_SEARCHABLE_NAMES_PROMPT = """You are an expert construction estimator who knows EXACTLY what products are sold at Home Depot and Lowe's.
+
+Your job is to convert generic line item descriptions into SPECIFIC, SEARCHABLE product names that will find real products on homedepot.com or lowes.com.
+
+## CRITICAL: Generate Real Product Names
+- Include BRAND NAMES (Moen, Delta, Kohler, LG, Samsung, Whirlpool, etc.)
+- Include MODEL SERIES when you know them (e.g., "Delta Faucet Leland", "Moen Chateau")
+- Include EXACT SPECIFICATIONS (dimensions, colors, materials)
+- The name should return 5-20 real products when searched, NOT generic results
+
+## Brand Recommendations by Finish Level:
+**Budget**:
+- Faucets: Glacier Bay, Peerless
+- Cabinets: Hampton Bay unfinished, In Stock Kitchen
+- Flooring: TrafficMaster, LifeProof basic
+- Appliances: Frigidaire, Amana, Hotpoint
+- Paint: Glidden, BEHR Premium Plus
+
+**Mid-Range**:
+- Faucets: Moen, Delta, Pfister
+- Cabinets: Hampton Bay, KraftMaid basics
+- Flooring: LifeProof, Pergo, Bruce
+- Appliances: GE, LG, Samsung mid-tier
+- Paint: BEHR Ultra, Sherwin-Williams Cashmere
+
+**High-End**:
+- Faucets: Kohler, Delta Touch, Moen MotionSense
+- Cabinets: KraftMaid, Thomasville
+- Flooring: Shaw, Mannington, solid hardwood
+- Appliances: Samsung, LG, GE Profile
+- Paint: Benjamin Moore, Sherwin-Williams Emerald
+
+**Luxury**:
+- Faucets: Kohler Artifacts, Brizo, Grohe
+- Cabinets: Custom, Diamond NOW premium
+- Flooring: Real hardwood, natural stone
+- Appliances: GE Café, Samsung Bespoke, LG Studio
+- Paint: Benjamin Moore Advance, Farrow & Ball
+
+## Examples (BE THIS SPECIFIC):
+
+Input: {"description": "Kitchen faucet", "finish_level": "mid_range"}
+Output: "Moen Georgene Spot Resist Stainless Single-Handle Pull-Down Kitchen Faucet"
+
+Input: {"description": "Bathroom vanity", "finish_level": "budget", "specs": "30 inch"}
+Output: "Glacier Bay Everdean 30 in White Single Sink Bathroom Vanity"
+
+Input: {"description": "Dishwasher", "finish_level": "high_end"}
+Output: "Samsung 24 in Top Control Stainless Steel Dishwasher with StormWash"
+
+Input: {"description": "Interior paint", "finish_level": "mid_range", "specs": "walls"}
+Output: "BEHR Ultra Scuff Defense Interior Eggshell Paint Gallon"
+
+Input: {"description": "Flooring", "finish_level": "mid_range", "specs": "200 SF kitchen"}
+Output: "LifeProof Sterling Oak 8.7 in Waterproof Luxury Vinyl Plank Flooring"
+
+Input: {"description": "Recessed lighting", "finish_level": "high_end"}
+Output: "Halo 6 in LED Recessed Ceiling Light Retrofit Trim"
+
+Input: {"description": "Ceiling fan", "finish_level": "mid_range", "specs": "bedroom"}
+Output: "Hunter Dempsey 52 in Indoor Brushed Nickel Ceiling Fan with Light"
+
+## Input Format:
+{
+    "items": [
+        {"id": "item-1", "description": "...", "specifications": "...", "unit": "..."},
+        ...
+    ],
+    "finish_level": "mid_range",
+    "project_type": "kitchen_remodel"
+}
+
+## Output Format (JSON):
+{
+    "searchable_names": [
+        {
+            "id": "item-1",
+            "searchable_name": "Brand Model Specific Product Name with Color/Size",
+            "search_category": "flooring|cabinets|countertops|fixtures|lighting|paint|hardware|appliances|plumbing|electrical|other",
+            "suggested_brand": "Moen|Delta|etc",
+            "is_labor_only": false
+        },
+        ...
+    ]
+}
+
+## CRITICAL: Skip Labor/Service Items
+Set `searchable_name` to null and `is_labor_only` to true for items that are:
+- Labor/installation only (e.g., "Demolition", "Installation", "Rough-in")
+- Overhead/contingency items (e.g., "Contingency", "General Conditions", "Permits")
+- Services not sold at retail (e.g., "Inspections", "Hauling", "Cleanup")
+- Items with units like "LS" (lump sum), "HR" (hour), "DAY" that are clearly labor
+
+Examples of labor-only items (return null searchable_name):
+- "Wall Finish Demolition" -> null (demolition labor)
+- "Contingency" -> null (overhead)
+- "Plumbing rough-in" -> null (installation labor, not the valve itself)
+- "Drywall Installation" -> null (labor only)
+- "Electrical rough-in" -> null (labor only)
+- "Framing Labor" -> null (labor only)
+
+Examples of MATERIAL items (DO generate searchable_name):
+- "Drywall" -> "USG Sheetrock 1/2 in x 4 ft x 8 ft Drywall Panel" (the actual drywall sheets)
+- "Wall Insulation" -> "Owens Corning R-15 Kraft Faced Fiberglass Insulation Batt 15 in W x 93 in L"
+- "Shower Valve" -> "Delta R10000-UNBX MultiChoice Universal Tub/Shower Rough-In Valve"
+
+IMPORTANT: Every searchable_name MUST be specific enough to find REAL products. Include brand, series, size, and color/finish."""
+
+
 # =============================================================================
 # EXPECTED DIVISIONS BY PROJECT TYPE
 # =============================================================================
@@ -194,7 +303,27 @@ class ScopeAgent(BaseA2AAgent):
             cad_data=cad_data,
             total_sqft=total_sqft
         )
-        
+
+        # Step 3.5: Generate searchable product names for price comparison
+        searchable_names = await self._generate_searchable_names(
+            divisions=enriched_divisions,
+            finish_level=finish_level,
+            project_type=project_type
+        )
+
+        # Attach searchable names to line items
+        for div in enriched_divisions:
+            for item in div.line_items:
+                if item.id in searchable_names:
+                    item.searchable_name = searchable_names[item.id].get("searchable_name", "")
+                    item.search_category = searchable_names[item.id].get("search_category", "other")
+
+        logger.info(
+            "searchable_names_generated",
+            estimate_id=estimate_id,
+            items_with_names=len(searchable_names)
+        )
+
         # Step 4: Check completeness
         completeness = self._check_completeness(
             divisions=enriched_divisions,
@@ -335,6 +464,136 @@ class ScopeAgent(BaseA2AAgent):
         
         return enriched_divisions
     
+    async def _generate_searchable_names(
+        self,
+        divisions: List[EnrichedDivision],
+        finish_level: str,
+        project_type: str = "remodel"
+    ) -> Dict[str, Dict[str, str]]:
+        """Generate searchable product names for line items.
+
+        Uses LLM to generate specific, searchable product names that will
+        return accurate results on Home Depot/Lowe's Google Shopping.
+
+        Args:
+            divisions: List of enriched divisions with line items.
+            finish_level: Project finish level (budget, mid_range, high_end, luxury).
+            project_type: Type of project (kitchen_remodel, bathroom_remodel, etc.)
+
+        Returns:
+            Dict mapping item_id to {searchable_name, search_category}.
+        """
+        # Collect material items that need searchable names
+        items_to_process = []
+        for div in divisions:
+            if div.status != "included":
+                continue
+            for item in div.line_items:
+                # Process ALL items, not just ones with material costs
+                # The LLM will help generate appropriate searchable names
+                items_to_process.append({
+                    "id": item.id,
+                    "description": item.item,
+                    "specifications": item.specifications or "",
+                    "unit": item.unit,
+                    "division": div.division_code,
+                    "division_name": div.division_name
+                })
+
+        if not items_to_process:
+            return {}
+
+        # Process in batches of 20 items
+        searchable_names = {}
+        batch_size = 20
+
+        for i in range(0, len(items_to_process), batch_size):
+            batch = items_to_process[i:i + batch_size]
+
+            try:
+                result = await self.llm.generate_json(
+                    system_prompt=GENERATE_SEARCHABLE_NAMES_PROMPT,
+                    user_message=json.dumps({
+                        "items": batch,
+                        "finish_level": finish_level,
+                        "project_type": project_type
+                    }, indent=2)
+                )
+
+                self._tokens_used += result.get("tokens_used", 0)
+                response = result.get("content", {})
+
+                for item_data in response.get("searchable_names", []):
+                    item_id = item_data.get("id")
+                    if item_id:
+                        # Skip labor-only items (no material to search)
+                        is_labor_only = item_data.get("is_labor_only", False)
+                        searchable_name = item_data.get("searchable_name")
+
+                        # Only add if it's a material item with a valid searchable name
+                        if not is_labor_only and searchable_name:
+                            searchable_names[item_id] = {
+                                "searchable_name": searchable_name,
+                                "search_category": item_data.get("search_category", "other"),
+                                "is_labor_only": False
+                            }
+                        else:
+                            # Mark as labor-only so cost_agent knows not to search
+                            searchable_names[item_id] = {
+                                "searchable_name": None,
+                                "search_category": item_data.get("search_category", "labor"),
+                                "is_labor_only": True
+                            }
+
+            except Exception as e:
+                logger.warning(
+                    "searchable_name_generation_failed",
+                    batch_start=i,
+                    batch_size=len(batch),
+                    error=str(e)
+                )
+                # Generate fallback names for this batch
+                for item in batch:
+                    searchable_names[item["id"]] = {
+                        "searchable_name": self._generate_fallback_searchable_name(
+                            item["description"], finish_level
+                        ),
+                        "search_category": "other"
+                    }
+
+        return searchable_names
+
+    def _generate_fallback_searchable_name(
+        self,
+        description: str,
+        finish_level: str
+    ) -> str:
+        """Generate a fallback searchable name without LLM.
+
+        Args:
+            description: Item description.
+            finish_level: Project finish level.
+
+        Returns:
+            Basic searchable name.
+        """
+        # Add finish level qualifier
+        qualifiers = {
+            "budget": "standard",
+            "mid_range": "mid-grade",
+            "high_end": "premium",
+            "luxury": "luxury"
+        }
+        qualifier = qualifiers.get(finish_level, "")
+
+        # Clean up description
+        name = description.lower().strip()
+
+        # Add qualifier if not already present
+        if qualifier and qualifier not in name:
+            return f"{qualifier} {name}"
+        return name
+
     async def _enrich_line_item(
         self,
         item: Dict[str, Any],

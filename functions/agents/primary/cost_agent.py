@@ -5,6 +5,7 @@ for Monte Carlo compatibility.
 """
 
 from typing import Dict, Any, Optional, List
+import asyncio
 import json
 import math
 import structlog
@@ -13,6 +14,7 @@ from agents.base_agent import BaseA2AAgent
 from services.firestore_service import FirestoreService
 from services.llm_service import LLMService
 from services.cost_data_service import CostDataService
+from services.serper_service import SerperService, get_serper_service, ShoppingResult
 from models.cost_estimate import (
     CostRange,
     CostEstimate,
@@ -168,14 +170,16 @@ class CostAgent(BaseA2AAgent):
         self,
         firestore_service: Optional[FirestoreService] = None,
         llm_service: Optional[LLMService] = None,
-        cost_data_service: Optional[CostDataService] = None
+        cost_data_service: Optional[CostDataService] = None,
+        serper_service: Optional[SerperService] = None
     ):
         """Initialize CostAgent.
-        
+
         Args:
             firestore_service: Optional Firestore service instance.
             llm_service: Optional LLM service instance.
             cost_data_service: Optional cost data service instance.
+            serper_service: Optional Serper service instance for Google Shopping.
         """
         super().__init__(
             name="cost",
@@ -183,6 +187,7 @@ class CostAgent(BaseA2AAgent):
             llm_service=llm_service
         )
         self.cost_data_service = cost_data_service or CostDataService()
+        self.serper = serper_service or get_serper_service()
     
     async def run(
         self,
@@ -245,6 +250,7 @@ class CostAgent(BaseA2AAgent):
             zip_code=zip_code,
             waste_factor=user_prefs["waste_factor"],
             project_id=project_id,
+            location_output=location_output,
         )
         
         # Step 3: Calculate subtotals
@@ -336,16 +342,23 @@ class CostAgent(BaseA2AAgent):
         zip_code: str,
         waste_factor: float,
         project_id: Optional[str] = None,
+        location_output: Optional[Dict[str, Any]] = None,
     ) -> tuple[List[DivisionCost], int, int]:
         """Calculate costs for all divisions and line items.
-        
+
+        Uses the multi-source pricing strategy:
+        1. Global materials DB
+        2. Google Shopping for Home Depot/Lowe's prices
+        3. BLS labor rates from location output
+
         Args:
             estimate_id: Estimate document ID.
             scope_output: Bill of Quantities from Scope Agent.
             zip_code: Project ZIP code for labor rates.
             waste_factor: Waste factor multiplier.
             project_id: Optional project ID for price comparison service.
-            
+            location_output: Location agent output with BLS labor rates.
+
         Returns:
             Tuple of (division_costs, total_items, exact_matches).
         """
@@ -357,30 +370,31 @@ class CostAgent(BaseA2AAgent):
                     description = item.get("item", item.get("description", ""))
                     if description:
                         product_descriptions.append(description)
-            
+
             if product_descriptions:
                 await self.cost_data_service.batch_prefetch_prices(
                     product_descriptions=product_descriptions,
                     project_id=project_id,
                     zip_code=zip_code
                 )
-        
+
         division_costs = []
         total_items = 0
         exact_matches = 0
-        
+
         for div_data in scope_output.get("divisions", []):
             div_code = div_data.get("divisionCode", "00")
             div_name = div_data.get("divisionName", f"Division {div_code}")
-            
+
             line_item_costs = []
             granular_items: List[Dict[str, Any]] = []
-            
+
             for item in div_data.get("lineItems", []):
                 item_cost, is_exact = await self._calculate_line_item_cost(
                     item=item,
                     zip_code=zip_code,
-                    project_id=project_id
+                    project_id=project_id,
+                    location_output=location_output
                 )
                 
                 if item_cost:
@@ -538,15 +552,22 @@ class CostAgent(BaseA2AAgent):
         self,
         item: Dict[str, Any],
         zip_code: str,
-        project_id: Optional[str] = None
+        project_id: Optional[str] = None,
+        location_output: Optional[Dict[str, Any]] = None
     ) -> tuple[Optional[LineItemCost], bool]:
         """Calculate cost for a single line item.
-        
+
+        Uses multi-source price lookup strategy:
+        1. Global materials DB (Firestore)
+        2. Google Shopping for Home Depot/Lowe's prices
+        3. BLS labor rates from LocationAgent output
+
         Args:
             item: Line item data from BoQ.
             zip_code: Project ZIP code for labor rates.
             project_id: Optional project ID for price comparison service.
-            
+            location_output: Optional location agent output for BLS labor rates.
+
         Returns:
             Tuple of (LineItemCost, is_exact_match).
         """
@@ -557,30 +578,65 @@ class CostAgent(BaseA2AAgent):
             description = item.get("item", item.get("description", "Unknown item"))
             quantity = float(item.get("quantity", 1))
             unit = item.get("unit", "EA")
-            
+            searchable_name = item.get("searchableName")
+
             # Get primary trade (from BoQ or infer from cost code)
             primary_trade_str = item.get("primaryTrade", "general_labor")
             try:
                 primary_trade = TradeCategory(primary_trade_str)
             except ValueError:
                 primary_trade = TradeCategory.GENERAL_LABOR
-            
-            # Look up material cost (with price comparison if project_id provided)
-            material_data = await self.cost_data_service.get_material_cost(
-                cost_code=cost_code,
-                item_description=description,
-                project_id=project_id,
-                zip_code=zip_code
+
+            # Look up material cost using multi-source strategy
+            # Priority: Google Shopping (if searchable_name) > Global DB
+            material_data = await self._get_material_cost_with_search(
+                item=item,
+                zip_code=zip_code,
+                project_id=project_id
             )
-            
+
             is_exact = material_data.get("confidence_score", 0) >= 0.85
-            
-            # Get labor rate for the trade
-            labor_data = await self.cost_data_service.get_labor_rate(
-                trade=primary_trade,
-                zip_code=zip_code
-            )
-            
+            price_source = material_data.get("source", "database")
+
+            # Get labor rate - prefer BLS rates from location output
+            labor_rate = None
+            if location_output:
+                labor_rates = location_output.get("laborRates", {})
+                # Map trade category to labor rate field
+                trade_field_map = {
+                    TradeCategory.ELECTRICIAN: "electrician",
+                    TradeCategory.PLUMBER: "plumber",
+                    TradeCategory.CARPENTER: "carpenter",
+                    TradeCategory.HVAC: "hvac",
+                    TradeCategory.GENERAL_LABOR: "generalLabor",
+                    TradeCategory.PAINTER: "painter",
+                    TradeCategory.TILE_SETTER: "tileSetter",
+                    TradeCategory.ROOFER: "roofer",
+                }
+                field_name = trade_field_map.get(primary_trade, "generalLabor")
+                bls_rate = labor_rates.get(field_name)
+                if bls_rate and isinstance(bls_rate, (int, float)) and bls_rate > 0:
+                    labor_rate = CostRange.from_base_cost(
+                        base_cost=bls_rate,
+                        p80_multiplier=1.05,
+                        p90_multiplier=1.10
+                    )
+
+            # Fallback to cost data service if BLS rate not available
+            if not labor_rate:
+                labor_data = await self.cost_data_service.get_labor_rate(
+                    trade=primary_trade,
+                    zip_code=zip_code
+                )
+                labor_rate = labor_data.get("hourly_rate", CostRange.from_base_cost(40.0))
+
+            # Build notes with price source info
+            notes = None
+            if price_source == "google_shopping":
+                retailer = material_data.get("retailer", "")
+                product_title = material_data.get("product_title", "")
+                notes = f"Price from {retailer}: {product_title}"
+
             # Calculate line item cost
             line_item_cost = LineItemCost.calculate(
                 line_item_id=line_item_id,
@@ -590,15 +646,15 @@ class CostAgent(BaseA2AAgent):
                 unit=unit,
                 unit_material_cost=material_data.get("unit_cost", CostRange.from_base_cost(50.0)),
                 unit_labor_hours=material_data.get("labor_hours_per_unit", 0.5),
-                labor_rate=labor_data.get("hourly_rate", CostRange.from_base_cost(40.0)),
+                labor_rate=labor_rate,
                 primary_trade=primary_trade,
                 unit_equipment_cost=material_data.get("equipment_cost"),
                 confidence=material_data.get("confidence", CostConfidenceLevel.MEDIUM),
-                notes=None
+                notes=notes
             )
-            
+
             return line_item_cost, is_exact
-            
+
         except Exception as e:
             logger.warning(
                 "line_item_cost_calculation_failed",
@@ -895,6 +951,226 @@ Please analyze this estimate and provide insights in the required JSON format.""
             "confidence_notes": "Estimate based on available cost data and regional factors."
         }
     
+    async def _search_material_price(
+        self,
+        searchable_name: str,
+        item_description: str
+    ) -> Optional[Dict[str, Any]]:
+        """Search for material price using Google Shopping via Serper API.
+
+        Implements the 3-tier price lookup strategy:
+        1. Try to get from global materials DB (handled by CostDataService)
+        2. Search Google Shopping for Home Depot/Lowe's prices
+        3. Use LLM to extract price from search results
+
+        Args:
+            searchable_name: Searchable product name generated by ScopeAgent.
+            item_description: Original item description for fallback.
+
+        Returns:
+            Dict with price data or None if not found.
+        """
+        search_term = searchable_name or item_description
+        if not search_term:
+            return None
+
+        try:
+            # Search both Home Depot and Lowe's
+            search_result = await self.serper.search_home_depot_and_lowes(search_term)
+
+            if not search_result:
+                return None
+
+            best_price = search_result.get("bestPrice")
+            home_depot = search_result.get("homeDepot")
+            lowes = search_result.get("lowes")
+
+            if not best_price and not home_depot and not lowes:
+                return None
+
+            # Build price data from search results
+            price_data = {
+                "source": "google_shopping",
+                "search_term": search_term,
+                "prices": {}
+            }
+
+            if home_depot:
+                price_data["prices"]["homeDepot"] = {
+                    "price": home_depot.price,
+                    "title": home_depot.title,
+                    "link": home_depot.link,
+                    "rating": home_depot.rating
+                }
+
+            if lowes:
+                price_data["prices"]["lowes"] = {
+                    "price": lowes.price,
+                    "title": lowes.title,
+                    "link": lowes.link,
+                    "rating": lowes.rating
+                }
+
+            # Determine best price
+            if best_price:
+                price_data["best_price"] = best_price.price
+                price_data["best_retailer"] = search_result.get("bestRetailer")
+                price_data["best_title"] = best_price.title
+                price_data["best_link"] = best_price.link
+
+            logger.info(
+                "google_shopping_price_found",
+                search_term=search_term[:50],
+                best_price=price_data.get("best_price"),
+                best_retailer=price_data.get("best_retailer")
+            )
+
+            return price_data
+
+        except Exception as e:
+            logger.warning(
+                "google_shopping_search_error",
+                search_term=search_term[:50],
+                error=str(e)
+            )
+            return None
+
+    async def _get_material_cost_with_search(
+        self,
+        item: Dict[str, Any],
+        zip_code: str,
+        project_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get material cost using multi-source lookup strategy.
+
+        Strategy:
+        1. Check global materials DB (Firestore) first
+        2. If not found or low confidence, search Google Shopping
+        3. If both found, prefer Google Shopping for current prices
+
+        Args:
+            item: Line item with searchable_name and description.
+            zip_code: Project ZIP code.
+            project_id: Project ID for caching.
+
+        Returns:
+            Dict with material cost data.
+        """
+        cost_code = item.get("costCode", "")
+        description = item.get("item", item.get("description", "Unknown item"))
+        searchable_name = item.get("searchableName")
+        unit = item.get("unit", "EA")
+
+        # Step 1: Try Google Shopping FIRST if we have a searchable name
+        # This prioritizes real-time market prices over hardcoded mock data
+        shopping_result = None
+        if searchable_name:
+            shopping_result = await self._search_material_price(
+                searchable_name=searchable_name,
+                item_description=description
+            )
+
+            if shopping_result and shopping_result.get("best_price"):
+                best_price = shopping_result["best_price"]
+
+                # Convert to CostRange with ±10-20% variance
+                unit_cost = CostRange.from_base_cost(
+                    base_cost=best_price,
+                    p80_multiplier=1.10,
+                    p90_multiplier=1.20
+                )
+
+                logger.info(
+                    "using_google_shopping_price",
+                    product=searchable_name[:50],
+                    price=best_price,
+                    retailer=shopping_result.get("best_retailer")
+                )
+
+                return {
+                    "cost_code": cost_code or "SHOP-001",
+                    "unit_cost": unit_cost,
+                    "labor_hours_per_unit": 0.5,  # Default labor hours
+                    "equipment_cost": CostRange.zero(),
+                    "confidence": CostConfidenceLevel.HIGH,
+                    "confidence_score": 0.90,
+                    "source": "google_shopping",
+                    "retailer": shopping_result.get("best_retailer"),
+                    "product_title": shopping_result.get("best_title"),
+                    "product_link": shopping_result.get("best_link"),
+                    "prices": shopping_result.get("prices", {})
+                }
+
+        # Step 2: Fallback to database/mock data
+        db_result = await self.cost_data_service.get_material_cost(
+            cost_code=cost_code,
+            item_description=description,
+            project_id=project_id,
+            zip_code=zip_code
+        )
+
+        logger.debug(
+            "using_database_price",
+            description=description[:50] if description else None,
+            cost_code=cost_code,
+            source="database"
+        )
+
+        return db_result
+
+    async def _batch_search_prices(
+        self,
+        items: List[Dict[str, Any]],
+        zip_code: str
+    ) -> Dict[str, Dict[str, Any]]:
+        """Batch search prices for multiple items.
+
+        Args:
+            items: List of items with searchable_name.
+            zip_code: Project ZIP code.
+
+        Returns:
+            Dict mapping item_id to price data.
+        """
+        results = {}
+
+        # Filter items that have searchable names
+        searchable_items = [
+            item for item in items
+            if item.get("searchableName")
+        ]
+
+        if not searchable_items:
+            return results
+
+        # Search in parallel (limit concurrency to avoid rate limits)
+        semaphore = asyncio.Semaphore(5)  # Max 5 concurrent searches
+
+        async def search_with_limit(item):
+            async with semaphore:
+                price_data = await self._search_material_price(
+                    searchable_name=item.get("searchableName", ""),
+                    item_description=item.get("item", item.get("description", ""))
+                )
+                return item.get("id", item.get("lineItemId")), price_data
+
+        tasks = [search_with_limit(item) for item in searchable_items]
+        search_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in search_results:
+            if isinstance(result, tuple) and len(result) == 2:
+                item_id, price_data = result
+                if item_id and price_data:
+                    results[item_id] = price_data
+
+        logger.info(
+            "batch_price_search_complete",
+            items_searched=len(searchable_items),
+            prices_found=len(results)
+        )
+
+        return results
+
     def _build_summary(
         self,
         grand_total: CostRange,

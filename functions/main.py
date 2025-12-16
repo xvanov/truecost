@@ -73,19 +73,33 @@ def error_response(code: str, message: str, details: Dict[str, Any] = None) -> D
 
 def get_request_json(req: https_fn.Request) -> Dict[str, Any]:
     """Extract JSON from request body.
-    
+
     Args:
         req: HTTP request object.
-        
+
     Returns:
-        Parsed JSON data.
-        
+        Parsed JSON data, or empty dict if body is empty/invalid.
+
     Raises:
-        ValidationError: If JSON is invalid.
+        ValidationError: If JSON is invalid (unless body is empty).
     """
     try:
-        return req.get_json(force=True) or {}
+        # Check if request has any body content
+        content_length = req.content_length or 0
+        if content_length == 0:
+            logger.warning("empty_request_body", method=req.method, path=req.path)
+            return {}
+
+        result = req.get_json(force=True)
+        return result if result else {}
     except Exception as e:
+        # Log the error but return empty dict for resilience
+        logger.warning(
+            "json_parse_error",
+            error=str(e),
+            method=req.method,
+            path=req.path
+        )
         raise ValidationError(
             message=f"Invalid JSON in request body: {str(e)}"
         )

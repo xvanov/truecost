@@ -155,6 +155,14 @@ class EnrichedLineItem(BaseModel):
     estimated_equipment_cost: float = Field(
         default=0.0, ge=0, description="Estimated equipment cost ($)"
     )
+
+    # Searchable product name for price comparison
+    searchable_name: Optional[str] = Field(
+        None, description="Searchable product name for Google Shopping"
+    )
+    search_category: Optional[str] = Field(
+        None, description="Search category (flooring, cabinets, fixtures, etc.)"
+    )
     
     @field_validator("estimated_material_cost", "estimated_labor_hours", mode="before")
     @classmethod

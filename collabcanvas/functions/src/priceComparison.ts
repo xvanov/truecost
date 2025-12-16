@@ -101,6 +101,32 @@ const RETAILERS: Retailer[] = ['homeDepot', 'lowes'];
 
 const SERPAPI_TIMEOUT_MS = 30000;
 
+// ============ SERPAPI CIRCUIT BREAKER ============
+// Track if SerpAPI quota is exhausted to avoid redundant calls
+let serpApiQuotaExhausted = false;
+let serpApiQuotaExhaustedAt: number | null = null;
+const SERPAPI_QUOTA_RESET_MS = 60 * 60 * 1000; // Reset after 1 hour
+
+function isSerpApiAvailable(): boolean {
+  if (!serpApiQuotaExhausted) return true;
+
+  // Reset circuit breaker after timeout
+  if (serpApiQuotaExhaustedAt && Date.now() - serpApiQuotaExhaustedAt > SERPAPI_QUOTA_RESET_MS) {
+    console.log('[PRICE_COMPARISON] SerpApi circuit breaker reset');
+    serpApiQuotaExhausted = false;
+    serpApiQuotaExhaustedAt = null;
+    return true;
+  }
+
+  return false;
+}
+
+function markSerpApiQuotaExhausted(): void {
+  serpApiQuotaExhausted = true;
+  serpApiQuotaExhaustedAt = Date.now();
+  console.log('[PRICE_COMPARISON] SerpApi circuit breaker TRIPPED - quota exhausted');
+}
+
 // ============ SERPAPI GOOGLE SHOPPING ============
 
 /**
@@ -111,6 +137,12 @@ async function fetchFromSerpApi(
   productName: string,
   retailer: Retailer
 ): Promise<unknown[]> {
+  // Check circuit breaker first
+  if (!isSerpApiAvailable()) {
+    console.log(`[PRICE_COMPARISON] SerpApi circuit breaker OPEN - skipping API call for "${productName}"`);
+    return [];
+  }
+
   const apiKey = process.env.SERP_API_KEY;
   if (!apiKey) {
     console.error('[PRICE_COMPARISON] SERP_API_KEY not configured');
@@ -139,6 +171,12 @@ async function fetchFromSerpApi(
     if (!res.ok) {
       const errorText = await res.text();
       console.error(`[PRICE_COMPARISON] SerpApi error: ${res.status} - ${errorText}`);
+
+      // Check for quota exhaustion (429) and trip circuit breaker
+      if (res.status === 429 || errorText.includes('run out of searches')) {
+        markSerpApiQuotaExhausted();
+      }
+
       return [];
     }
 
@@ -499,6 +537,39 @@ async function autoPopulateGlobalMaterials(
       brand
     );
 
+    // Build retailers object, only including retailers with matches
+    // Firestore doesn't accept undefined values
+    const retailers: Record<string, {
+      productUrl: string;
+      productId: string;
+      price: number;
+      priceUpdatedAt: number;
+      imageUrl?: string;
+      brand?: string;
+    }> = {};
+
+    if (hdMatch) {
+      retailers.homeDepot = {
+        productUrl: hdMatch.url,
+        productId: hdMatch.id,
+        price: hdMatch.price,
+        priceUpdatedAt: Date.now(),
+        ...(hdMatch.imageUrl && { imageUrl: hdMatch.imageUrl }),
+        ...(hdMatch.brand && { brand: hdMatch.brand }),
+      };
+    }
+
+    if (lowesMatch) {
+      retailers.lowes = {
+        productUrl: lowesMatch.url,
+        productId: lowesMatch.id,
+        price: lowesMatch.price,
+        priceUpdatedAt: Date.now(),
+        ...(lowesMatch.imageUrl && { imageUrl: lowesMatch.imageUrl }),
+        ...(lowesMatch.brand && { brand: lowesMatch.brand }),
+      };
+    }
+
     await saveToGlobalMaterials(
       db,
       {
@@ -507,24 +578,7 @@ async function autoPopulateGlobalMaterials(
         description,
         aliases,
         zipCode,
-        retailers: {
-          homeDepot: hdMatch ? {
-            productUrl: hdMatch.url,
-            productId: hdMatch.id,
-            price: hdMatch.price,
-            priceUpdatedAt: Date.now(),
-            imageUrl: hdMatch.imageUrl || undefined,
-            brand: hdMatch.brand || undefined,
-          } : undefined,
-          lowes: lowesMatch ? {
-            productUrl: lowesMatch.url,
-            productId: lowesMatch.id,
-            price: lowesMatch.price,
-            priceUpdatedAt: Date.now(),
-            imageUrl: lowesMatch.imageUrl || undefined,
-            brand: lowesMatch.brand || undefined,
-          } : undefined,
-        },
+        retailers,
         source: 'scraped',
       },
       productName
