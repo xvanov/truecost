@@ -337,22 +337,30 @@ def build_bls_series_id(msa_code: str, soc_code: str) -> str:
     """
     Build a BLS OES series ID for a given MSA and SOC code.
 
-    BLS OES series IDs follow the pattern: OEUM{MSA}000000{SOC}03
-    - OEUM = OES (Occupational Employment Statistics) Unemployment
-    - {MSA} = 5-digit MSA code
-    - 000000 = Industry code (all industries)
-    - {SOC} = SOC code without hyphen (e.g., 472111 for 47-2111)
-    - 03 = Data type (hourly mean wage)
+    BLS OES series IDs follow the pattern: OEUM00{MSA}000000{SOC}03 (25 chars)
+
+    Example: OEUM003108000000047211103 for LA Electricians
+             ││││││    │     │      └─ 03 = Data type (hourly mean wage)
+             ││││││    │     └──────── 472111 = SOC code (47-2111 Electrician)
+             ││││││    └────────────── 000000 = Industry (all industries)
+             ││││└┴─────────────────── 31080 = MSA code (LA metro)
+             ││└┴───────────────────── 00 = Area type prefix (required)
+             └┴─────────────────────── OEUM = OES Metro survey
+
+    Test with curl:
+        curl -s -X POST 'https://api.bls.gov/publicAPI/v2/timeseries/data/' \\
+          -H 'Content-Type: application/json' \\
+          -d '{"seriesid":["OEUM003108000000047211103"],"startyear":"2023","endyear":"2024"}'
 
     Args:
-        msa_code: 5-digit MSA code
+        msa_code: 5-digit MSA code (e.g., "31080" for LA)
         soc_code: SOC code with hyphen (e.g., "47-2111")
 
     Returns:
-        BLS series ID string
+        BLS series ID string (25 characters)
     """
     soc_clean = soc_code.replace("-", "")
-    return f"OEUM{msa_code}000000{soc_clean}03"
+    return f"OEUM00{msa_code}000000{soc_clean}03"
 
 
 def get_bls_api_key() -> Optional[str]:
@@ -459,11 +467,11 @@ def _parse_bls_response(
         series_id = series.get("seriesID", "")
 
         # Extract SOC code from series ID
-        # Series ID format: OEUM{MSA:5}000000{SOC:6}03
-        # Total: 4 + 5 + 6 + 6 + 2 = 23 characters
-        # SOC starts at position 15 (4+5+6)
-        if len(series_id) >= 23:
-            soc_raw = series_id[15:21]  # Extract 6-digit SOC portion
+        # Series ID format: OEUM00{MSA:5}000000{SOC:6}03
+        # Total: 4 + 2 + 5 + 6 + 6 + 2 = 25 characters
+        # SOC starts at position 17 (4+2+5+6)
+        if len(series_id) >= 25:
+            soc_raw = series_id[17:23]  # Extract 6-digit SOC portion
             soc_code = f"{soc_raw[:2]}-{soc_raw[2:]}"  # Format as XX-XXXX
 
             trade = SOC_TO_TRADE_MAP.get(soc_code)
