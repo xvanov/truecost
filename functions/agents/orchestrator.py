@@ -32,6 +32,18 @@ from models.agent_output import (
     AgentScoreResult,
     CriticFeedback
 )
+from utils.agent_logger import (
+    log_pipeline_start,
+    log_pipeline_complete,
+    log_pipeline_failed,
+    log_agent_start,
+    log_agent_output,
+    log_scorer_result,
+    log_critic_feedback,
+    log_agent_error,
+    log_agent_retry,
+    log_input_context,
+)
 
 logger = structlog.get_logger()
 
@@ -103,6 +115,9 @@ class PipelineOrchestrator:
         self._user_id = user_id
         self._started_at = int(self._start_time * 1000)
 
+        # Log pipeline start with visual banner
+        log_pipeline_start(estimate_id, len(AGENT_SEQUENCE))
+
         logger.info(
             "pipeline_started",
             estimate_id=estimate_id,
@@ -145,6 +160,12 @@ class PipelineOrchestrator:
         
         try:
             for agent_name in AGENT_SEQUENCE:
+                # Log agent start with visual banner
+                log_agent_start(agent_name, estimate_id)
+                
+                # Log input context summary
+                log_input_context(agent_name, estimate_id, accumulated_context)
+
                 logger.info(
                     "agent_starting",
                     estimate_id=estimate_id,
@@ -170,6 +191,14 @@ class PipelineOrchestrator:
                     pipeline_status.agent_statuses[agent_name] = AgentStatus.FAILED.value
                     pipeline_status.error = f"Agent {agent_name} failed after {MAX_RETRIES} retries"
                     await self._update_pipeline_status(estimate_id, pipeline_status)
+
+                    # Log pipeline failure with visual banner
+                    log_pipeline_failed(
+                        estimate_id=estimate_id,
+                        failed_agent=agent_name,
+                        error=f"Failed after {MAX_RETRIES} retries",
+                        completed_agents=completed_agents
+                    )
                     
                     logger.error(
                         "pipeline_agent_failed",
@@ -235,6 +264,14 @@ class PipelineOrchestrator:
                 estimate_id,
                 {"status": "final"}
             )
+
+            # Log pipeline completion with visual banner
+            log_pipeline_complete(
+                estimate_id=estimate_id,
+                completed_agents=completed_agents,
+                duration_ms=self.elapsed_ms,
+                total_tokens=self._total_tokens
+            )
             
             logger.info(
                 "pipeline_completed",
@@ -266,6 +303,14 @@ class PipelineOrchestrator:
             )
             
         except Exception as e:
+            # Log pipeline failure with visual banner
+            log_pipeline_failed(
+                estimate_id=estimate_id,
+                failed_agent=pipeline_status.current_agent or "unknown",
+                error=str(e),
+                completed_agents=completed_agents
+            )
+
             logger.exception(
                 "pipeline_exception",
                 estimate_id=estimate_id,
@@ -332,7 +377,26 @@ class PipelineOrchestrator:
                     critic_feedback=critic_feedback,
                     retry_attempt=retry_count
                 )
+                
+                # Log agent output with visual banner
+                metadata = getattr(self, '_last_agent_metadata', {})
+                log_agent_output(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    output=output,
+                    duration_ms=metadata.get('duration_ms', 0),
+                    tokens_used=metadata.get('tokens_used', 0)
+                )
+
             except (A2AError, TrueCostError) as e:
+                # Log agent error with visual banner
+                log_agent_error(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    error=str(e),
+                    retry_attempt=retry_count
+                )
+
                 logger.error(
                     "primary_agent_error",
                     estimate_id=estimate_id,
@@ -351,6 +415,17 @@ class PipelineOrchestrator:
                     output=output,
                     input_data=input_data
                 )
+                
+                # Log scorer result with visual banner
+                log_scorer_result(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    score=score_result.score,
+                    passed=score_result.passed,
+                    breakdown=score_result.breakdown,
+                    feedback=score_result.feedback
+                )
+
             except (A2AError, TrueCostError) as e:
                 logger.error(
                     "scorer_agent_error",
@@ -364,6 +439,16 @@ class PipelineOrchestrator:
                     passed=True,
                     breakdown=[],
                     feedback="Scorer unavailable, defaulting to pass"
+                )
+                
+                # Log scorer result (default pass)
+                log_scorer_result(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    score=score_result.score,
+                    passed=score_result.passed,
+                    breakdown=score_result.breakdown,
+                    feedback=score_result.feedback
                 )
             
             # Update score in pipeline status
@@ -402,6 +487,14 @@ class PipelineOrchestrator:
                     score=score_result.score,
                     scorer_feedback=score_result.feedback
                 )
+                
+                # Log critic feedback with visual banner
+                log_critic_feedback(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    feedback=critic_feedback
+                )
+
             except (A2AError, TrueCostError) as e:
                 logger.error(
                     "critic_agent_error",
@@ -416,6 +509,21 @@ class PipelineOrchestrator:
                     "how_to_fix": ["Review and improve the output quality"],
                     "score": score_result.score
                 }
+                
+                # Log critic feedback (fallback)
+                log_critic_feedback(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    feedback=critic_feedback
+                )
+
+            # Log retry with visual banner
+            log_agent_retry(
+                agent_name=agent_name,
+                estimate_id=estimate_id,
+                retry_number=retry_count + 1,
+                previous_score=score_result.score
+            )
             
             logger.info(
                 "agent_retry_with_feedback",
@@ -472,10 +580,16 @@ class PipelineOrchestrator:
         # Extract result data
         result = self.a2a.extract_result_data(response)
         
-        # Track tokens
+        # Track tokens and store metadata for logging
         metadata = response.get("result", {}).get("metadata", {})
         if tokens := metadata.get("tokens_used"):
             self._total_tokens += tokens
+        
+        # Store metadata for logging in _run_agent_with_validation
+        self._last_agent_metadata = {
+            'duration_ms': metadata.get('duration_ms', 0),
+            'tokens_used': metadata.get('tokens_used', 0)
+        }
         
         return result
     
