@@ -26,35 +26,6 @@ interface NodePosition {
 }
 
 /**
- * Sample CPM data for when no real data exists
- * This simulates what the agent pipeline would produce
- */
-const SAMPLE_CPM: CPM = {
-  id: 'sample-cpm',
-  projectId: 'sample',
-  tasks: [
-    { id: 't1', name: 'Site Preparation', duration: 2, dependencies: [], category: 'prep' },
-    { id: 't2', name: 'Demolition', duration: 3, dependencies: ['t1'], category: 'demo' },
-    { id: 't3', name: 'Foundation Work', duration: 5, dependencies: ['t2'], category: 'foundation' },
-    { id: 't4', name: 'Rough Framing', duration: 7, dependencies: ['t3'], category: 'framing' },
-    { id: 't5', name: 'Electrical Rough-In', duration: 4, dependencies: ['t4'], category: 'electrical' },
-    { id: 't6', name: 'Plumbing Rough-In', duration: 4, dependencies: ['t4'], category: 'plumbing' },
-    { id: 't7', name: 'HVAC Installation', duration: 3, dependencies: ['t4'], category: 'hvac' },
-    { id: 't8', name: 'Insulation', duration: 2, dependencies: ['t5', 't6', 't7'], category: 'insulation' },
-    { id: 't9', name: 'Drywall Installation', duration: 4, dependencies: ['t8'], category: 'drywall' },
-    { id: 't10', name: 'Interior Painting', duration: 3, dependencies: ['t9'], category: 'finish' },
-    { id: 't11', name: 'Flooring Installation', duration: 3, dependencies: ['t9'], category: 'finish' },
-    { id: 't12', name: 'Fixture Installation', duration: 2, dependencies: ['t10', 't11'], category: 'finish' },
-    { id: 't13', name: 'Final Inspection', duration: 1, dependencies: ['t12'], category: 'finish' },
-  ],
-  criticalPath: [],
-  totalDuration: 0,
-  createdAt: Date.now(),
-  createdBy: 'system',
-  updatedAt: Date.now(),
-};
-
-/**
  * Task category color mapping (dark theme compatible)
  */
 const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string }> = {
