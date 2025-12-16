@@ -12,7 +12,6 @@ import heroVideo from "../assets/animated_hero.mp4";
 import logo from "../assets/logo.png";
 import floorPlanGemini from "../assets/floor_plan_gemini.png";
 import qrCodeImage from "../assets/qr-code.png";
-import teamPhotoImage from "../assets/IMG_2464.jpg";
 import fireImage from "../assets/fires.png";
 import { teamMembers } from "../assets/team/teamMembers";
 import "../styles/hero.css";
@@ -817,11 +816,6 @@ export function DemoPage() {
     setDraggingLabel(null);
   };
 
-  const resetLabelPositions = () => {
-    setAutoLabels(DEFAULT_AUTO_LABELS);
-    localStorage.removeItem("demo-auto-labels");
-  };
-
   // Full-screen Plan Annotations with professional toolbar
   const renderAnnotatePlanContent = () => (
     <div className="fixed inset-0 bg-truecost-bg-primary flex flex-col">
@@ -1241,115 +1235,6 @@ export function DemoPage() {
               </svg>
               <span className="text-truecost-text-primary font-medium">Mobile App</span>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Keep for backwards compatibility but no longer used
-  const renderAnnotateChatContent = () => (
-    <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
-      <div className="flex-1 max-w-4xl mx-auto w-full">
-        <div className="glass-panel p-6 h-full flex flex-col" style={{ minHeight: "calc(100vh - 200px)" }}>
-          <h2 className="text-xl font-semibold text-truecost-text-primary mb-2">AI Clarification Chat</h2>
-          <p className="text-truecost-text-secondary mb-4">
-            The AI assistant asks clarifying questions to ensure accurate estimates:
-          </p>
-
-          {/* Chat messages with scroller */}
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2" style={{ maxHeight: "calc(100vh - 350px)" }}>
-            <div className="flex gap-3">
-              <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
-                AI
-              </div>
-              <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
-                I've analyzed the floor plan. The bathroom is approximately 85 sq ft. I see a separate shower cabin and
-                bathtub with a knee wall between them. Can you confirm the ceiling height for the recessed lighting?
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end">
-              <div className="flex-1 max-w-[80%] p-4 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary">
-                The ceiling height is 9 feet. We want 6 recessed lights total, evenly distributed.
-              </div>
-              <div className="w-10 h-10 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-sm flex-shrink-0">
-                U
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
-                AI
-              </div>
-              <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
-                Perfect. For the large format tiles on the shower walls, what size are you planning? Standard options are
-                24x48 or 12x24 porcelain.
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end">
-              <div className="flex-1 max-w-[80%] p-4 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary">
-                24x48 porcelain tiles for a modern look. Grey/neutral color.
-              </div>
-              <div className="w-10 h-10 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-sm flex-shrink-0">
-                U
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
-                AI
-              </div>
-              <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
-                The knee wall between the shower and bathtub - should this be rebuilt to the same height, or do you want
-                modifications? Also, what finish for the shower head assembly?
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end">
-              <div className="flex-1 max-w-[80%] p-4 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary">
-                Same height, about 4 feet. Chrome finish for all fixtures.
-              </div>
-              <div className="w-10 h-10 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-sm flex-shrink-0">
-                U
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
-                AI
-              </div>
-              <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
-                Great! One more question - do you have an existing permit or will you need one pulled? Cary, NC
-                typically requires permits for bathroom remodels involving plumbing and electrical changes.
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end">
-              <div className="flex-1 max-w-[80%] p-4 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary">
-                We'll need to pull a permit. Please include that in the estimate.
-              </div>
-              <div className="w-10 h-10 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-sm flex-shrink-0">
-                U
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="w-10 h-10 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-sm flex-shrink-0">
-                AI
-              </div>
-              <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary border border-green-500/30">
-                <span className="text-green-400 font-medium">All clarifications complete!</span><br /><br />
-                I have all the information needed to generate your estimate. The system will now run through our
-                multi-agent pipeline to create a comprehensive, accurate estimate.
-              </div>
-            </div>
-          </div>
-
-          {/* Input area (disabled for demo) */}
-          <div className="mt-4 flex gap-2">
-            <input
-              type="text"
-              placeholder="Type a message..."
-              disabled
-              className="flex-1 p-3 bg-truecost-glass-bg rounded-lg border border-truecost-glass-border text-truecost-text-primary placeholder-truecost-text-muted"
-            />
-            <button disabled className="px-6 py-3 bg-truecost-glass-border text-truecost-text-muted rounded-lg">
-              Send
-            </button>
           </div>
         </div>
       </div>
@@ -1787,17 +1672,6 @@ export function DemoPage() {
     </div>
   );
 
-  // Team Photo slide
-  const renderTeamPhoto = () => (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-truecost-bg-primary p-8">
-      <img
-        src={teamPhotoImage}
-        alt="TrueCost Team"
-        className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-      />
-    </div>
-  );
-
   // Estimate Accuracy with full detail panels
   const renderAccuracyComparison = () => {
     const { manualEstimate, trueCostEstimate, actualCost } = ACCURACY_COMPARISON;
@@ -2221,7 +2095,10 @@ export function DemoPage() {
             Contact <span className="text-truecost-cyan">us</span>
           </h2>
 
-          {/* Large Centered QR Code */}
+          {/* URL and Large Centered QR Code */}
+          <p className="text-2xl md:text-3xl font-semibold text-truecost-cyan mb-6">
+            https://www.gettruecost.com/
+          </p>
           <div className="flex justify-center mb-4">
             <div className="w-72 h-72 md:w-[28rem] md:h-[28rem] lg:w-[34rem] lg:h-[34rem] bg-white rounded-2xl p-6 shadow-xl">
               <img src={qrCodeImage} alt="QR Code" className="w-full h-full object-contain" />

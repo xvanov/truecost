@@ -678,7 +678,9 @@ function generateClientPDF(): jsPDF {
 
   doc.setFontSize(10);
   doc.setTextColor(128);
-  doc.text('Prepared: December 16, 2025', pageWidth / 2, 200, { align: 'center' });
+  const now = new Date();
+  const preparedDate = `Prepared: ${now.toLocaleString('en-US', { month: 'long' })} ${now.getDate()}, ${now.getFullYear()}`;
+  doc.text(preparedDate, pageWidth / 2, 200, { align: 'center' });
 
   doc.setFontSize(8);
   doc.text('Confidential - Prepared for Client', margin, pageHeight - 10);
