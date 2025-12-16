@@ -38,6 +38,35 @@ logger = structlog.get_logger()
 
 
 # =============================================================================
+# LABOR HOUR SANITY LIMITS BY PROJECT TYPE
+# =============================================================================
+# These are reasonable maximum labor hours for different project types
+# Used for logging warnings, not hard caps (to help identify data issues)
+
+MAX_LABOR_HOURS_BY_PROJECT_TYPE = {
+    "bathroom_remodel": 200,      # Typical: 40-100 hours
+    "kitchen_remodel": 500,       # Typical: 150-350 hours
+    "bedroom_remodel": 150,       # Typical: 30-80 hours
+    "living_room_remodel": 200,   # Typical: 50-120 hours
+    "basement_finish": 800,       # Typical: 200-500 hours
+    "whole_house_remodel": 2000,  # Typical: 500-1500 hours
+    "addition": 1500,             # Typical: 400-1000 hours
+    "default": 500,               # Fallback
+}
+
+# Maximum reasonable labor hours per unit by unit type
+MAX_HOURS_PER_UNIT = {
+    "SF": 0.5,      # Half hour per square foot is very high (e.g., complex tile work)
+    "LF": 0.5,      # Half hour per linear foot
+    "EA": 16.0,     # 16 hours per item (e.g., complex fixture installation)
+    "SY": 4.5,      # Per square yard (9 SF)
+    "allowance": 40.0,  # Allowance items can be larger
+    "day": 8.0,     # One workday
+    "default": 2.0,  # Fallback
+}
+
+
+# =============================================================================
 # SYSTEM PROMPT
 # =============================================================================
 
@@ -559,9 +588,59 @@ Determine the complexity level and project type."""
                 line_items=line_item_costs
             )
             div_cost.calculate_subtotals()
-            
+
+            # Log division summary
+            logger.info(
+                "division_cost_calculated",
+                division_code=div_code,
+                division_name=div_name,
+                item_count=len(line_item_costs),
+                labor_hours=round(div_cost.labor_hours_subtotal, 2),
+                material_cost_medium=round(div_cost.material_subtotal.medium, 2),
+                labor_cost_medium=round(div_cost.labor_subtotal.medium, 2)
+            )
+
             division_costs.append(div_cost)
-        
+
+        # Calculate totals and log summary
+        total_labor_hours = sum(d.labor_hours_subtotal for d in division_costs)
+        total_material_cost = sum(d.material_subtotal.medium for d in division_costs)
+
+        # Get project type for sanity check
+        project_type = scope_output.get("projectType", "default")
+        max_hours = MAX_LABOR_HOURS_BY_PROJECT_TYPE.get(project_type, MAX_LABOR_HOURS_BY_PROJECT_TYPE["default"])
+
+        # Log comprehensive summary
+        logger.info(
+            "═" * 60 + " LABOR HOURS SUMMARY " + "═" * 60,
+            project_type=project_type,
+            total_labor_hours=round(total_labor_hours, 2),
+            max_expected_hours=max_hours,
+            total_material_cost=round(total_material_cost, 2),
+            total_items=total_items,
+            exact_matches=exact_matches
+        )
+
+        # Log by division
+        for div_cost in division_costs:
+            if div_cost.labor_hours_subtotal > 0:
+                logger.info(
+                    f"  Division {div_cost.division_code}: {div_cost.division_name}",
+                    labor_hours=round(div_cost.labor_hours_subtotal, 2),
+                    item_count=len(div_cost.line_items)
+                )
+
+        # SANITY CHECK: Warn if total hours exceed expected maximum
+        if total_labor_hours > max_hours:
+            logger.warning(
+                "⚠️ LABOR HOURS EXCEED EXPECTED MAXIMUM",
+                project_type=project_type,
+                total_labor_hours=round(total_labor_hours, 2),
+                max_expected_hours=max_hours,
+                ratio=round(total_labor_hours / max_hours, 2),
+                message=f"Labor hours ({total_labor_hours:.0f}) are {total_labor_hours/max_hours:.1f}x the expected max ({max_hours}) for {project_type}. Check quantities in scope!"
+            )
+
         return division_costs, total_items, exact_matches
 
     def _build_granular_cost_items(
@@ -765,7 +844,7 @@ Determine the complexity level and project type."""
             # Get labor hours from productivity service
             # Extract division code from cost_code (first 2 digits) or use default
             division_code = cost_code[:2] if cost_code and len(cost_code) >= 2 else "09"
-            
+
             # Get labor hours with complexity and project type adjustments
             labor_data = self.labor_productivity.get_labor_hours(
                 division=division_code,
@@ -774,13 +853,58 @@ Determine the complexity level and project type."""
                 project_type=self._project_type,
                 use_crew_factor=True
             )
-            
-            # Use productivity service hours, fall back to material data or default
-            unit_labor_hours = material_data.get("labor_hours_per_unit")
-            if unit_labor_hours is None or unit_labor_hours == 0.5:
-                # Replace default 0.5 with researched value
-                unit_labor_hours = labor_data["base_hours_per_unit"]
-            
+
+            # Always use the labor productivity service for labor hours
+            # The researched values are more accurate than the generic defaults
+            # from the cost data service (which can be 1.0-2.0 hrs/unit regardless of unit type)
+            unit_labor_hours = labor_data["base_hours_per_unit"]
+
+            # Calculate total labor hours for this item
+            total_labor_hours = unit_labor_hours * quantity
+
+            # SANITY CHECK: Validate labor hours per unit against reasonable limits
+            unit_upper = unit.upper()
+            max_hours_per_unit = MAX_HOURS_PER_UNIT.get(unit_upper, MAX_HOURS_PER_UNIT["default"])
+
+            if unit_labor_hours > max_hours_per_unit:
+                logger.warning(
+                    "⚠️ HIGH LABOR HOURS PER UNIT",
+                    line_item_id=line_item_id,
+                    description=description[:50],
+                    unit=unit,
+                    unit_labor_hours=round(unit_labor_hours, 4),
+                    max_expected=max_hours_per_unit,
+                    division=division_code,
+                    message=f"Labor rate {unit_labor_hours:.3f} hrs/{unit} exceeds expected max {max_hours_per_unit} hrs/{unit}"
+                )
+
+            # SANITY CHECK: Warn if single item has excessive total hours
+            if total_labor_hours > 100:
+                logger.warning(
+                    "⚠️ HIGH TOTAL LABOR HOURS FOR SINGLE ITEM",
+                    line_item_id=line_item_id,
+                    description=description[:50],
+                    quantity=quantity,
+                    unit=unit,
+                    unit_labor_hours=round(unit_labor_hours, 4),
+                    total_labor_hours=round(total_labor_hours, 2),
+                    message=f"Item '{description[:30]}' has {total_labor_hours:.1f} hours ({quantity} {unit} × {unit_labor_hours:.3f} hrs/{unit})"
+                )
+
+            # Log each line item calculation for debugging
+            logger.debug(
+                "line_item_labor_calc",
+                line_item_id=line_item_id,
+                description=description[:40],
+                quantity=quantity,
+                unit=unit,
+                division=division_code,
+                unit_labor_hours=round(unit_labor_hours, 4),
+                total_labor_hours=round(total_labor_hours, 2),
+                trade=labor_data["trade"],
+                complexity=self._project_complexity.value
+            )
+
             # Add labor productivity notes
             labor_notes = f"Labor: {labor_data['trade']} crew ({labor_data['crew']['description']}), complexity: {self._project_complexity.value}"
             if notes:

@@ -195,9 +195,14 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
                 status=400
             )
         
-        # Validate ClarificationOutput schema
+        # Validate ClarificationOutput schema (lenient mode by default)
         validation_result = validate_clarification_output(clarification_output)
         if not validation_result.is_valid:
+            logger.warning(
+                "clarification_output_validation_failed",
+                errors=validation_result.errors,
+                keys_received=list(clarification_output.keys()) if isinstance(clarification_output, dict) else "not_a_dict"
+            )
             return _json_response(
                 error_response(
                     ErrorCode.VALIDATION_ERROR,
@@ -206,9 +211,12 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
                 ),
                 status=400
             )
-        
+
+        # Use raw_data if parsed model is not available (lenient mode)
+        effective_clarification = validation_result.raw_data or clarification_output
+
         # Generate estimate ID or use provided one
-        estimate_id = clarification_output.get("estimateId") or f"est-{uuid4().hex[:12]}"
+        estimate_id = effective_clarification.get("estimateId") or f"est-{uuid4().hex[:12]}"
         
         logger.info(
             "pipeline_request_received",
@@ -222,7 +230,7 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
             estimate_id=estimate_id,
             user_id=user_id,
             project_id=project_id,
-            clarification_output=clarification_output
+            clarification_output=effective_clarification
         ))
         
         return _json_response(success_response(result))
