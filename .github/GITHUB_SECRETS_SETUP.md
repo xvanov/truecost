@@ -1,5 +1,8 @@
 # GitHub Secrets Setup for CollabCanvas Deployment
 
+> **Note**: This document covers **GitHub Secrets** for CI/CD builds (frontend `VITE_*` variables).
+> For **Firebase Secrets** (API keys for Cloud Functions like `OPENAI_API_KEY`), see [collabcanvas/docs/firebase-configuration.md](../collabcanvas/docs/firebase-configuration.md).
+
 ## Problem Solved
 
 The GitHub Actions deployment was failing because the build process didn't have access to Firebase environment variables, resulting in a blank page after deployment.

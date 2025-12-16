@@ -744,18 +744,25 @@ def build_bls_series_id(msa_code: str, soc_code: str) -> str:
     """
     Build a BLS OES series ID for a given MSA and SOC code.
 
-    BLS OES series IDs follow the pattern: OEUM00{MSA}000000{SOC}03
-    - OEUM = OES (Occupational Employment Statistics) Metro survey
-    - 00 = Prefix padding (required)
-    - {MSA} = 5-digit MSA code (e.g., 31080 for LA)
-    - 000000 = Industry code (all industries)
-    - {SOC} = SOC code without hyphen (e.g., 472111 for 47-2111)
-    - 03 = Data type (hourly mean wage)
+    BLS OES series IDs follow the pattern: OEUM00{MSA}000000{SOC}03 (25 chars)
+
+    Example: OEUM003108000000047211103 for LA Electricians
+             ││││││    │     │      └─ 03 = Data type (hourly mean wage)
+             ││││││    │     └──────── 472111 = SOC code (47-2111 Electrician)
+             ││││││    └────────────── 000000 = Industry (all industries)
+             ││││└┴─────────────────── 31080 = MSA code (LA metro)
+             ││└┴───────────────────── 00 = Area type prefix (required)
+             └┴─────────────────────── OEUM = OES Metro survey
+
+    Test with curl:
+        curl -s -X POST 'https://api.bls.gov/publicAPI/v2/timeseries/data/' \\
+          -H 'Content-Type: application/json' \\
+          -d '{"seriesid":["OEUM003108000000047211103"],"startyear":"2023","endyear":"2024"}'
 
     Example: OEUM003108000000047211103 for LA electricians
 
     Args:
-        msa_code: 5-digit MSA code
+        msa_code: 5-digit MSA code (e.g., "31080" for LA)
         soc_code: SOC code with hyphen (e.g., "47-2111")
 
     Returns:

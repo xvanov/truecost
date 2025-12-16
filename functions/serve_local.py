@@ -7,15 +7,24 @@ This server mimics the Firebase Functions emulator endpoints.
 Usage:
     cd functions
     source venv/bin/activate
+    export OPENAI_API_KEY='sk-proj-...'  # Required for LLM operations
     python serve_local.py
 
-This will start a Flask server on port 8080 that handles:
+This will start a Flask server on port 5003 that handles:
 - POST /start_deep_pipeline -> start_deep_pipeline function
 - POST /get_pipeline_status -> get_pipeline_status function
 - POST /delete_estimate -> delete_estimate function
 - POST /a2a_* -> Agent-to-Agent endpoints
 
 The TypeScript orchestrator will call these endpoints when PYTHON_FUNCTIONS_URL is set.
+
+SECRETS:
+    Secrets are NOT stored in .env files. Set them as environment variables:
+        export OPENAI_API_KEY='sk-proj-...'
+        export SERP_API_KEY='...'
+        export BLS_API_KEY='...'
+
+    In production, secrets are loaded from Firebase Secrets Manager automatically.
 """
 
 import os
@@ -25,6 +34,21 @@ import sys
 os.environ.setdefault('FUNCTIONS_EMULATOR', 'true')
 os.environ.setdefault('GCLOUD_PROJECT', 'collabcanvas-dev')
 os.environ.setdefault('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8081')
+
+# Check for required secrets and warn if missing
+_missing_secrets = []
+if not os.environ.get('OPENAI_API_KEY'):
+    _missing_secrets.append('OPENAI_API_KEY')
+
+if _missing_secrets:
+    print("\n" + "=" * 60)
+    print("WARNING: Missing required secrets for local development!")
+    print("=" * 60)
+    for secret in _missing_secrets:
+        print(f"  - {secret}")
+    print("\nSet them before running:")
+    print("  export OPENAI_API_KEY='sk-proj-...'")
+    print("=" * 60 + "\n")
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS

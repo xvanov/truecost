@@ -4,26 +4,9 @@ exports.comparePrices = exports.comparePricesConfig = exports.parseMatchResult =
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
-const dotenv = require("dotenv");
-const path = require("path");
 const openai_1 = require("openai");
 // Global Materials Database imports
 const globalMaterials_1 = require("./globalMaterials");
-// Using cors: true to match other functions (aiCommand, materialEstimateCommand, sagemakerInvoke)
-// This supports Firebase preview channel URLs which have dynamic hostnames
-// Load environment variables - try multiple locations
-// Load .env.local first (higher priority), then .env as fallback
-dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
-dotenv.config();
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-// Log environment variable loading status
-if (process.env.NODE_ENV !== 'production') {
-    console.log('[PRICE_COMPARISON] Environment check:');
-    console.log('[PRICE_COMPARISON] - SERP_API_KEY:', process.env.SERP_API_KEY ? 'SET' : 'NOT SET');
-    console.log('[PRICE_COMPARISON] - OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET');
-}
 // Lazy-initialized Firestore instance
 let _db = null;
 function initFirebaseAdmin() {

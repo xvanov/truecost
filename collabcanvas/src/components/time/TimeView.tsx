@@ -486,13 +486,61 @@ function TaskListView({
     setLocalDeps([...task.dependencies]); // Copy current deps to local state
   };
 
+  // Check if adding depId as dependency of taskId would create a cycle
+  // Uses BFS to traverse from depId following dependencies to see if we can reach taskId
+  const wouldCreateCycle = (taskId: string, depId: string, proposedDeps: string[]): boolean => {
+    // Build a dependency map with the proposed change applied
+    const depsMap = new Map<string, string[]>();
+    tasks.forEach(t => {
+      if (t.id === taskId) {
+        // Use proposed deps for the task being edited
+        depsMap.set(t.id, proposedDeps);
+      } else {
+        depsMap.set(t.id, t.dependencies);
+      }
+    });
+
+    // BFS from depId to see if we can reach taskId
+    const visited = new Set<string>();
+    const queue = [depId];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (current === taskId) {
+        return true; // Found a path back to taskId - cycle detected
+      }
+      if (visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+
+      const currentDeps = depsMap.get(current) || [];
+      for (const dep of currentDeps) {
+        if (!visited.has(dep)) {
+          queue.push(dep);
+        }
+      }
+    }
+
+    return false;
+  };
+
   const handleToggleDependency = (depId: string) => {
     // Only update local state - don't trigger parent update yet
-    setLocalDeps(prev =>
-      prev.includes(depId)
-        ? prev.filter(d => d !== depId)
-        : [...prev, depId]
-    );
+    setLocalDeps(prev => {
+      if (prev.includes(depId)) {
+        // Removing dependency - always allowed
+        return prev.filter(d => d !== depId);
+      } else {
+        // Adding dependency - check for cycles first
+        const proposedDeps = [...prev, depId];
+        if (editingDepsId && wouldCreateCycle(editingDepsId, depId, proposedDeps)) {
+          console.warn(`Cannot add dependency: ${depId} -> ${editingDepsId} would create a cycle`);
+          return prev; // Don't add the dependency
+        }
+        return proposedDeps;
+      }
+    });
   };
 
   const handleSaveDeps = () => {

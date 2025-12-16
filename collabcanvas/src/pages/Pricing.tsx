@@ -11,24 +11,24 @@ export function Pricing() {
 
   const plans = [
     {
-      name: 'Starter',
+      name: 'Trial',
       monthlyPrice: 'Free',
       yearlyPrice: 'Free',
       period: '',
-      description: 'Perfect for trying out TrueCost',
+      description: 'Try TrueCost with full capabilities',
       features: [
-        'Up to 3 projects',
-        'Basic cost estimates',
-        'Standard support',
+        '1 trial project',
+        'Full AI analysis',
+        'Detailed CSI breakdown',
         'Export to PDF',
       ],
-      cta: 'Get Started',
+      cta: 'Start Trial',
       highlighted: false,
     },
     {
       name: 'Professional',
-      monthlyPrice: '$99',
-      yearlyPrice: '$79',
+      monthlyPrice: '$399',
+      yearlyPrice: '$319',
       period: isYearly ? '/month' : '/month',
       description: 'For contractors and small teams',
       features: [
@@ -160,7 +160,7 @@ export function Pricing() {
                     </div>
                     {showYearlySavings && (
                       <p className="text-green-400 text-sm mt-2">
-                        Billed annually (${79 * 12}/year)
+                        Billed annually (${319 * 12}/year)
                       </p>
                     )}
                   </div>

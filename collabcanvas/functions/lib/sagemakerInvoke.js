@@ -6,20 +6,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sagemakerInvoke = void 0;
 const https_1 = require("firebase-functions/v2/https");
+const params_1 = require("firebase-functions/params");
 const admin = require("firebase-admin");
-const dotenv = require("dotenv");
-const path = require("path");
-// Lazy initialization to avoid timeout during module load
-let _initialized = false;
-function initializeEnv() {
-    if (_initialized)
+// Define secrets for Firebase Functions v2
+const awsAccessKeyIdSecret = (0, params_1.defineSecret)('AWS_ACCESS_KEY_ID');
+const awsSecretAccessKeySecret = (0, params_1.defineSecret)('AWS_SECRET_ACCESS_KEY');
+const sagemakerEndpointNameSecret = (0, params_1.defineSecret)('SAGEMAKER_ENDPOINT_NAME');
+const awsRegionSecret = (0, params_1.defineSecret)('AWS_REGION');
+// Lazy initialization for admin
+let _adminInitialized = false;
+function initializeAdmin() {
+    if (_adminInitialized)
         return;
-    _initialized = true;
-    // Load environment variables
-    dotenv.config();
-    dotenv.config({ path: path.resolve(__dirname, '../.env') });
-    dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-    // Initialize admin if not already
+    _adminInitialized = true;
     try {
         admin.app();
     }
@@ -27,15 +26,10 @@ function initializeEnv() {
         admin.initializeApp();
     }
 }
-// Configuration - static values only (env vars are read lazily after initializeEnv)
+// Configuration
 const TIMEOUT_SECONDS = 60;
-// Lazy getters for environment-dependent config (must be called after initializeEnv)
-function getEndpointName() {
-    return process.env.SAGEMAKER_ENDPOINT_NAME || 'locatrix-blueprint-endpoint';
-}
-function getAwsRegion() {
-    return process.env.AWS_REGION || 'us-east-2';
-}
+const DEFAULT_ENDPOINT_NAME = 'locatrix-blueprint-endpoint-dev';
+const DEFAULT_AWS_REGION = 'us-east-2';
 /**
  * Sleep utility for retry delays
  */
@@ -45,24 +39,20 @@ function sleep(ms) {
 /**
  * Invoke SageMaker endpoint with retry logic and exponential backoff
  */
-async function invokeSageMakerEndpoint(imageData, attempt = 1, maxAttempts = 3) {
-    initializeEnv();
-    // Check if AWS credentials are configured
-    const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
-    const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-    if (!awsAccessKeyId || !awsSecretAccessKey) {
-        throw new Error('AWS credentials are not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.');
+async function invokeSageMakerEndpoint(imageData, credentials, attempt = 1, maxAttempts = 3) {
+    initializeAdmin();
+    const { accessKeyId, secretAccessKey, endpointName, region } = credentials;
+    if (!accessKeyId || !secretAccessKey) {
+        throw new Error('AWS credentials are not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets.');
     }
     // Use AWS SDK for JavaScript (Node.js)
-    // Note: aws-sdk v2 is used here. For v3, use @aws-sdk/client-sagemaker-runtime
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const AWS = require('aws-sdk');
-    const endpointName = getEndpointName();
-    const awsRegion = getAwsRegion();
+    const awsRegion = region || DEFAULT_AWS_REGION;
     const sagemakerRuntime = new AWS.SageMakerRuntime({
         region: awsRegion,
-        accessKeyId: awsAccessKeyId,
-        secretAccessKey: awsSecretAccessKey,
+        accessKeyId: accessKeyId,
+        secretAccessKey: secretAccessKey,
         httpOptions: {
             timeout: TIMEOUT_SECONDS * 1000,
         },
@@ -111,7 +101,7 @@ async function invokeSageMakerEndpoint(imageData, attempt = 1, maxAttempts = 3) 
                 const delay = Math.pow(2, attempt - 1) * 1000; // Exponential backoff: 1s, 2s, 4s
                 console.log(`[SAGEMAKER] Timeout error, retrying after ${delay}ms...`);
                 await sleep(delay);
-                return invokeSageMakerEndpoint(imageData, attempt + 1, maxAttempts);
+                return invokeSageMakerEndpoint(imageData, credentials, attempt + 1, maxAttempts);
             }
             throw new Error(`Request timed out after ${TIMEOUT_SECONDS} seconds. The endpoint may be taking longer than expected.`);
         }
@@ -123,7 +113,7 @@ async function invokeSageMakerEndpoint(imageData, attempt = 1, maxAttempts = 3) 
             const delay = Math.pow(2, attempt - 1) * 1000;
             console.log(`[SAGEMAKER] Transient error, retrying after ${delay}ms...`);
             await sleep(delay);
-            return invokeSageMakerEndpoint(imageData, attempt + 1, maxAttempts);
+            return invokeSageMakerEndpoint(imageData, credentials, attempt + 1, maxAttempts);
         }
         throw error;
     }
@@ -136,6 +126,7 @@ exports.sagemakerInvoke = (0, https_1.onCall)({
     timeoutSeconds: 90,
     memory: '512MiB',
     maxInstances: 10,
+    secrets: [awsAccessKeyIdSecret, awsSecretAccessKeySecret, sagemakerEndpointNameSecret, awsRegionSecret],
 }, async (request) => {
     try {
         const { imageData, projectId } = request.data;
@@ -145,7 +136,15 @@ exports.sagemakerInvoke = (0, https_1.onCall)({
         if (!projectId) {
             throw new https_1.HttpsError('invalid-argument', 'projectId is required');
         }
+        // Get credentials from secrets
+        const credentials = {
+            accessKeyId: awsAccessKeyIdSecret.value(),
+            secretAccessKey: awsSecretAccessKeySecret.value(),
+            endpointName: sagemakerEndpointNameSecret.value() || DEFAULT_ENDPOINT_NAME,
+            region: awsRegionSecret.value() || DEFAULT_AWS_REGION,
+        };
         console.log(`[SAGEMAKER] Processing annotation request for project: ${projectId}`);
+        console.log(`[SAGEMAKER] Using endpoint: ${credentials.endpointName} in region: ${credentials.region}`);
         console.log(`[SAGEMAKER] Image data length: ${imageData.length} characters`);
         // Validate base64 image data
         try {
@@ -158,7 +157,7 @@ exports.sagemakerInvoke = (0, https_1.onCall)({
             throw new https_1.HttpsError('invalid-argument', `Invalid image format: ${validationError instanceof Error ? validationError.message : String(validationError)}`);
         }
         // Invoke SageMaker endpoint
-        const detections = await invokeSageMakerEndpoint(imageData);
+        const detections = await invokeSageMakerEndpoint(imageData, credentials);
         return {
             success: true,
             detections,

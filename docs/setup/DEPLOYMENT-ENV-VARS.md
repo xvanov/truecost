@@ -2,9 +2,10 @@
 
 ## Overview
 
-You need to configure environment variables in **two places**:
-1. **Frontend** (Vite) - Set in `.env.production` file (baked into build)
-2. **Backend** (Cloud Functions) - Set in Firebase Console
+Environment configuration is split into two categories:
+
+1. **Frontend (Vite)** - Set in `.env.production` file (baked into build)
+2. **Backend Secrets (Cloud Functions)** - Stored in **Firebase Secrets Manager**
 
 ---
 
@@ -15,7 +16,7 @@ You need to configure environment variables in **two places**:
 Create or update `.env.production` with your Firebase config:
 
 ```bash
-# Production Firebase Configuration
+# Production Firebase Configuration (public config - safe to commit)
 VITE_FIREBASE_API_KEY=your-production-api-key
 VITE_FIREBASE_AUTH_DOMAIN=your-production-project.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=your-production-project-id
@@ -26,63 +27,61 @@ VITE_FIREBASE_DATABASE_URL=https://your-project-default-rtdb.firebaseio.com
 
 # IMPORTANT: Set to false for production
 VITE_USE_FIREBASE_EMULATORS=false
+
+# Google Maps (restricted API key - safe for frontend)
+VITE_GOOGLE_MAPS_API_KEY=your-google-maps-api-key
 ```
 
 ### How to Get Firebase Config Values:
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Select your project
-3. Click the gear icon ⚙️ → **Project Settings**
+3. Click the gear icon → **Project Settings**
 4. Scroll down to **"Your apps"** section
 5. Click on your web app (or create one if needed)
 6. Copy the config values from the `firebaseConfig` object
 
 ---
 
-## 2. Backend Environment Variables (Cloud Functions)
+## 2. Backend Secrets (Cloud Functions)
 
-### Location: Firebase Console → Functions → Configuration
+### Location: Firebase Secrets Manager (NOT .env files)
 
-You need to set these **secret environment variables** for Cloud Functions:
+All API keys and credentials for Cloud Functions are stored in Firebase Secrets Manager. This is the **single source of truth** for both Node.js and Python functions.
 
-#### Required Variables:
+### Required Secrets
 
-1. **SERP_API_KEY**
-   - Used by: `getHomeDepotPrice` function (pricing service)
-   - Get it from: [SerpAPI Dashboard](https://serpapi.com/dashboard)
-   - Purpose: Fetches Home Depot prices
+| Secret Name | Used By | How to Get |
+|-------------|---------|------------|
+| `OPENAI_API_KEY` | AI functions, estimation pipeline | [OpenAI Platform](https://platform.openai.com/api-keys) |
+| `SERP_API_KEY` | Pricing functions (Home Depot prices) | [SerpAPI Dashboard](https://serpapi.com/dashboard) |
+| `BLS_API_KEY` | Labor statistics data | [BLS API Registration](https://data.bls.gov/registrationEngine/) |
+| `AWS_ACCESS_KEY_ID` | SageMaker integration | AWS Console |
+| `AWS_SECRET_ACCESS_KEY` | SageMaker integration | AWS Console |
 
-2. **OPENAI_API_KEY**
-   - Used by: `aiCommand` and `materialEstimateCommand` functions
-   - Get it from: [OpenAI Platform](https://platform.openai.com/api-keys)
-   - Purpose: AI command processing and material estimation
-
-### How to Set Cloud Functions Environment Variables:
-
-#### Option A: Using Firebase Console (Recommended)
-
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Select your project
-3. Navigate to **Functions** → **Configuration** (or **Secrets** tab)
-4. Click **"Add secret"** or **"Add environment variable"**
-5. Add each variable:
-   - Name: `SERP_API_KEY`, Value: `your-serpapi-key`
-   - Name: `OPENAI_API_KEY`, Value: `your-openai-key`
-6. Click **Save**
-
-#### Option B: Using Firebase CLI
+### How to Set Secrets
 
 ```bash
-# Set secrets (recommended for sensitive keys)
-firebase functions:secrets:set SERP_API_KEY
+# Set a secret (you'll be prompted for the value)
 firebase functions:secrets:set OPENAI_API_KEY
+firebase functions:secrets:set SERP_API_KEY
+firebase functions:secrets:set BLS_API_KEY
 
-# Or set regular environment variables
-firebase functions:config:set serpapi.key="your-serpapi-key"
-firebase functions:config:set openai.key="your-openai-key"
+# View a secret value (be careful - logs to console!)
+firebase functions:secrets:access OPENAI_API_KEY
+
+# List all configured secrets
+firebase functions:secrets:list
+
+# Delete a secret
+firebase functions:secrets:destroy OPENAI_API_KEY
 ```
 
-**Note:** For Firebase Functions v2 (which you're using), secrets are preferred over config.
+### Important Notes
+
+- **Emulator mode**: Node.js functions pull secrets from Firebase Secrets Manager even in emulator mode
+- **Python functions**: For local development, set secrets as environment variables before running `serve_local.py`
+- **Never store secrets in .env files** - They should only contain non-secret configuration
 
 ---
 
@@ -92,26 +91,31 @@ firebase functions:config:set openai.key="your-openai-key"
 
 ```bash
 cd collabcanvas
-# Create .env.production file with Firebase config (see above)
+# Create/update .env.production file with Firebase config (see above)
 ```
 
-### Step 2: Set Backend Variables
+### Step 2: Set Backend Secrets
 
-Set in Firebase Console → Functions → Configuration (see above)
+```bash
+# Set all required secrets
+firebase functions:secrets:set OPENAI_API_KEY
+firebase functions:secrets:set SERP_API_KEY
+
+# Verify
+firebase functions:secrets:list
+```
 
 ### Step 3: Build and Deploy
 
 ```bash
 # Build frontend with production env vars
-npm run build:production
+npm run build
 
 # Deploy security rules
 firebase deploy --only firestore:rules,database:rules
 
-# Deploy Cloud Functions (with environment variables)
-cd functions
-npm run build
-cd ..
+# Deploy Cloud Functions (will use configured secrets)
+cd functions && npm run build && cd ..
 firebase deploy --only functions
 
 # Deploy frontend
@@ -131,10 +135,12 @@ firebase deploy --only hosting
 - [ ] `VITE_FIREBASE_MESSAGING_SENDER_ID`
 - [ ] `VITE_FIREBASE_APP_ID`
 - [ ] `VITE_USE_FIREBASE_EMULATORS=false`
+- [ ] `VITE_GOOGLE_MAPS_API_KEY`
 
-### Backend (Firebase Console):
-- [ ] `SERP_API_KEY` (for pricing)
-- [ ] `OPENAI_API_KEY` (for AI features)
+### Backend (Firebase Secrets Manager):
+- [ ] `OPENAI_API_KEY` - Run: `firebase functions:secrets:set OPENAI_API_KEY`
+- [ ] `SERP_API_KEY` - Run: `firebase functions:secrets:set SERP_API_KEY`
+- [ ] `BLS_API_KEY` (optional) - Run: `firebase functions:secrets:set BLS_API_KEY`
 
 ---
 
@@ -143,44 +149,63 @@ firebase deploy --only hosting
 After deployment, verify:
 
 1. **Frontend**: Check browser console - should see Firebase initialized (no emulator warnings)
-2. **Functions**: Check Functions logs in Firebase Console for:
-   - `[PRICING] SERP_API_KEY configured: YES`
-   - No OpenAI API key warnings
+2. **Functions**: Check Functions logs in Firebase Console for successful secret loading
+3. **Test API calls**: Verify AI and pricing features work correctly
 
 ---
 
 ## Troubleshooting
 
-### Functions can't access environment variables:
+### Functions can't access secrets
 
-- **For Firebase Functions v2**: Use **Secrets** instead of config
-- Go to Functions → Configuration → Secrets tab
-- Set secrets there, then redeploy functions
+```bash
+# Check if secrets are set
+firebase functions:secrets:list
 
-### Frontend shows wrong Firebase project:
+# If missing, set them
+firebase functions:secrets:set OPENAI_API_KEY
 
-- Check `.env.production` file exists
-- Verify `VITE_USE_FIREBASE_EMULATORS=false`
-- Rebuild: `npm run build:production`
+# Redeploy functions
+firebase deploy --only functions
+```
 
-### Pricing doesn't work:
+### 401 Unauthorized from OpenAI
 
-- Check Functions logs for SERP_API_KEY errors
-- Verify SERP_API_KEY is set in Firebase Console → Functions → Configuration
-- Redeploy functions after setting: `firebase deploy --only functions`
+The API key is invalid. Update it:
 
-### AI features don't work:
+```bash
+# Check current value
+firebase functions:secrets:access OPENAI_API_KEY
 
-- Check Functions logs for OPENAI_API_KEY errors
-- Verify OPENAI_API_KEY is set in Firebase Console → Functions → Configuration
-- Redeploy functions after setting: `firebase deploy --only functions`
+# If invalid, set new value
+firebase functions:secrets:set OPENAI_API_KEY
+```
+
+### Python functions can't find secrets
+
+For local development, set as environment variables:
+
+```bash
+export OPENAI_API_KEY='sk-proj-...'
+python serve_local.py
+```
 
 ---
 
 ## Security Notes
 
 - **Never commit** `.env.production` to git (should be in `.gitignore`)
-- **Never commit** API keys to version control
-- Use Firebase Secrets for sensitive keys (SERP_API_KEY, OPENAI_API_KEY)
-- Rotate keys if accidentally exposed
+- **Never store** API keys in `.env` files
+- **Use Firebase Secrets Manager** for all sensitive credentials
+- **Rotate keys** immediately if accidentally exposed
+- **`VITE_*` variables** are public - never use for secrets
 
+---
+
+## Further Documentation
+
+See [collabcanvas/docs/firebase-configuration.md](../../collabcanvas/docs/firebase-configuration.md) for comprehensive documentation on:
+- Architecture overview
+- Secrets management details
+- Local development setup
+- Troubleshooting guide
