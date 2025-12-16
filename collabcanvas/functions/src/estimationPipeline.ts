@@ -2,7 +2,7 @@
  * Estimation Pipeline Cloud Function
  * PRIMARY: Uses user annotations (polylines, polygons, bounding boxes) with scale for accurate measurements
  * SECONDARY: Uses OpenAI Vision only for inference/gap-filling when annotations are insufficient
- * 
+ *
  * ENHANCED v2.0:
  * - Comprehensive CSI coverage (all 24 divisions)
  * - Project-type-specific data extraction
@@ -14,8 +14,6 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { OpenAI } from 'openai';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import * as dotenv from 'dotenv';
-import * as path from 'path';
 import {
   computeQuantitiesFromAnnotations,
   buildSpaceModelFromQuantities,
@@ -27,29 +25,15 @@ import { runEnhancedInference, mergeInferenceIntoCSI } from './enhancedInference
 
 // Lazy initialization to avoid timeout during module load
 let _openai: OpenAI | null = null;
-let _apiKey: string | null = null;
-
-function getApiKey(): string {
-  if (_apiKey === null) {
-    // Load environment variables
-    const envPath = path.resolve(process.cwd(), '.env');
-    const envResult = dotenv.config({ path: envPath, override: true });
-
-    const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-    const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
-    const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-    _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-
-    if (!_apiKey) {
-      console.warn('⚠️ OPENAI_API_KEY not found. LLM inference will not work.');
-    }
-  }
-  return _apiKey;
-}
 
 function getOpenAI(): OpenAI {
   if (!_openai) {
-    _openai = new OpenAI({ apiKey: getApiKey() });
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error('[ESTIMATION_PIPELINE] OPENAI_API_KEY not configured');
+      throw new Error('OPENAI_API_KEY not configured');
+    }
+    _openai = new OpenAI({ apiKey });
   }
   return _openai;
 }
@@ -550,11 +534,10 @@ export const estimationPipeline = onCall({
     // ===================
     let inferenceResult = null;
     let spatialNarrative = '';
-    
+
     // Only use LLM if we have annotations but need inference for non-measured items
     if (quantities.hasScale && (quantities.totalWallLength > 0 || quantities.totalFloorArea > 0)) {
-      const apiKey = getApiKey();
-      if (apiKey) {
+      if (process.env.OPENAI_API_KEY) {
         console.log('[ESTIMATION] Running enhanced LLM inference for gap-filling...');
         const openai = getOpenAI();
         

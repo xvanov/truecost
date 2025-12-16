@@ -170,7 +170,9 @@ describe('ScopePage Component', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/Upload Plans/i)).toBeInTheDocument();
+    // The form has a "Construction Plan" label (with asterisk for required field)
+    expect(screen.getByText('Construction Plan *')).toBeInTheDocument();
+    // The upload zone shows drag-and-drop text
     expect(screen.getByText(/Drag and drop your files here/i)).toBeInTheDocument();
   });
 
