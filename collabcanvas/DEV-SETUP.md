@@ -114,5 +114,39 @@ If you get port conflicts:
 - **Terminal 1**: Press `Ctrl+C` to stop Firebase emulators
 - **Terminal 2**: Press `Ctrl+C` to stop Vite dev server
 
+## Secrets Management
+
+All API keys and credentials are stored in **Firebase Secrets Manager**, not in `.env` files.
+
+### For Node.js Functions (collabcanvas/functions/)
+
+Node.js functions automatically get secrets from Firebase Secrets Manager, even in emulator mode.
+
+### For Python Functions (gauntletai/functions/)
+
+Set secrets as environment variables before running `serve_local.py`:
+
+```bash
+cd gauntletai/functions
+source venv/bin/activate
+export OPENAI_API_KEY='sk-proj-...'  # Get via: firebase functions:secrets:access OPENAI_API_KEY
+python serve_local.py
+```
+
+### Managing Secrets
+
+```bash
+# Set a secret
+firebase functions:secrets:set OPENAI_API_KEY
+
+# View a secret
+firebase functions:secrets:access OPENAI_API_KEY
+
+# List all secrets
+firebase functions:secrets:list
+```
+
+See [docs/firebase-configuration.md](docs/firebase-configuration.md) for detailed documentation.
+
 
 

@@ -3,15 +3,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.materialEstimateCommand = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const openai_1 = require("openai");
-const dotenv = require("dotenv");
 // Lazy initialization to avoid timeout during module load
 let _openai = null;
 function getOpenAI() {
     if (!_openai) {
-        dotenv.config();
-        _openai = new openai_1.OpenAI({
-            apiKey: process.env.OPENAI_API_KEY || '',
-        });
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) {
+            console.error('[MATERIAL_ESTIMATE] OPENAI_API_KEY not configured');
+            throw new Error('OPENAI_API_KEY not configured');
+        }
+        _openai = new openai_1.OpenAI({ apiKey });
     }
     return _openai;
 }

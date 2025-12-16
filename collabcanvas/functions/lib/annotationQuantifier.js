@@ -384,6 +384,7 @@ function buildSpaceModelFromQuantities(quantities) {
     }));
     // Build openings array using COUNTS with standard USA sizes
     // Door and window quantities are COUNTS, not areas from bounding boxes
+    // Include required fields: inWall, position, connectsRooms for Pydantic schema validation
     const openings = [
         // Standard USA interior door: 32" x 80" (2.67' x 6.67')
         ...quantities.doors.map((door, index) => ({
@@ -391,6 +392,13 @@ function buildSpaceModelFromQuantities(quantities) {
             type: 'door',
             width: 2.67,
             height: 6.67,
+            inWall: walls.length > 0 ? walls[index % walls.length].id : `wall-inferred-${index}`,
+            connectsRooms: [],
+            position: {
+                distanceFromCorner: 0,
+                side: 'center',
+            },
+            swing: 'in',
             standardSize: '32" x 80"',
             confidence: door.confidence,
             note: `Door ${index + 1} of ${quantities.doors.length} (standard USA size applied)`,
@@ -401,6 +409,12 @@ function buildSpaceModelFromQuantities(quantities) {
             type: 'window',
             width: 3.0,
             height: 4.0,
+            inWall: walls.length > 0 ? walls[index % walls.length].id : `wall-inferred-${index}`,
+            connectsRooms: [],
+            position: {
+                distanceFromCorner: 0,
+                side: 'center',
+            },
             standardSize: '36" x 48"',
             confidence: window.confidence,
             note: `Window ${index + 1} of ${quantities.windows.length} (standard USA size applied)`,
