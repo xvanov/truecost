@@ -3,58 +3,58 @@
     {
       "trade": "electrician",
       "region": "northeast",
-      "base_rate": 85.00,
+      "base_rate": 65.00,
       "benefits_burden": 0.35,
-      "total_rate": 114.75
+      "total_rate": 87.75
     },
     {
       "trade": "electrician",
       "region": "midwest",
-      "base_rate": 70.00,
-      "benefits_burden": 0.35,
-      "total_rate": 94.50
-    },
-    {
-      "trade": "electrician",
-      "region": "south",
       "base_rate": 55.00,
       "benefits_burden": 0.35,
       "total_rate": 74.25
     },
     {
       "trade": "electrician",
-      "region": "west",
-      "base_rate": 75.00,
+      "region": "south",
+      "base_rate": 45.00,
       "benefits_burden": 0.35,
-      "total_rate": 101.25
+      "total_rate": 60.75
+    },
+    {
+      "trade": "electrician",
+      "region": "west",
+      "base_rate": 60.00,
+      "benefits_burden": 0.35,
+      "total_rate": 81.00
     },
     {
       "trade": "plumber",
       "region": "northeast",
-      "base_rate": 82.00,
+      "base_rate": 65.00,
       "benefits_burden": 0.35,
-      "total_rate": 110.70
+      "total_rate": 87.75
     },
     {
       "trade": "plumber",
       "region": "midwest",
-      "base_rate": 68.00,
+      "base_rate": 55.00,
       "benefits_burden": 0.35,
-      "total_rate": 91.80
+      "total_rate": 74.25
     },
     {
       "trade": "plumber",
       "region": "south",
-      "base_rate": 52.00,
+      "base_rate": 45.00,
       "benefits_burden": 0.35,
-      "total_rate": 70.20
+      "total_rate": 60.75
     },
     {
       "trade": "plumber",
       "region": "west",
-      "base_rate": 72.00,
+      "base_rate": 50.00,
       "benefits_burden": 0.35,
-      "total_rate": 97.20
+      "total_rate": 81.00
     },
     {
       "trade": "carpenter",
@@ -87,142 +87,135 @@
     {
       "trade": "hvac_tech",
       "region": "northeast",
-      "base_rate": 78.00,
+      "base_rate": 60.00,
       "benefits_burden": 0.35,
-      "total_rate": 105.30
+      "total_rate": 81.00
     },
     {
       "trade": "hvac_tech",
       "region": "midwest",
-      "base_rate": 65.00,
-      "benefits_burden": 0.35,
-      "total_rate": 87.75
-    },
-    {
-      "trade": "hvac_tech",
-      "region": "south",
-      "base_rate": 55.00,
-      "benefits_burden": 0.35,
-      "total_rate": 74.25
-    },
-    {
-      "trade": "hvac_tech",
-      "region": "west",
-      "base_rate": 70.00,
-      "benefits_burden": 0.35,
-      "total_rate": 94.50
-    },
-    {
-      "trade": "roofer",
-      "region": "northeast",
-      "base_rate": 55.00,
-      "benefits_burden": 0.35,
-      "total_rate": 74.25
-    },
-    {
-      "trade": "roofer",
-      "region": "midwest",
-      "base_rate": 48.00,
-      "benefits_burden": 0.35,
-      "total_rate": 64.80
-    },
-    {
-      "trade": "roofer",
-      "region": "south",
-      "base_rate": 42.00,
-      "benefits_burden": 0.35,
-      "total_rate": 56.70
-    },
-    {
-      "trade": "roofer",
-      "region": "west",
       "base_rate": 50.00,
       "benefits_burden": 0.35,
       "total_rate": 67.50
     },
     {
-      "trade": "painter",
+      "trade": "hvac_tech",
+      "region": "south",
+      "base_rate": 45.00,
+      "benefits_burden": 0.35,
+      "total_rate": 60.75
+    },
+    {
+      "trade": "hvac_tech",
+      "region": "west",
+      "base_rate": 55.00,
+      "benefits_burden": 0.35,
+      "total_rate": 74.25
+    },
+    {
+      "trade": "roofer",
       "region": "northeast",
-      "base_rate": 48.00,
+      "base_rate": 45.00,
       "benefits_burden": 0.35,
-      "total_rate": 64.80
+      "total_rate": 60.75
     },
     {
-      "trade": "painter",
+      "trade": "roofer",
       "region": "midwest",
-      "base_rate": 42.00,
+      "base_rate": 38.00,
       "benefits_burden": 0.35,
-      "total_rate": 56.70
+      "total_rate": 51.30
     },
     {
-      "trade": "painter",
+      "trade": "roofer",
       "region": "south",
       "base_rate": 38.00,
       "benefits_burden": 0.35,
       "total_rate": 51.30
     },
     {
+      "trade": "roofer",
+      "region": "west",
+      "base_rate": 45.00,
+      "benefits_burden": 0.35,
+      "total_rate": 60.75
+    },
+    {
       "trade": "painter",
-      "region": "west",
-      "base_rate": 45.00,
-      "benefits_burden": 0.35,
-      "total_rate": 60.75
-    },
-    {
-      "trade": "tile_setter",
       "region": "northeast",
-      "base_rate": 58.00,
+      "base_rate": 42.00,
       "benefits_burden": 0.35,
-      "total_rate": 78.30
+      "total_rate": 56.70
     },
     {
-      "trade": "tile_setter",
+      "trade": "painter",
       "region": "midwest",
-      "base_rate": 50.00,
+      "base_rate": 38.00,
       "benefits_burden": 0.35,
-      "total_rate": 67.50
+      "total_rate": 51.30
     },
     {
-      "trade": "tile_setter",
+      "trade": "painter",
       "region": "south",
-      "base_rate": 45.00,
-      "benefits_burden": 0.35,
-      "total_rate": 60.75
-    },
-    {
-      "trade": "tile_setter",
-      "region": "west",
-      "base_rate": 52.00,
-      "benefits_burden": 0.35,
-      "total_rate": 70.20
-    },
-    {
-      "trade": "general_labor",
-      "region": "northeast",
       "base_rate": 35.00,
       "benefits_burden": 0.35,
       "total_rate": 47.25
     },
     {
-      "trade": "general_labor",
+      "trade": "painter",
+      "region": "west",
+      "base_rate": 40.00,
+      "benefits_burden": 0.35,
+      "total_rate": 54.00
+    },
+    {
+      "trade": "tile_setter",
+      "region": "northeast",
+      "base_rate": 45.00,
+      "benefits_burden": 0.35,
+      "total_rate": 60.75
+    },
+    {
+      "trade": "tile_setter",
       "region": "midwest",
+      "base_rate": 42.00,
+      "benefits_burden": 0.35,
+      "total_rate": 56.70
+    },
+    {
+      "trade": "tile_setter",
+      "region": "south",
+      "base_rate": 40.00,
+      "benefits_burden": 0.35,
+      "total_rate": 54.00
+    },
+    {
+      "trade": "tile_setter",
+      "region": "west",
+      "base_rate": 40.00,
+      "benefits_burden": 0.35,
+      "total_rate": 54.00
+    },
+    {
+      "trade": "general_labor",
+      "region": "northeast",
       "base_rate": 30.00,
       "benefits_burden": 0.35,
       "total_rate": 40.50
     },
     {
       "trade": "general_labor",
-      "region": "south",
+      "region": "midwest",
       "base_rate": 28.00,
       "benefits_burden": 0.35,
       "total_rate": 37.80
     },
     {
       "trade": "general_labor",
-      "region": "west",
-      "base_rate": 32.00,
+      "region": "south",
+      "base_rate": 30.00,
       "benefits_burden": 0.35,
-      "total_rate": 43.20
+      "total_rate": 40.50
     }
   ]
 }

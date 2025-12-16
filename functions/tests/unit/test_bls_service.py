@@ -169,8 +169,8 @@ class TestBLSSeriesID:
     def test_build_series_id_format(self):
         """Test that series ID follows BLS OES format."""
         series_id = build_bls_series_id("35620", "47-2111")
-        # Format: OEUM{MSA}000000{SOC}03 where SOC has hyphen removed
-        assert series_id == "OEUM3562000000047211103"
+        # Format: OEUM00{MSA}000000{SOC}03 where SOC has hyphen removed
+        assert series_id == "OEUM003562000000047211103"
 
     def test_build_series_id_removes_hyphen(self):
         """Test that SOC code hyphen is removed."""
@@ -281,13 +281,13 @@ class TestBLSResponseParsing:
 
     def test_parse_successful_response(self):
         """Test parsing a successful BLS response."""
-        # Build correct series ID format: OEUM{MSA}000000{SOC}03
+        # Build correct series ID format: OEUM00{MSA}000000{SOC}03
         mock_response = {
             "status": "REQUEST_SUCCEEDED",
             "Results": {
                 "series": [
                     {
-                        "seriesID": "OEUM3562000000047211103",  # electrician (47-2111)
+                        "seriesID": "OEUM003562000000047211103",  # electrician (47-2111)
                         "data": [
                             {"year": "2024", "value": "87.50"}
                         ]

@@ -26,6 +26,13 @@ from models.cost_estimate import (
     CostConfidenceLevel,
 )
 from models.bill_of_quantities import TradeCategory
+from services.labor_productivity_service import (
+    LaborProductivityService,
+    get_labor_productivity_service,
+    Complexity,
+    ProjectType,
+    COMPLEXITY_INDICATORS,
+)
 
 logger = structlog.get_logger()
 
@@ -171,7 +178,8 @@ class CostAgent(BaseA2AAgent):
         firestore_service: Optional[FirestoreService] = None,
         llm_service: Optional[LLMService] = None,
         cost_data_service: Optional[CostDataService] = None,
-        serper_service: Optional[SerperService] = None
+        serper_service: Optional[SerperService] = None,
+        labor_productivity_service: Optional[LaborProductivityService] = None
     ):
         """Initialize CostAgent.
 
@@ -180,6 +188,7 @@ class CostAgent(BaseA2AAgent):
             llm_service: Optional LLM service instance.
             cost_data_service: Optional cost data service instance.
             serper_service: Optional Serper service instance for Google Shopping.
+            labor_productivity_service: Optional labor productivity service instance.
         """
         super().__init__(
             name="cost",
@@ -188,6 +197,11 @@ class CostAgent(BaseA2AAgent):
         )
         self.cost_data_service = cost_data_service or CostDataService()
         self.serper = serper_service or get_serper_service()
+        self.labor_productivity = labor_productivity_service or get_labor_productivity_service()
+        
+        # Project complexity (set during run)
+        self._project_complexity: Complexity = Complexity.MODERATE
+        self._project_type: ProjectType = ProjectType.REMODEL
     
     async def run(
         self,
@@ -241,6 +255,16 @@ class CostAgent(BaseA2AAgent):
             location_factor=location_factor,
             zip_code=zip_code,
             division_count=len(scope_output.get("divisions", []))
+        )
+        
+        # Step 1.5: Infer project complexity and type using LLM
+        await self._infer_project_complexity(clarification, scope_output)
+        
+        logger.info(
+            "cost_agent_complexity",
+            estimate_id=estimate_id,
+            complexity=self._project_complexity.value,
+            project_type=self._project_type.value
         )
         
         # Step 2: Calculate costs for each line item
@@ -334,6 +358,107 @@ class CostAgent(BaseA2AAgent):
         )
         
         return output
+    
+    async def _infer_project_complexity(
+        self,
+        clarification: Dict[str, Any],
+        scope_output: Dict[str, Any]
+    ) -> None:
+        """Infer project complexity and type using LLM analysis.
+        
+        Analyzes project description, scope, and conditions to determine:
+        - Complexity: SIMPLE, MODERATE, or COMPLEX
+        - Project Type: NEW_CONSTRUCTION, REMODEL, REPAIR, or ADDITION
+        
+        Sets self._project_complexity and self._project_type.
+        
+        Args:
+            clarification: Clarification output with project details.
+            scope_output: Scope agent output with BoQ.
+        """
+        # Build context from project data
+        project_brief = clarification.get("projectBrief", {}) if isinstance(clarification, dict) else {}
+        project_description = project_brief.get("description", "")
+        property_details = project_brief.get("propertyDetails", {})
+        year_built = property_details.get("yearBuilt", "")
+        project_scope = scope_output.get("scopeSummary", "")
+        
+        # Build description for analysis
+        context_parts = []
+        if project_description:
+            context_parts.append(f"Project: {project_description}")
+        if year_built:
+            context_parts.append(f"Year built: {year_built}")
+        if project_scope:
+            context_parts.append(f"Scope: {project_scope}")
+        
+        context = "\n".join(context_parts) if context_parts else "Standard residential remodel"
+        
+        # Quick keyword-based inference first (fallback if LLM fails)
+        self._project_type = self.labor_productivity.infer_project_type(context)
+        self._project_complexity = self.labor_productivity.infer_complexity(context)
+        
+        # Try LLM for more accurate inference
+        try:
+            system_prompt = """You are an expert construction estimator. Analyze the project and determine:
+1. Complexity level: "simple", "moderate", or "complex"
+2. Project type: "new_construction", "remodel", "repair", or "addition"
+
+Complexity Guidelines:
+- SIMPLE: Cosmetic updates, easy access, newer home (post-2000), no structural changes
+- MODERATE: Typical remodel, some layout changes, standard conditions
+- COMPLEX: Old home (pre-1970), structural changes, difficult access, custom work, code upgrades needed
+
+Respond with JSON only: {"complexity": "...", "project_type": "...", "reasoning": "..."}"""
+
+            user_message = f"""Analyze this project:
+
+{context}
+
+Determine the complexity level and project type."""
+
+            result = await self.llm.generate_json(
+                system_prompt=system_prompt,
+                user_message=user_message
+            )
+            
+            if result and result.get("content"):
+                llm_result = result["content"]
+                
+                # Parse complexity
+                complexity_str = llm_result.get("complexity", "moderate").lower()
+                if complexity_str == "simple":
+                    self._project_complexity = Complexity.SIMPLE
+                elif complexity_str == "complex":
+                    self._project_complexity = Complexity.COMPLEX
+                else:
+                    self._project_complexity = Complexity.MODERATE
+                
+                # Parse project type
+                type_str = llm_result.get("project_type", "remodel").lower()
+                if type_str == "new_construction":
+                    self._project_type = ProjectType.NEW_CONSTRUCTION
+                elif type_str == "repair":
+                    self._project_type = ProjectType.REPAIR
+                elif type_str == "addition":
+                    self._project_type = ProjectType.ADDITION
+                else:
+                    self._project_type = ProjectType.REMODEL
+                
+                logger.info(
+                    "complexity_inferred_by_llm",
+                    complexity=self._project_complexity.value,
+                    project_type=self._project_type.value,
+                    reasoning=llm_result.get("reasoning", "")[:100]
+                )
+                
+        except Exception as e:
+            logger.warning(
+                "complexity_inference_fallback",
+                error=str(e),
+                using_complexity=self._project_complexity.value,
+                using_project_type=self._project_type.value
+            )
     
     async def _calculate_division_costs(
         self,
@@ -637,6 +762,32 @@ class CostAgent(BaseA2AAgent):
                 product_title = material_data.get("product_title", "")
                 notes = f"Price from {retailer}: {product_title}"
 
+            # Get labor hours from productivity service
+            # Extract division code from cost_code (first 2 digits) or use default
+            division_code = cost_code[:2] if cost_code and len(cost_code) >= 2 else "09"
+            
+            # Get labor hours with complexity and project type adjustments
+            labor_data = self.labor_productivity.get_labor_hours(
+                division=division_code,
+                quantity=1.0,  # Get per-unit hours
+                complexity=self._project_complexity,
+                project_type=self._project_type,
+                use_crew_factor=True
+            )
+            
+            # Use productivity service hours, fall back to material data or default
+            unit_labor_hours = material_data.get("labor_hours_per_unit")
+            if unit_labor_hours is None or unit_labor_hours == 0.5:
+                # Replace default 0.5 with researched value
+                unit_labor_hours = labor_data["base_hours_per_unit"]
+            
+            # Add labor productivity notes
+            labor_notes = f"Labor: {labor_data['trade']} crew ({labor_data['crew']['description']}), complexity: {self._project_complexity.value}"
+            if notes:
+                notes = f"{notes}. {labor_notes}"
+            else:
+                notes = labor_notes
+
             # Calculate line item cost
             line_item_cost = LineItemCost.calculate(
                 line_item_id=line_item_id,
@@ -645,7 +796,7 @@ class CostAgent(BaseA2AAgent):
                 quantity=quantity,
                 unit=unit,
                 unit_material_cost=material_data.get("unit_cost", CostRange.from_base_cost(50.0)),
-                unit_labor_hours=material_data.get("labor_hours_per_unit", 0.5),
+                unit_labor_hours=unit_labor_hours,
                 labor_rate=labor_rate,
                 primary_trade=primary_trade,
                 unit_equipment_cost=material_data.get("equipment_cost"),
@@ -1133,7 +1284,7 @@ Please analyze this estimate and provide insights in the required JSON format.""
                 return {
                     "cost_code": cost_code or "SHOP-001",
                     "unit_cost": unit_cost,
-                    "labor_hours_per_unit": scope_labor_hours,
+                    "labor_hours_per_unit": scope_labor_hours,  # Use LLM-generated hours from scope if available
                     "equipment_cost": CostRange.zero(),
                     "confidence": CostConfidenceLevel.HIGH,
                     "confidence_score": 0.90,
