@@ -18,6 +18,7 @@ import { DemoPage } from './pages/DemoPage';
 import { Dashboard } from './pages/Dashboard';
 import { Account } from './pages/Account';
 import { PriceComparisonPage } from './components/PriceComparisonPage';
+import { ContractorSettings } from './pages/ContractorSettings';
 
 // Project flow pages
 import { ScopePage } from './pages/project/ScopePage';
@@ -97,6 +98,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Account />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/contractor-settings"
+          element={
+            <ProtectedRoute>
+              <ContractorSettings />
             </ProtectedRoute>
           }
         />

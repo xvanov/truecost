@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   signInWithPopup,
+  signInWithCredential,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   signInAnonymously,
   type User as FirebaseUser,
 } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { auth } from '../services/firebase';
 import type { User } from '../types';
 import { getHarnessUser, isHarnessEnabled, registerHarnessApi } from '../utils/harness';
@@ -103,7 +106,8 @@ export function useAuth() {
   }, [harnessMode]);
 
   /**
-   * Sign in with Google using popup
+   * Sign in with Google
+   * Uses Capacitor Firebase Authentication plugin on native, popup on web
    */
   const signInWithGoogle = async () => {
     if (harnessMode && harnessUser) {
@@ -113,19 +117,46 @@ export function useAuth() {
     }
     setError(null);
     setLoading(true);
+
+    const isNative = Capacitor.isNativePlatform();
+
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      
-      const userData: User = {
-        uid: result.user.uid,
-        name: result.user.displayName || 'Anonymous',
-        email: result.user.email,
-        photoURL: result.user.photoURL,
-      };
-      
-      setUser(userData);
-      return userData;
+      if (isNative) {
+        // On native platforms, use Capacitor Firebase Authentication plugin
+        // This uses native Google Sign-In which handles everything properly
+        const result = await FirebaseAuthentication.signInWithGoogle();
+
+        if (result.user) {
+          // Get the ID token to sign in with Firebase Auth
+          const credential = GoogleAuthProvider.credential(result.credential?.idToken);
+          const firebaseResult = await signInWithCredential(auth, credential);
+
+          const userData: User = {
+            uid: firebaseResult.user.uid,
+            name: firebaseResult.user.displayName || 'Anonymous',
+            email: firebaseResult.user.email,
+            photoURL: firebaseResult.user.photoURL,
+          };
+
+          setUser(userData);
+          return userData;
+        }
+        return null;
+      } else {
+        // On web, use popup
+        const provider = new GoogleAuthProvider();
+        const result = await signInWithPopup(auth, provider);
+
+        const userData: User = {
+          uid: result.user.uid,
+          name: result.user.displayName || 'Anonymous',
+          email: result.user.email,
+          photoURL: result.user.photoURL,
+        };
+
+        setUser(userData);
+        return userData;
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign in';
       setError(errorMessage);

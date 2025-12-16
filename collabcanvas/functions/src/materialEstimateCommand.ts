@@ -1,16 +1,17 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { OpenAI } from 'openai';
-import * as dotenv from 'dotenv';
 
 // Lazy initialization to avoid timeout during module load
 let _openai: OpenAI | null = null;
 
 function getOpenAI(): OpenAI {
   if (!_openai) {
-    dotenv.config();
-    _openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || '',
-    });
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error('[MATERIAL_ESTIMATE] OPENAI_API_KEY not configured');
+      throw new Error('OPENAI_API_KEY not configured');
+    }
+    _openai = new OpenAI({ apiKey });
   }
   return _openai;
 }

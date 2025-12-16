@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- App-specific subdirectory for captured images and room scans -->
+    <external-files-path name="app_images" path="Pictures/" />
+    <!-- App-specific cache subdirectory for temporary files -->
+    <cache-path name="app_cache" path="truecost_cache/" />
+    <!-- External pictures directory for shared images -->
+    <external-path name="external_images" path="Pictures/TrueCost/" />
+</paths>

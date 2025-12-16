@@ -71,6 +71,130 @@ Real-time collaborative canvas application for construction professionals. Uploa
 5. **Open your browser:**
    Navigate to `http://localhost:5173`
 
+## Local Development with Emulators
+
+For full local development, you need to run multiple services. The architecture separates Node.js Cloud Functions (Firebase) from Python functions (deep estimation pipeline).
+
+### Service Architecture
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Frontend (Vite) | 5173 | React development server |
+| Firebase Functions (Node.js) | 5001 | clarificationAgent, comparePrices, aiCommand, etc. |
+| Python Functions | 5003 | Deep pipeline, PDF generation, A2A agents |
+| Firestore Emulator | 8081 | Local Firestore database |
+| Auth Emulator | 9099 | Local authentication |
+| RTDB Emulator | 9000 | Local Realtime Database |
+| Storage Emulator | 9199 | Local file storage |
+| Emulator UI | 4000 | Firebase Emulator dashboard |
+
+### Quick Start (Full Local Development)
+
+You need **3 terminals** for full local development:
+
+**Terminal 1 - Firebase Emulators (Node.js functions + databases):**
+```bash
+cd collabcanvas
+firebase emulators:start
+```
+
+**Terminal 2 - Python Functions (deep pipeline, PDF generation):**
+```bash
+cd ../functions  # gauntletai/functions (Python)
+source venv/bin/activate
+python serve_local.py
+```
+
+**Terminal 3 - Frontend:**
+```bash
+cd collabcanvas
+VITE_USE_FIREBASE_EMULATORS=true npm run dev
+```
+
+### Environment Configuration
+
+The `VITE_USE_FIREBASE_EMULATORS=true` flag enables ALL emulators. Individual emulators can be disabled:
+
+```bash
+# Use all emulators (default when flag is true)
+VITE_USE_FIREBASE_EMULATORS=true npm run dev
+
+# Use emulators but with production Auth (for testing with real users)
+VITE_USE_FIREBASE_EMULATORS=true VITE_USE_AUTH_EMULATOR=false npm run dev
+
+# Use emulators but with deployed Cloud Functions (for AWS secrets)
+VITE_USE_FIREBASE_EMULATORS=true VITE_USE_FUNCTIONS_EMULATOR=false npm run dev
+```
+
+### Production Mode (No Emulators)
+
+To use deployed Firebase services:
+```bash
+npm run dev
+# Uses production Firestore, Auth, and deployed Cloud Functions
+```
+
+### Cloud Functions Setup
+
+#### Secrets Management
+
+All secrets are stored in **Firebase Secrets Manager** (single source of truth):
+
+```bash
+# Set secrets (you'll be prompted for the value)
+firebase functions:secrets:set OPENAI_API_KEY
+firebase functions:secrets:set SERP_API_KEY
+firebase functions:secrets:set BLS_API_KEY
+
+# View current secrets
+firebase functions:secrets:list
+```
+
+See [docs/firebase-configuration.md](docs/firebase-configuration.md) for detailed documentation.
+
+#### Node.js Functions (collabcanvas/functions/)
+
+```bash
+cd collabcanvas/functions
+npm install
+npm run build
+```
+
+Node.js functions automatically get secrets from Firebase Secrets Manager (both in emulator and production).
+
+#### Python Functions (gauntletai/functions/)
+
+```bash
+cd gauntletai/functions
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+For local development, set secrets as environment variables:
+```bash
+export OPENAI_API_KEY='sk-proj-...'  # Get via: firebase functions:secrets:access OPENAI_API_KEY
+python serve_local.py
+```
+
+**Note:** Firebase emulators do NOT run Python functions. The `serve_local.py` Flask server is required for local development. In production, Python functions deploy to Cloud Functions and use Firebase Secrets Manager.
+
+### Deploying Functions
+
+```bash
+# Deploy all functions
+firebase deploy --only functions
+
+# Deploy specific function
+firebase deploy --only functions:clarificationAgent
+
+# Deploy only Node.js functions
+firebase deploy --only functions:default
+
+# Deploy only Python functions
+firebase deploy --only functions:python
+```
+
 ### Firebase Setup
 
 1. Create a new Firebase project at [Firebase Console](https://console.firebase.google.com/)
@@ -187,20 +311,34 @@ npm test
 
 ### Integration Tests with Firebase Emulators
 
-1. Install Firebase tools:
+1. Install Firebase tools (if not already installed):
    ```bash
    npm install -g firebase-tools
    ```
 
-2. Start emulators:
+2. Start emulators in one terminal:
    ```bash
    firebase emulators:start
    ```
 
-3. Run tests against emulators:
+3. Run tests against emulators in another terminal:
    ```bash
    VITE_USE_FIREBASE_EMULATORS=true npm test
    ```
+
+### Troubleshooting
+
+**Firestore assertion errors during HMR:**
+The app guards against multiple emulator connections. If you see Firestore internal assertion errors, do a full page refresh (Cmd+Shift+R).
+
+**CORS errors calling Cloud Functions:**
+- Make sure the function is deployed: `firebase functions:list`
+- If using emulators, ensure `VITE_USE_FIREBASE_EMULATORS=true` is set
+- Check that the emulator is running on port 5001
+
+**Python functions not responding:**
+- Ensure `serve_local.py` is running on port 5003
+- Check `VITE_PYTHON_FUNCTIONS_URL` in `.env` points to `http://127.0.0.1:5003/collabcanvas-dev/us-central1`
 
 ### Performance Harness (Playwright)
 

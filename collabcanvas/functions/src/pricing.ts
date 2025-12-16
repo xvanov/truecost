@@ -1,39 +1,9 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { getFirestore, FieldValue, Firestore } from 'firebase-admin/firestore';
-import * as dotenv from 'dotenv';
-import * as path from 'path';
-// Using cors: true to match other functions (aiCommand, materialEstimateCommand, sagemakerInvoke)
 
 // Lazy initialization to avoid timeout during module load
-let _initialized = false;
 let _db: Firestore | null = null;
-
-function initializeEnv(): void {
-  if (_initialized) return;
-  _initialized = true;
-
-  // Load environment variables - try multiple locations
-  dotenv.config();
-  dotenv.config({ path: path.resolve(__dirname, '../.env') });
-  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-
-  // Log environment variable loading status
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('[PRICING] Environment check:');
-    console.log('[PRICING] - SERP_API_KEY:', process.env.SERP_API_KEY ? 'SET' : 'NOT SET');
-    console.log('[PRICING] - NODE_ENV:', process.env.NODE_ENV);
-    console.log('[PRICING] - CWD:', process.cwd());
-  }
-
-  // Configure Firestore to use emulator if running locally
-  if (process.env.FIRESTORE_EMULATOR_HOST) {
-    console.log('[PRICING] Using Firestore emulator:', process.env.FIRESTORE_EMULATOR_HOST);
-  } else if (process.env.NODE_ENV !== 'production' && !process.env.FUNCTIONS_EMULATOR) {
-    process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-    console.log('[PRICING] Setting FIRESTORE_EMULATOR_HOST to 127.0.0.1:8081');
-  }
-}
 
 function initFirebaseAdmin(): void {
   try {
@@ -45,7 +15,6 @@ function initFirebaseAdmin(): void {
 
 function getDb(): Firestore {
   if (!_db) {
-    initializeEnv();
     initFirebaseAdmin();
     _db = getFirestore();
   }
@@ -107,7 +76,6 @@ async function fetchFromSerpApi(
   deliveryZip?: string,
   attempt = 1
 ): Promise<{ priceUSD: number | null; link: string | null; error?: string }> {
-  initializeEnv();
   console.log(`[PRICING] fetchFromSerpApi called: query="${query}", store_id="${storeId || 'none'}", delivery_zip="${deliveryZip || 'none'}", attempt=${attempt}`);
 
   const apiKey = (process.env.SERP_API_KEY || '').trim();
@@ -116,9 +84,6 @@ async function fetchFromSerpApi(
     console.error(`[PRICING] ${error}`);
     return { priceUSD: null, link: null, error };
   }
-  
-  // Log first 10 chars of key for debugging (without exposing full key)
-  console.log(`[PRICING] Using SERP_API_KEY: ${apiKey.substring(0, 10)}... (length: ${apiKey.length})`);
 
   const params = new URLSearchParams({
     engine: 'home_depot',
@@ -246,7 +211,8 @@ export const getHomeDepotPrice = onCall<{ request: PriceRequest }>({
   cors: true,
   maxInstances: 20,
   memory: '256MiB',
-  timeoutSeconds: 60, // Allow up to 60 seconds for SerpAPI calls
+  timeoutSeconds: 60,
+  secrets: ['SERP_API_KEY'], // Required for SerpAPI calls
 }, async (req) => {
   console.log('[PRICING] Function invoked');
   console.log('[PRICING] Request data:', JSON.stringify(req.data));

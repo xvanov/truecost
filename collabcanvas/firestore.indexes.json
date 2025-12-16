@@ -5,7 +5,8 @@
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "zipCode", "order": "ASCENDING" },
-        { "fieldPath": "aliases", "arrayConfig": "CONTAINS" }
+        { "fieldPath": "aliases", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
       ]
     },
     {
@@ -13,7 +14,16 @@
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "zipCode", "order": "ASCENDING" },
-        { "fieldPath": "normalizedName", "order": "ASCENDING" }
+        { "fieldPath": "normalizedName", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "materials",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
       ]
     }
   ],
