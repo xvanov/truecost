@@ -85,6 +85,85 @@ You MUST respond with valid JSON only. No markdown, no explanation.
 """
 
 
+GENERATE_MATERIALS_AND_LABOR_PROMPT = """You are an expert construction estimator with 20+ years of experience in residential remodeling.
+
+Your job is to analyze line items from a construction scope and generate REALISTIC labor hour estimates and material specifications.
+
+## CRITICAL: Labor Hours Must Be Realistic
+
+Labor hours should reflect ACTUAL installation time by a professional contractor:
+- Consider the unit of measurement (SF, LF, EA, etc.)
+- A single tradesperson can typically:
+  - Install 30-50 SF of drywall per hour
+  - Paint 100-150 SF per hour (walls)
+  - Install 20-30 SF of tile per hour
+  - Install 15-25 LF of trim/molding per hour
+  - Install 1 toilet in 1.5-2 hours
+  - Install 1 faucet in 0.5-1 hour
+  - Install 1 vanity cabinet in 1-2 hours
+
+## Input Format:
+{
+    "project_type": "bathroom_remodel",
+    "finish_level": "mid_range",
+    "total_sqft": 75,
+    "items": [
+        {"id": "item-1", "description": "Drywall - Walls", "quantity": 200, "unit": "SF", "division": "09"},
+        ...
+    ]
+}
+
+## Output Format (JSON):
+{
+    "enriched_items": [
+        {
+            "id": "item-1",
+            "description": "Drywall - Walls",
+            "material_cost_per_unit": 1.50,
+            "labor_hours_per_unit": 0.025,
+            "total_labor_hours": 5.0,
+            "primary_trade": "drywall_installer",
+            "reasoning": "200 SF at ~40 SF/hour = 5 hours"
+        },
+        ...
+    ],
+    "total_project_labor_hours": 85,
+    "labor_summary": {
+        "demolition": 8,
+        "framing": 4,
+        "plumbing": 12,
+        "electrical": 6,
+        "drywall": 8,
+        "tile": 16,
+        "painting": 6,
+        "fixtures": 8,
+        "cleanup": 4
+    }
+}
+
+## Trade Categories (use exactly these values):
+- general_labor
+- carpenter
+- electrician
+- plumber
+- hvac
+- painter
+- tile_setter
+- drywall_installer
+- flooring_installer
+- cabinet_installer
+- demolition
+
+## Guidelines:
+1. Labor hours must be REALISTIC - a bathroom remodel typically takes 40-120 labor hours total
+2. Consider economies of scale (larger quantities = slightly more efficient per unit)
+3. Include setup/cleanup time in your estimates
+4. Factor in the finish level (luxury = more detailed work = more time)
+5. Provide brief reasoning for each estimate
+
+RESPOND WITH VALID JSON ONLY. No markdown, no explanation outside the JSON."""
+
+
 GENERATE_SEARCHABLE_NAMES_PROMPT = """You are an expert construction estimator who knows EXACTLY what products are sold at Home Depot and Lowe's.
 
 Your job is to convert generic line item descriptions into SPECIFIC, SEARCHABLE product names that will find real products on homedepot.com or lowes.com.
@@ -323,6 +402,48 @@ class ScopeAgent(BaseA2AAgent):
             estimate_id=estimate_id,
             items_with_names=len(searchable_names)
         )
+
+        # Step 3.6: Generate realistic labor estimates using LLM
+        # This replaces mock data with intelligent estimates based on project context
+        labor_estimates = await self._generate_labor_estimates_with_llm(
+            divisions=enriched_divisions,
+            project_type=project_type,
+            finish_level=finish_level,
+            total_sqft=total_sqft
+        )
+
+        # Apply LLM-generated labor estimates to line items
+        if labor_estimates:
+            for div in enriched_divisions:
+                for item in div.line_items:
+                    if item.id in labor_estimates:
+                        est = labor_estimates[item.id]
+                        # Update labor hours with LLM estimate
+                        item.unit_cost_reference.labor_hours_per_unit = est.get("labor_hours_per_unit", item.unit_cost_reference.labor_hours_per_unit)
+                        item.estimated_labor_hours = est.get("total_labor_hours", item.estimated_labor_hours)
+                        # Update material cost if provided
+                        if est.get("material_cost_per_unit", 0) > 0:
+                            item.unit_cost_reference.material_cost_per_unit = est["material_cost_per_unit"]
+                            item.estimated_material_cost = round(item.quantity * est["material_cost_per_unit"], 2)
+                        # Update trade if provided
+                        trade_str = est.get("primary_trade", "")
+                        if trade_str:
+                            try:
+                                item.unit_cost_reference.primary_trade = TradeCategory(trade_str)
+                            except ValueError:
+                                pass
+                        # Mark as LLM-sourced
+                        item.unit_cost_reference.cost_code_source = "llm_estimate"
+
+            # Recalculate division subtotals after updating labor hours
+            for div in enriched_divisions:
+                div.calculate_subtotals()
+
+            logger.info(
+                "llm_labor_estimates_applied",
+                estimate_id=estimate_id,
+                items_updated=len(labor_estimates)
+            )
 
         # Step 4: Check completeness
         completeness = self._check_completeness(
@@ -593,6 +714,112 @@ class ScopeAgent(BaseA2AAgent):
         if qualifier and qualifier not in name:
             return f"{qualifier} {name}"
         return name
+
+    async def _generate_labor_estimates_with_llm(
+        self,
+        divisions: List[EnrichedDivision],
+        project_type: str,
+        finish_level: str,
+        total_sqft: float
+    ) -> Dict[str, Dict[str, Any]]:
+        """Use LLM to generate realistic labor hour estimates for all line items.
+
+        This replaces the mock data lookup with intelligent LLM-based estimates
+        that consider the actual project context.
+
+        Args:
+            divisions: List of enriched divisions with line items.
+            project_type: Type of project (bathroom_remodel, kitchen_remodel, etc.)
+            finish_level: Finish level (budget, mid_range, high_end, luxury).
+            total_sqft: Total square footage of the project.
+
+        Returns:
+            Dict mapping item_id to labor estimate data.
+        """
+        # Collect all items for LLM processing
+        items_for_llm = []
+        for div in divisions:
+            if div.status != "included":
+                continue
+            for item in div.line_items:
+                items_for_llm.append({
+                    "id": item.id,
+                    "description": item.item,
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "division": div.division_code,
+                    "division_name": div.division_name
+                })
+
+        if not items_for_llm:
+            return {}
+
+        logger.info(
+            "generating_labor_estimates_with_llm",
+            item_count=len(items_for_llm),
+            project_type=project_type,
+            finish_level=finish_level
+        )
+
+        try:
+            result = await self.llm.generate_json(
+                system_prompt=GENERATE_MATERIALS_AND_LABOR_PROMPT,
+                user_message=json.dumps({
+                    "project_type": project_type,
+                    "finish_level": finish_level,
+                    "total_sqft": total_sqft,
+                    "items": items_for_llm
+                }, indent=2)
+            )
+
+            self._tokens_used += result.get("tokens_used", 0)
+            response = result.get("content", {})
+
+            # Build lookup dict from response
+            labor_estimates = {}
+            for item_data in response.get("enriched_items", []):
+                item_id = item_data.get("id")
+                if item_id:
+                    labor_estimates[item_id] = {
+                        "labor_hours_per_unit": item_data.get("labor_hours_per_unit", 0.5),
+                        "total_labor_hours": item_data.get("total_labor_hours", 0),
+                        "material_cost_per_unit": item_data.get("material_cost_per_unit", 0),
+                        "primary_trade": item_data.get("primary_trade", "general_labor"),
+                        "reasoning": item_data.get("reasoning", "")
+                    }
+
+            total_hours = response.get("total_project_labor_hours", 0)
+            labor_summary = response.get("labor_summary", {})
+
+            logger.info(
+                "llm_labor_estimates_generated",
+                items_estimated=len(labor_estimates),
+                total_project_hours=total_hours,
+                labor_summary=labor_summary
+            )
+
+            # Log the detailed breakdown for debugging
+            print(f"\n{'='*60}")
+            print(f"[LLM LABOR ESTIMATE] Generated for {len(labor_estimates)} items")
+            print(f"{'='*60}")
+            print(f"  Project Type: {project_type}")
+            print(f"  Finish Level: {finish_level}")
+            print(f"  Total Sqft: {total_sqft}")
+            print(f"  TOTAL PROJECT LABOR HOURS: {total_hours}")
+            print(f"\n  Labor by Trade:")
+            for trade, hours in labor_summary.items():
+                print(f"    - {trade}: {hours} hours")
+            print(f"{'='*60}\n")
+
+            return labor_estimates
+
+        except Exception as e:
+            logger.warning(
+                "llm_labor_estimate_failed",
+                error=str(e)
+            )
+            # Return empty dict - will fall back to mock data
+            return {}
 
     async def _enrich_line_item(
         self,
