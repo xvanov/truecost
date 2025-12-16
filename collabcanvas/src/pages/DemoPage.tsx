@@ -12,15 +12,17 @@ import heroVideo from "../assets/animated_hero.mp4";
 import logo from "../assets/logo.png";
 import floorPlanGemini from "../assets/floor_plan_gemini.png";
 import qrCodeImage from "../assets/qr-code.png";
+import teamPhotoImage from "../assets/IMG_2464.jpg";
+import fireImage from "../assets/fires.png";
 import { teamMembers } from "../assets/team/teamMembers";
 import "../styles/hero.css";
 
 // All demo steps in order (simplified - removed materials, labor, timeline, risk pages)
 const DEMO_STEPS = [
+  { id: "start", label: "Start", phase: "start" },
   { id: "home", label: "Welcome", phase: "home" },
   { id: "scope", label: "Project Scope", phase: "scope" },
   { id: "annotate-plan", label: "Plan Annotations", phase: "annotate" },
-  { id: "annotate-chat", label: "AI Clarification", phase: "annotate" },
   { id: "gen-1", label: "Scope Agent", phase: "generating" },
   { id: "gen-2", label: "Location Agent", phase: "generating" },
   { id: "gen-3", label: "Cost Agent", phase: "generating" },
@@ -33,6 +35,7 @@ const DEMO_STEPS = [
   { id: "result-pdf", label: "PDF Reports", phase: "results" },
   { id: "result-accuracy", label: "Estimate Accuracy", phase: "results" },
   { id: "differentiator", label: "Why TrueCost", phase: "about" },
+  { id: "mobile-app", label: "Mobile App", phase: "about" },
   { id: "pricing", label: "Pricing", phase: "about" },
   { id: "about-us", label: "Contact Us", phase: "about" },
 ] as const;
@@ -40,12 +43,12 @@ const DEMO_STEPS = [
 // Hardcoded demo data
 const DEMO_SCOPE = {
   projectName: "Primary Bathroom Remodel",
-  location: "San Francisco, CA 94110",
+  location: "105 Chatsworth St, Cary, NC 27513",
   projectType: "Bathroom Remodel",
-  scopeText: `Complete primary bathroom remodel. We will replace the drywall, install waterproofing, remove rotten knee wall framing between shower cabin and bathtub and replace with new framing, put large format tiles on walls of shower cabin, replace all tiles on the floor. Install new recessed lighting. Replace toilet. Paint cabinets. Modify plumbing to allow for ceiling shower head.`,
+  scopeText: `Complete primary bathroom remodel: We will install large format 24x48 tiles from the shower cabin all the way till the end of the wall touching the countertop. In that section we will remove rotten knee wall framing between shower cabin and bathtub, repair minor water damage to subfloor, remove the built-in bathtub (which will be replaced with standing bathtub), replace the drywall with cement board, install waterproofing, put large format tiles on walls of shower cabin, replace all tiles on the floor. Install new recessed lighting. Replace the toilet. Paint cabinets. Modify plumbing to move the shower head to be closer to the ceiling.`,
   estimateConfig: {
     overheadPercent: 10,
-    profitPercent: 10,
+    profitPercent: 15,
     contingencyPercent: 5,
     wasteFactorPercent: 10,
     startDate: "2025-01-15",
@@ -54,65 +57,73 @@ const DEMO_SCOPE = {
 
 // CSI Divisions detected from scope
 const CSI_DIVISIONS = [
-  { code: "03", name: "Concrete", items: ["Foundation repair allowance"] },
-  { code: "06", name: "Wood, Plastics, and Composites", items: ["Knee wall framing", "Pressure treated 2x4 studs"] },
-  { code: "07", name: "Thermal & Moisture Protection", items: ["Waterproof membrane (Kerdi)", "Waterproofing corners & bands"] },
-  { code: "09", name: "Finishes", items: ["Large format porcelain tile", "Tile adhesive", "Epoxy grout", "Moisture resistant drywall", "Cabinet paint"] },
-  { code: "22", name: "Plumbing", items: ["Ceiling mount shower head", "Copper pipe", "Toilet", "Wax ring & bolts"] },
+  { code: "02", name: "Existing Conditions", items: ["Demolition of built-in bathtub", "Removal of existing floor tiles", "Removal of rotten knee wall framing", "Minor subfloor water damage repair"] },
+  { code: "06", name: "Wood, Plastics, and Composites", items: ["Knee wall framing replacement", "Subfloor repair", "Pressure treated 2x4 studs"] },
+  { code: "07", name: "Thermal & Moisture Protection", items: ["Waterproof membrane (Kerdi)", "Waterproofing corners & bands", "Cement board installation"] },
+  { code: "09", name: "Finishes", items: ["Large format 24x48 porcelain tile (walls)", "Floor tiles", "Tile adhesive", "Epoxy grout", "Cabinet paint"] },
+  { code: "22", name: "Plumbing", items: ["Ceiling mount shower head relocation", "Standing bathtub installation", "Copper pipe", "Toilet replacement", "Wax ring & bolts"] },
   { code: "26", name: "Electrical", items: ["LED recessed light kit", "Dimmer switch", "Romex wire"] },
 ];
 
 const DEMO_ESTIMATE = {
   summary: {
-    totalCost: 28750,
-    costPerSqft: 338,
+    totalCost: 24850,
+    costPerSqft: 292,
     duration: "3-4 weeks",
     riskLevel: "medium",
   },
   costBreakdown: {
-    materials: 12450,
-    labor: 11200,
-    equipment: 850,
-    overhead: 2445,
-    profit: 2445,
-    contingency: 1225,
+    materials: 10340,
+    labor: 7456,
+    equipment: 650,
+    overhead: 1845,
+    profit: 2768,
+    contingency: 923,
   },
   materials: [
-    { id: 1, category: "Tile & Stone", item: "Large Format Porcelain Tile (24x48)", qty: 150, unit: "sq ft", unitCost: 8.50, total: 1275 },
-    { id: 2, category: "Tile & Stone", item: "Tile Adhesive (Modified Thinset)", qty: 6, unit: "bags", unitCost: 45, total: 270 },
-    { id: 3, category: "Tile & Stone", item: "Grout (Epoxy)", qty: 2, unit: "units", unitCost: 85, total: 170 },
-    { id: 4, category: "Waterproofing", item: "Waterproof Membrane (Kerdi)", qty: 60, unit: "sq ft", unitCost: 4.50, total: 270 },
-    { id: 5, category: "Waterproofing", item: "Waterproofing Corners & Bands", qty: 1, unit: "kit", unitCost: 125, total: 125 },
-    { id: 6, category: "Drywall", item: "Moisture Resistant Drywall (1/2\")", qty: 12, unit: "sheets", unitCost: 18, total: 216 },
-    { id: 7, category: "Drywall", item: "Joint Compound", qty: 2, unit: "buckets", unitCost: 22, total: 44 },
-    { id: 8, category: "Framing", item: "Pressure Treated 2x4 Studs", qty: 24, unit: "pcs", unitCost: 8.50, total: 204 },
-    { id: 9, category: "Framing", item: "Construction Screws", qty: 2, unit: "boxes", unitCost: 18, total: 36 },
-    { id: 10, category: "Electrical", item: "6\" LED Recessed Light Kit", qty: 6, unit: "units", unitCost: 45, total: 270 },
-    { id: 11, category: "Electrical", item: "Dimmer Switch", qty: 1, unit: "unit", unitCost: 65, total: 65 },
-    { id: 12, category: "Electrical", item: "Romex 12/2 Wire", qty: 50, unit: "ft", unitCost: 1.20, total: 60 },
-    { id: 13, category: "Plumbing", item: "Ceiling Mount Shower Head Assembly", qty: 1, unit: "unit", unitCost: 285, total: 285 },
-    { id: 14, category: "Plumbing", item: "Copper Pipe (3/4\")", qty: 20, unit: "ft", unitCost: 8.50, total: 170 },
-    { id: 15, category: "Plumbing", item: "Toilet (Elongated, Comfort Height)", qty: 1, unit: "unit", unitCost: 385, total: 385 },
-    { id: 16, category: "Plumbing", item: "Wax Ring & Bolts", qty: 1, unit: "kit", unitCost: 15, total: 15 },
-    { id: 17, category: "Paint", item: "Cabinet Paint (Semi-Gloss)", qty: 2, unit: "gal", unitCost: 55, total: 110 },
-    { id: 18, category: "Paint", item: "Primer (Bonding)", qty: 1, unit: "gal", unitCost: 45, total: 45 },
+    // Items from Price Comparison (matched exactly)
+    { id: 1, category: "Tile & Stone", item: "Large Format Porcelain Tile (24x48)", qty: 150, unit: "sq ft", unitCost: 7.25, total: 1088 },
+    { id: 2, category: "Tile & Stone", item: "Floor Tile (12x24)", qty: 85, unit: "sq ft", unitCost: 5.49, total: 467 },
+    { id: 3, category: "Tile & Stone", item: "Tile Adhesive (Modified Thinset) 50lb", qty: 6, unit: "bags", unitCost: 38.98, total: 234 },
+    { id: 4, category: "Tile & Stone", item: "Epoxy Grout 9lb", qty: 2, unit: "units", unitCost: 78.98, total: 158 },
+    { id: 5, category: "Waterproofing", item: "Kerdi Waterproof Membrane", qty: 60, unit: "sq ft", unitCost: 4.15, total: 249 },
+    { id: 6, category: "Waterproofing", item: "Cement Board (1/2\")", qty: 10, unit: "sheets", unitCost: 13.98, total: 140 },
+    { id: 7, category: "Electrical", item: "6\" LED Recessed Light Kit", qty: 6, unit: "units", unitCost: 38.97, total: 234 },
+    { id: 8, category: "Plumbing", item: "Toilet - Elongated Comfort Height", qty: 1, unit: "unit", unitCost: 345, total: 345 },
+    { id: 9, category: "Plumbing", item: "Ceiling Mount Rain Shower Head", qty: 1, unit: "unit", unitCost: 259, total: 259 },
+    { id: 10, category: "Framing", item: "Pressure Treated 2x4 Studs 8ft", qty: 24, unit: "pcs", unitCost: 6.75, total: 162 },
+    { id: 11, category: "Plumbing", item: "Standing Bathtub", qty: 1, unit: "unit", unitCost: 1850, total: 1850 },
+    // Additional items not in price comparison
+    { id: 12, category: "Waterproofing", item: "Waterproofing Corners & Bands", qty: 1, unit: "kit", unitCost: 115, total: 115 },
+    { id: 13, category: "Framing", item: "Construction Screws", qty: 2, unit: "boxes", unitCost: 16, total: 32 },
+    { id: 14, category: "Framing", item: "Subfloor Patch Material", qty: 1, unit: "kit", unitCost: 45, total: 45 },
+    { id: 15, category: "Electrical", item: "Dimmer Switch", qty: 1, unit: "unit", unitCost: 55, total: 55 },
+    { id: 16, category: "Electrical", item: "Romex 12/2 Wire", qty: 50, unit: "ft", unitCost: 1.10, total: 55 },
+    { id: 17, category: "Plumbing", item: "Copper Pipe (3/4\")", qty: 20, unit: "ft", unitCost: 7.50, total: 150 },
+    { id: 18, category: "Plumbing", item: "Wax Ring & Bolts", qty: 1, unit: "kit", unitCost: 12, total: 12 },
+    { id: 19, category: "Plumbing", item: "Bathtub Drain Kit", qty: 1, unit: "kit", unitCost: 85, total: 85 },
+    { id: 20, category: "Paint", item: "Cabinet Paint (Semi-Gloss)", qty: 2, unit: "gal", unitCost: 48, total: 96 },
+    { id: 21, category: "Paint", item: "Primer (Bonding)", qty: 1, unit: "gal", unitCost: 38, total: 38 },
+    { id: 22, category: "Demolition", item: "Disposal & Hauling", qty: 1, unit: "load", unitCost: 350, total: 350 },
   ],
   labor: [
-    { id: 1, trade: "Tile Setter", hours: 24, rate: 75, total: 1800 },
-    { id: 2, trade: "Plumber", hours: 16, rate: 95, total: 1520 },
-    { id: 3, trade: "Electrician", hours: 8, rate: 85, total: 680 },
-    { id: 4, trade: "Carpenter (Framing)", hours: 12, rate: 65, total: 780 },
-    { id: 5, trade: "Drywall Installer", hours: 10, rate: 60, total: 600 },
-    { id: 6, trade: "Painter", hours: 8, rate: 55, total: 440 },
-    { id: 7, trade: "General Labor", hours: 20, rate: 45, total: 900 },
-    { id: 8, trade: "Project Supervision", hours: 16, rate: 85, total: 1360 },
+    { id: 1, trade: "Tile Setter", hours: 36, rate: 48, total: 1728 },
+    { id: 2, trade: "Plumber", hours: 24, rate: 52, total: 1248 },
+    { id: 3, trade: "Electrician", hours: 12, rate: 65, total: 780 },
+    { id: 4, trade: "Carpenter (Framing)", hours: 18, rate: 40, total: 720 },
+    { id: 5, trade: "Drywall Installer", hours: 16, rate: 35, total: 560 },
+    { id: 6, trade: "Painter", hours: 14, rate: 23, total: 322 },
+    { id: 7, trade: "General Labor", hours: 32, rate: 20, total: 640 },
+    { id: 8, trade: "Project Supervision", hours: 22, rate: 35, total: 770 },
+    { id: 9, trade: "Demolition", hours: 16, rate: 22, total: 352 },
+    { id: 10, trade: "Bathtub Installation", hours: 6, rate: 56, total: 336 },
   ],
 };
 
 // Actual DeepAgent pipeline stages (no emojis)
 const PIPELINE_STAGES = [
   { id: "gen-1", name: "Scope Agent", description: "Extracting and validating project scope from description", percent: 10 },
-  { id: "gen-2", name: "Location Agent", description: "Analyzing regional labor rates and material costs for SF Bay Area", percent: 25 },
+  { id: "gen-2", name: "Location Agent", description: "Analyzing regional labor rates and material costs for Cary, NC area", percent: 25 },
   { id: "gen-3", name: "Cost Agent", description: "Calculating material quantities and pricing from multiple vendors", percent: 40 },
   { id: "gen-4", name: "Code Compliance Agent", description: "Verifying building codes and permit requirements", percent: 55 },
   { id: "gen-5", name: "Risk Agent", description: "Identifying potential risks and mitigation strategies", percent: 70 },
@@ -120,71 +131,106 @@ const PIPELINE_STAGES = [
   { id: "gen-7", name: "Final Agent", description: "Assembling comprehensive estimate with Monte Carlo simulation", percent: 100 },
 ];
 
-// Price comparison data - Home Depot vs Lowes
+// Price comparison data - Home Depot vs Lowes vs Local Vendor
 const PRICE_COMPARISON = [
   {
     item: "Large Format Porcelain Tile (24x48)",
     qty: 150,
     unit: "sq ft",
-    homeDepot: { price: 8.97, sku: "HD-PT24X48-GRY", inStock: true },
-    lowes: { price: 8.49, sku: "LW-1045892", inStock: true },
+    homeDepot: { price: 7.97, sku: "HD-PT24X48-GRY", inStock: true },
+    lowes: { price: 7.49, sku: "LW-1045892", inStock: true },
+    localVendor: { price: 7.25, name: "Triangle Tile & Stone", inStock: true },
+    selected: "localVendor" as const,
+  },
+  {
+    item: "Floor Tile (12x24)",
+    qty: 85,
+    unit: "sq ft",
+    homeDepot: { price: 5.98, sku: "HD-FT1224-GRY", inStock: true },
+    lowes: { price: 5.49, sku: "LW-1045893", inStock: true },
+    localVendor: { price: 5.75, name: "Triangle Tile & Stone", inStock: true },
     selected: "lowes" as const,
   },
   {
     item: "Tile Adhesive (Modified Thinset) 50lb",
     qty: 6,
     unit: "bags",
-    homeDepot: { price: 42.98, sku: "HD-VERSABOND-50", inStock: true },
-    lowes: { price: 45.99, sku: "LW-4829103", inStock: false },
+    homeDepot: { price: 38.98, sku: "HD-VERSABOND-50", inStock: true },
+    lowes: { price: 41.99, sku: "LW-4829103", inStock: false },
+    localVendor: null,
     selected: "homeDepot" as const,
   },
   {
     item: "Epoxy Grout 9lb",
     qty: 2,
     unit: "units",
-    homeDepot: { price: 89.00, sku: "HD-SPECEPOXY-9", inStock: true },
-    lowes: { price: 84.98, sku: "LW-2938471", inStock: true },
+    homeDepot: { price: 82.00, sku: "HD-SPECEPOXY-9", inStock: true },
+    lowes: { price: 78.98, sku: "LW-2938471", inStock: true },
+    localVendor: null,
     selected: "lowes" as const,
   },
   {
     item: "Kerdi Waterproof Membrane",
     qty: 60,
     unit: "sq ft",
-    homeDepot: { price: 4.29, sku: "HD-KERDI-108", inStock: true },
-    lowes: { price: 4.59, sku: "LW-9182736", inStock: true },
+    homeDepot: { price: 4.15, sku: "HD-KERDI-108", inStock: true },
+    lowes: { price: 4.49, sku: "LW-9182736", inStock: true },
+    localVendor: { price: 4.29, name: "Cary Building Supply", inStock: true },
     selected: "homeDepot" as const,
+  },
+  {
+    item: "Cement Board (1/2\")",
+    qty: 10,
+    unit: "sheets",
+    homeDepot: { price: 14.48, sku: "HD-DUROCK-12", inStock: true },
+    lowes: { price: 13.98, sku: "LW-8827364", inStock: true },
+    localVendor: null,
+    selected: "lowes" as const,
   },
   {
     item: "6\" LED Recessed Light Kit",
     qty: 6,
     unit: "units",
-    homeDepot: { price: 42.97, sku: "HD-HLBSL6-WH", inStock: true },
-    lowes: { price: 47.98, sku: "LW-8273645", inStock: true },
+    homeDepot: { price: 38.97, sku: "HD-HLBSL6-WH", inStock: true },
+    lowes: { price: 42.98, sku: "LW-8273645", inStock: true },
+    localVendor: null,
     selected: "homeDepot" as const,
   },
   {
     item: "Toilet - Elongated Comfort Height",
     qty: 1,
     unit: "unit",
-    homeDepot: { price: 379.00, sku: "HD-KOHLER-CH", inStock: true },
-    lowes: { price: 399.00, sku: "LW-7364528", inStock: true },
-    selected: "homeDepot" as const,
+    homeDepot: { price: 349.00, sku: "HD-KOHLER-CH", inStock: true },
+    lowes: { price: 369.00, sku: "LW-7364528", inStock: true },
+    localVendor: { price: 345.00, name: "Ferguson Bath & Kitchen", inStock: true },
+    selected: "localVendor" as const,
   },
   {
     item: "Ceiling Mount Rain Shower Head",
     qty: 1,
     unit: "unit",
-    homeDepot: { price: 299.00, sku: "HD-MOEN-RAIN12", inStock: false },
-    lowes: { price: 279.00, sku: "LW-6253419", inStock: true },
+    homeDepot: { price: 279.00, sku: "HD-MOEN-RAIN12", inStock: false },
+    lowes: { price: 259.00, sku: "LW-6253419", inStock: true },
+    localVendor: { price: 275.00, name: "Ferguson Bath & Kitchen", inStock: true },
     selected: "lowes" as const,
   },
   {
     item: "Pressure Treated 2x4 Studs 8ft",
     qty: 24,
     unit: "pcs",
-    homeDepot: { price: 7.98, sku: "HD-PT2X4-8", inStock: true },
-    lowes: { price: 8.48, sku: "LW-5142308", inStock: true },
+    homeDepot: { price: 6.75, sku: "HD-PT2X4-8", inStock: true },
+    lowes: { price: 7.28, sku: "LW-5142308", inStock: true },
+    localVendor: { price: 6.95, name: "Cary Building Supply", inStock: true },
     selected: "homeDepot" as const,
+  },
+  {
+    item: "Standing Bathtub",
+    qty: 1,
+    unit: "unit",
+    homeDepot: { price: 1899.00, sku: "HD-STBTUB-60", inStock: true },
+    lowes: { price: 1949.00, sku: "LW-9988776", inStock: false },
+    localVendor: { price: 1850.00, name: "Ferguson Bath & Kitchen", inStock: true },
+    selected: "localVendor" as const,
   },
 ];
 
@@ -193,49 +239,46 @@ const ACCURACY_COMPARISON = {
   manualEstimate: {
     label: "Manual Estimate",
     description: "Traditional spreadsheet-based estimate by junior estimator",
-    materials: 9800,
-    labor: 8500,
-    overhead: 1830,
-    contingency: 915,
-    total: 21045,
+    materials: 8200,
+    labor: 6100,
+    overhead: 1430,
+    contingency: 715,
+    total: 16445,
     timeToCreate: "4-6 hours",
     issues: [
-      "Missed waterproofing materials",
-      "Underestimated tile quantity by 20%",
-      "Used outdated labor rates",
-      "No ceiling plumbing modification included",
-      "Forgot epoxy grout premium",
+      "Missed waterproofing and cement board materials",
+      "Forgot standing bathtub in materials list",
+      "Used outdated labor rates from 2023",
+      "Underestimated demolition time",
     ],
   },
   trueCostEstimate: {
     label: "TrueCost AI Estimate",
     description: "AI-powered estimate with real-time pricing",
-    materials: 12450,
-    labor: 11200,
-    overhead: 2445,
-    contingency: 1225,
-    total: 28750,
+    materials: 10340,
+    labor: 7456,
+    overhead: 1845,
+    contingency: 923,
+    total: 24850,
     timeToCreate: "30 minutes",
     features: [
       "Auto-detected all scope items from description",
-      "Current pricing from multiple vendors",
-      "Region-adjusted labor rates (SF Bay Area)",
-      "Included ceiling plumbing complexity",
-      "Proper waste factor calculations",
+      "Real-time pricing from multiple vendors + local suppliers",
+      "Region-adjusted labor rates for Cary, NC area",
     ],
   },
   actualCost: {
     label: "Actual Project Cost",
     description: "Final invoiced amount after project completion",
-    materials: 12890,
-    labor: 11850,
-    overhead: 2474,
-    contingency: 980,
-    total: 29194,
+    materials: 10580,
+    labor: 7820,
+    overhead: 1840,
+    contingency: 760,
+    total: 25280,
     notes: [
       "Minor tile overage due to cuts",
-      "Plumber needed extra 4 hours",
-      "Contingency partially used for hidden pipe repair",
+      "Plumber needed extra 3 hours for pipe rerouting",
+      "Contingency partially used for subfloor repair",
     ],
   },
 };
@@ -463,6 +506,111 @@ export function DemoPage() {
   };
 
   // Content renderers
+  const renderStartContent = () => (
+    <section className="hero" style={{ minHeight: "100vh", paddingTop: 0 }}>
+      <div className="hero__background">
+        <img
+          className="hero__bg-image"
+          src={fireImage}
+          alt="Construction chaos"
+          style={{ objectFit: "cover", objectPosition: "center center", width: "100%", height: "100%", position: "absolute", inset: 0 }}
+        />
+        <div className="hero__overlay" />
+      </div>
+
+      <div className="hero__content container-spacious">
+        <div className="hero__card" style={{ opacity: 0.85, animation: "none", padding: 0, overflow: "hidden", transform: "scale(1.15)" }}>
+          {/* Excel-like spreadsheet */}
+          <div style={{
+            background: "rgba(20, 30, 40, 0.95)",
+            border: "1px solid rgba(59, 227, 245, 0.3)",
+            borderRadius: "12px",
+            overflow: "hidden"
+          }}>
+            {/* Excel header bar */}
+            <div style={{
+              background: "rgba(59, 227, 245, 0.1)",
+              borderBottom: "1px solid rgba(59, 227, 245, 0.3)",
+              padding: "8px 16px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
+            }}>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#ff5f57" }} />
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#febc2e" }} />
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#28c840" }} />
+              </div>
+              <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "12px", marginLeft: "8px" }}>
+                bathroom_estimate_v3_FINAL_final2.xlsx
+              </span>
+            </div>
+
+            {/* Spreadsheet grid */}
+            <table style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontFamily: "monospace",
+              fontSize: "13px"
+            }}>
+              <thead>
+                <tr style={{ background: "rgba(59, 227, 245, 0.05)" }}>
+                  <th style={{ width: 40, padding: "8px 4px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.4)" }}></th>
+                  <th style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(59, 227, 245, 0.7)", fontWeight: 500 }}>A</th>
+                  <th style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(59, 227, 245, 0.7)", fontWeight: 500 }}>B</th>
+                  <th style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(59, 227, 245, 0.7)", fontWeight: 500 }}>C</th>
+                  <th style={{ padding: "8px 12px", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(59, 227, 245, 0.7)", fontWeight: 500 }}>D</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={{ padding: "8px 4px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>1</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.8)" }}>Item</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.8)" }}>Qty</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.8)" }}>Unit Cost</td>
+                  <td style={{ padding: "8px 12px", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.8)" }}>Total</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: "8px 4px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>2</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>Tile</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>150</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "#ff6b6b", fontWeight: 600 }}>#REF!</td>
+                  <td style={{ padding: "8px 12px", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "#ff6b6b", fontWeight: 600 }}>#REF!</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: "8px 4px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>3</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>Labor</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>24</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>$75/hr</td>
+                  <td style={{ padding: "8px 12px", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "#ff6b6b", fontWeight: 600 }}>#VALUE!</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: "8px 4px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>4</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>Plumbing</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "#ff6b6b", fontWeight: 600 }}>#N/A</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>$95/hr</td>
+                  <td style={{ padding: "8px 12px", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "#ff6b6b", fontWeight: 600 }}>#REF!</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: "8px 4px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>5</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>Electrical</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>8</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>$85/hr</td>
+                  <td style={{ padding: "8px 12px", borderBottom: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.6)" }}>$680</td>
+                </tr>
+                <tr style={{ background: "rgba(59, 227, 245, 0.05)" }}>
+                  <td style={{ padding: "8px 4px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>6</td>
+                  <td style={{ padding: "8px 12px", borderRight: "1px solid rgba(59, 227, 245, 0.2)", color: "rgba(255,255,255,0.8)", fontWeight: 600 }} colSpan={3}>TOTAL</td>
+                  <td style={{ padding: "8px 12px", color: "#ff6b6b", fontWeight: 700, fontSize: "14px" }}>#ERROR!</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
   const renderHomeContent = () => (
     <section className="hero" style={{ minHeight: "100vh", paddingTop: 0 }}>
       <div className="hero__background">
@@ -844,68 +992,275 @@ export function DemoPage() {
           </div>
         </div>
 
-        {/* Right sidebar - Layers/Annotations panel */}
-        <div className="w-64 bg-truecost-bg-secondary/50 border-l border-truecost-glass-border flex flex-col">
+        {/* Right sidebar - AI Clarification Chat */}
+        <div className="w-[512px] bg-truecost-bg-secondary/50 border-l border-truecost-glass-border flex flex-col">
           <div className="p-3 border-b border-truecost-glass-border">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-truecost-text-primary">Auto-Detected Elements</h3>
-              <button
-                onClick={resetLabelPositions}
-                className="text-xs text-truecost-text-muted hover:text-truecost-cyan transition-colors"
-                title="Reset label positions"
-              >
-                Reset
-              </button>
-            </div>
-            <p className="text-xs text-truecost-text-muted mt-1">Drag to reposition labels</p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {autoLabels.map((label) => (
-              <div
-                key={label.id}
-                className="flex items-center gap-2 p-2 rounded-lg hover:bg-truecost-glass-bg/50 cursor-pointer transition-colors"
-              >
-                <div
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: label.color }}
-                />
-                <span className="text-sm text-truecost-text-primary">{label.label}</span>
-              </div>
-            ))}
+            <h3 className="text-sm font-semibold text-truecost-text-primary">AI Clarification Chat</h3>
+            <p className="text-xs text-truecost-text-muted mt-1">AI asks clarifying questions for accurate estimates</p>
           </div>
 
-          {/* User annotations */}
-          {annotations.length > 0 && (
-            <>
-              <div className="p-3 border-t border-truecost-glass-border">
-                <h3 className="text-sm font-semibold text-truecost-text-primary">Your Annotations</h3>
+          {/* Chat messages */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            <div className="flex gap-2">
+              <div className="w-7 h-7 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-xs flex-shrink-0">
+                AI
               </div>
-              <div className="p-2 space-y-1">
-                {annotations.map((ann) => (
-                  <div
-                    key={ann.id}
-                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-truecost-glass-bg/50 transition-colors"
-                  >
-                    <div
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: ann.color }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm text-truecost-text-primary block truncate">{ann.label}</span>
-                      <span className="text-xs text-truecost-text-muted">
-                        {ann.type === "polyline" ? "Line" : "Area"} - {ann.points.length} pts
-                      </span>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex-1 p-2.5 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary text-sm">
+                I've analyzed the floor plan. The bathroom is approximately 85 sq ft. Can you confirm the ceiling height?
               </div>
-            </>
-          )}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <div className="flex-1 max-w-[85%] p-2.5 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
+                The ceiling height is 9 feet. We want 6 recessed lights.
+              </div>
+              <div className="w-7 h-7 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-xs flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="w-7 h-7 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-xs flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-2.5 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary text-sm">
+                For the wall tiles, what size? 24x48 or 12x24 porcelain?
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <div className="flex-1 max-w-[85%] p-2.5 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
+                24x48 porcelain tiles. Grey/neutral color.
+              </div>
+              <div className="w-7 h-7 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-xs flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="w-7 h-7 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-xs flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-2.5 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary text-sm">
+                What size tiles for the floor?
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <div className="flex-1 max-w-[85%] p-2.5 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
+                12x24 porcelain for the floor.
+              </div>
+              <div className="w-7 h-7 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-xs flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="w-7 h-7 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-xs flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-2.5 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary text-sm">
+                What finish for the shower head assembly?
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <div className="flex-1 max-w-[85%] p-2.5 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
+                Chrome finish for all fixtures.
+              </div>
+              <div className="w-7 h-7 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-xs flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="w-7 h-7 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-xs flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-2.5 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary text-sm">
+                I see a knee wall between the shower and bathtub. Should it be rebuilt to the same height?
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <div className="flex-1 max-w-[85%] p-2.5 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
+                Yes, same height - about 4 feet.
+              </div>
+              <div className="w-7 h-7 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-xs flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="w-7 h-7 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-xs flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-2.5 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary text-sm">
+                What type of toilet are you considering? Standard, elongated, or wall-mounted?
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <div className="flex-1 max-w-[85%] p-2.5 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
+                Elongated, comfort height. Kohler or similar.
+              </div>
+              <div className="w-7 h-7 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-xs flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="w-7 h-7 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-xs flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-2.5 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary text-sm">
+                For the cabinet painting, should we include new hardware?
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <div className="flex-1 max-w-[85%] p-2.5 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
+                Yes, brushed nickel pulls and knobs.
+              </div>
+              <div className="w-7 h-7 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-xs flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="w-7 h-7 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-xs flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-2.5 bg-truecost-cyan/20 rounded-lg text-truecost-text-primary text-sm">
+                Will you need a permit? Cary, NC typically requires one for plumbing/electrical changes.
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <div className="flex-1 max-w-[85%] p-2.5 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm">
+                Yes, please include permit costs in the estimate.
+              </div>
+              <div className="w-7 h-7 rounded-full bg-truecost-glass-border flex items-center justify-center text-truecost-text-secondary text-xs flex-shrink-0">
+                U
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="w-7 h-7 rounded-full bg-truecost-cyan/20 flex items-center justify-center text-truecost-cyan text-xs flex-shrink-0">
+                AI
+              </div>
+              <div className="flex-1 p-2.5 bg-truecost-glass-bg rounded-lg text-truecost-text-primary text-sm border border-green-500/30">
+                <span className="text-green-400 font-medium">All clarifications complete!</span><br />
+                Ready to generate your estimate.
+              </div>
+            </div>
+          </div>
+
+          {/* Input area (disabled for demo) */}
+          <div className="p-3 border-t border-truecost-glass-border">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Type a message..."
+                disabled
+                className="flex-1 p-2 text-sm bg-truecost-glass-bg rounded-lg border border-truecost-glass-border text-truecost-text-primary placeholder-truecost-text-muted"
+              />
+              <button disabled className="px-3 py-2 bg-truecost-glass-border text-truecost-text-muted rounded-lg text-sm">
+                Send
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 
+  // Mobile App slide - shows mobile version of the app
+  const renderMobileApp = () => (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-truecost-bg-primary p-8">
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border mb-4">
+          <span className="text-truecost-cyan text-sm font-medium">Mobile Experience</span>
+        </div>
+        <h2 className="text-3xl font-bold text-truecost-text-primary mb-2">TrueCost Mobile App</h2>
+        <p className="text-truecost-text-secondary">Capture photos and get estimates on the go</p>
+      </div>
+
+      {/* Phone mockup */}
+      <div className="relative">
+        <div className="w-[380px] h-[780px] bg-black rounded-[3.5rem] p-4 shadow-2xl">
+          <div className="w-full h-full bg-truecost-bg-primary rounded-[3rem] overflow-hidden relative">
+            {/* Notch */}
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-36 h-8 bg-black rounded-b-3xl z-10" />
+
+            {/* Status bar */}
+            <div className="pt-12 px-6 pb-5 bg-truecost-bg-secondary/50">
+              <div className="flex items-center justify-between">
+                <img src={logo} alt="TrueCost" className="h-8 w-8" />
+                <span className="text-truecost-text-primary font-semibold text-base">TrueCost</span>
+                <div className="w-8" />
+              </div>
+            </div>
+
+            {/* App content */}
+            <div className="px-5 py-4 space-y-4">
+              {/* Camera capture card */}
+              <div className="bg-truecost-glass-bg rounded-2xl p-5 border border-truecost-glass-border">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-truecost-cyan/20 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-truecost-text-primary font-medium text-base">Capture Photos</h3>
+                    <p className="text-truecost-text-muted text-sm">Take photos of the job site</p>
+                  </div>
+                </div>
+                <div className="h-36 bg-truecost-bg-primary rounded-xl flex items-center justify-center border border-dashed border-truecost-glass-border">
+                  <span className="text-truecost-text-muted text-sm">Tap to capture</span>
+                </div>
+              </div>
+
+              {/* Recent project */}
+              <div className="bg-truecost-glass-bg rounded-2xl p-5 border border-truecost-glass-border">
+                <h3 className="text-truecost-text-primary font-medium text-base mb-3">Recent Project</h3>
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-truecost-cyan/20" />
+                  <div className="flex-1">
+                    <p className="text-truecost-text-primary text-base font-medium">Bathroom Remodel</p>
+                    <p className="text-truecost-text-muted text-sm">$24,847 estimate</p>
+                  </div>
+                  <svg className="w-5 h-5 text-truecost-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Quick actions */}
+              <div className="grid grid-cols-2 gap-3">
+                <button className="bg-truecost-cyan text-truecost-bg-primary rounded-xl py-4 text-base font-medium">
+                  New Estimate
+                </button>
+                <button className="bg-truecost-glass-bg text-truecost-text-primary rounded-xl py-4 text-base font-medium border border-truecost-glass-border">
+                  View All
+                </button>
+              </div>
+            </div>
+
+            {/* Bottom nav */}
+            <div className="absolute bottom-0 left-0 right-0 h-20 bg-truecost-bg-secondary/80 backdrop-blur-md border-t border-truecost-glass-border flex items-center justify-around px-10">
+              <div className="flex flex-col items-center gap-1">
+                <svg className="w-6 h-6 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                <span className="text-truecost-cyan text-xs">Home</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <svg className="w-6 h-6 text-truecost-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="text-truecost-text-muted text-xs">Projects</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <svg className="w-6 h-6 text-truecost-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span className="text-truecost-text-muted text-xs">Profile</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Keep for backwards compatibility but no longer used
   const renderAnnotateChatContent = () => (
     <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-4 pb-8 px-4">
       <div className="flex-1 max-w-4xl mx-auto w-full">
@@ -973,7 +1328,7 @@ export function DemoPage() {
                 AI
               </div>
               <div className="flex-1 p-4 bg-truecost-glass-bg rounded-lg text-truecost-text-primary">
-                Great! One more question - do you have an existing permit or will you need one pulled? San Francisco
+                Great! One more question - do you have an existing permit or will you need one pulled? Cary, NC
                 typically requires permits for bathroom remodels involving plumbing and electrical changes.
               </div>
             </div>
@@ -1198,15 +1553,21 @@ export function DemoPage() {
   const renderPriceComparison = () => {
     const hdTotal = PRICE_COMPARISON.reduce((sum, item) => sum + item.homeDepot.price * item.qty, 0);
     const lowesTotal = PRICE_COMPARISON.reduce((sum, item) => sum + item.lowes.price * item.qty, 0);
-    const bestTotal = PRICE_COMPARISON.reduce(
-      (sum, item) => sum + (item.selected === "homeDepot" ? item.homeDepot.price : item.lowes.price) * item.qty,
-      0
-    );
+    const localTotal = PRICE_COMPARISON.reduce((sum, item) => {
+      if (item.localVendor) return sum + item.localVendor.price * item.qty;
+      return sum + Math.min(item.homeDepot.price, item.lowes.price) * item.qty;
+    }, 0);
+    const getBestPrice = (item: typeof PRICE_COMPARISON[0]) => {
+      if (item.selected === "localVendor" && item.localVendor) return item.localVendor.price;
+      if (item.selected === "homeDepot") return item.homeDepot.price;
+      return item.lowes.price;
+    };
+    const bestTotal = PRICE_COMPARISON.reduce((sum, item) => sum + getBestPrice(item) * item.qty, 0);
     const savings = Math.min(hdTotal, lowesTotal) - bestTotal;
 
     return (
       <div className="min-h-screen flex flex-col bg-truecost-bg-primary pt-8 pb-8 px-4">
-        <div className="flex-1 max-w-6xl mx-auto w-full space-y-6">
+        <div className="flex-1 max-w-7xl mx-auto w-full space-y-6">
           {/* Badge */}
           <div className="text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-truecost-glass-bg border border-truecost-glass-border">
@@ -1215,14 +1576,14 @@ export function DemoPage() {
           </div>
 
           {/* Summary cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="glass-panel p-4">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
                   <span className="text-orange-500 font-bold text-sm">HD</span>
                 </div>
                 <div>
-                  <p className="text-sm text-truecost-text-secondary">Home Depot Total</p>
+                  <p className="text-sm text-truecost-text-secondary">Home Depot</p>
                   <p className="text-xl font-bold text-truecost-text-primary">${hdTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
               </div>
@@ -1233,8 +1594,19 @@ export function DemoPage() {
                   <span className="text-blue-500 font-bold text-sm">L</span>
                 </div>
                 <div>
-                  <p className="text-sm text-truecost-text-secondary">Lowe's Total</p>
+                  <p className="text-sm text-truecost-text-secondary">Lowe's</p>
                   <p className="text-xl font-bold text-truecost-text-primary">${lowesTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+            </div>
+            <div className="glass-panel p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                  <span className="text-purple-500 font-bold text-sm">LC</span>
+                </div>
+                <div>
+                  <p className="text-sm text-truecost-text-secondary">Local Vendors</p>
+                  <p className="text-xl font-bold text-truecost-text-primary">${localTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
               </div>
             </div>
@@ -1246,7 +1618,7 @@ export function DemoPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm text-truecost-text-secondary">Best Price (Mixed)</p>
+                  <p className="text-sm text-truecost-text-secondary">Optimized Mix</p>
                   <p className="text-xl font-bold text-truecost-cyan">${bestTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
               </div>
@@ -1258,14 +1630,15 @@ export function DemoPage() {
           <div className="glass-panel p-6 flex-1">
             <h3 className="text-lg font-semibold text-truecost-text-primary mb-4">Material Price Comparison</h3>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-fixed">
                 <thead>
                   <tr className="text-left text-xs text-truecost-text-secondary uppercase border-b border-truecost-glass-border">
-                    <th className="pb-3 pr-4">Item</th>
-                    <th className="pb-3 pr-4 text-center">Qty</th>
-                    <th className="pb-3 pr-4 text-center">Home Depot</th>
-                    <th className="pb-3 pr-4 text-center">Lowe's</th>
-                    <th className="pb-3 text-center">Best Price</th>
+                    <th className="pb-3 pr-4 w-[22%]">Item</th>
+                    <th className="pb-3 pr-4 text-center w-[10%]">Qty</th>
+                    <th className="pb-3 pr-4 text-center w-[17%]">Home Depot</th>
+                    <th className="pb-3 pr-4 text-center w-[17%]">Lowe's</th>
+                    <th className="pb-3 pr-4 text-center w-[17%]">Local Vendor</th>
+                    <th className="pb-3 text-center w-[17%]">Best Price</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-truecost-glass-border/50">
@@ -1293,9 +1666,24 @@ export function DemoPage() {
                           </span>
                         </div>
                       </td>
+                      <td className="py-3 pr-4">
+                        {item.localVendor ? (
+                          <div className={`text-center p-2 rounded ${item.selected === "localVendor" ? "bg-purple-500/10 border border-purple-500/30" : ""}`}>
+                            <p className="font-mono font-medium">${item.localVendor.price.toFixed(2)}</p>
+                            <span className="text-xs text-purple-400 block truncate" title={item.localVendor.name}>
+                              {item.localVendor.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="text-center p-2 text-truecost-text-muted">
+                            <p className="font-mono">—</p>
+                            <span className="text-xs">Not available</span>
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3 text-center">
                         <p className="font-mono font-bold text-truecost-cyan">
-                          ${((item.selected === "homeDepot" ? item.homeDepot.price : item.lowes.price) * item.qty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ${(getBestPrice(item) * item.qty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                       </td>
                     </tr>
@@ -1409,6 +1797,17 @@ export function DemoPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+
+  // Team Photo slide
+  const renderTeamPhoto = () => (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-truecost-bg-primary p-8">
+      <img
+        src={teamPhotoImage}
+        alt="TrueCost Team"
+        className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+      />
     </div>
   );
 
@@ -1529,21 +1928,6 @@ export function DemoPage() {
               </ul>
             </div>
 
-            {/* TrueCost Estimate */}
-            <div className="glass-panel p-6 border-l-4 border-truecost-cyan">
-              <h4 className="font-semibold text-truecost-text-primary mb-2">{trueCostEstimate.label}</h4>
-              <p className="text-xs text-truecost-text-secondary mb-4">{trueCostEstimate.description}</p>
-
-              <p className="text-xs text-truecost-cyan font-medium mb-2">Key Features:</p>
-              <ul className="space-y-1">
-                {trueCostEstimate.features.map((feature, idx) => (
-                  <li key={idx} className="text-xs text-truecost-text-secondary flex items-start gap-1">
-                    <span className="text-truecost-cyan">✓</span> {feature}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
             {/* Actual Project Cost */}
             <div className="glass-panel p-6 border-l-4 border-green-500">
               <h4 className="font-semibold text-truecost-text-primary mb-2">{actualCost.label}</h4>
@@ -1554,6 +1938,21 @@ export function DemoPage() {
                 {actualCost.notes.map((note, idx) => (
                   <li key={idx} className="text-xs text-truecost-text-secondary flex items-start gap-1">
                     <span className="text-green-400">•</span> {note}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* TrueCost Estimate */}
+            <div className="glass-panel p-6 border-l-4 border-truecost-cyan">
+              <h4 className="font-semibold text-truecost-text-primary mb-2">{trueCostEstimate.label}</h4>
+              <p className="text-xs text-truecost-text-secondary mb-4">{trueCostEstimate.description}</p>
+
+              <p className="text-xs text-truecost-cyan font-medium mb-2">Key Features:</p>
+              <ul className="space-y-1">
+                {trueCostEstimate.features.map((feature, idx) => (
+                  <li key={idx} className="text-xs text-truecost-text-secondary flex items-start gap-1">
+                    <span className="text-truecost-cyan">✓</span> {feature}
                   </li>
                 ))}
               </ul>
@@ -1989,14 +2388,14 @@ export function DemoPage() {
   // Main content renderer based on current step
   const renderContent = () => {
     switch (currentStep.id) {
+      case "start":
+        return renderStartContent();
       case "home":
         return renderHomeContent();
       case "scope":
         return renderScopeContent();
       case "annotate-plan":
         return renderAnnotatePlanContent();
-      case "annotate-chat":
-        return renderAnnotateChatContent();
       case "gen-1":
       case "gen-2":
       case "gen-3":
@@ -2015,6 +2414,8 @@ export function DemoPage() {
         return renderAccuracyComparison();
       case "differentiator":
         return renderDifferentiatorContent();
+      case "mobile-app":
+        return renderMobileApp();
       case "pricing":
         return renderPricingContent();
       case "about-us":

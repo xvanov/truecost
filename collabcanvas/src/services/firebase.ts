@@ -54,21 +54,43 @@ export const enableRTDBNetwork = () => goOnline(rtdb);
 export const disableRTDBNetwork = () => goOffline(rtdb);
 
 // Connect to emulators if in development mode
+// VITE_USE_FIREBASE_EMULATORS controls Firestore, RTDB, Storage
+// VITE_USE_AUTH_EMULATOR controls Auth separately (for testing with deployed functions)
+// VITE_USE_FUNCTIONS_EMULATOR controls Functions separately (deployed functions have AWS secrets)
 const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
+const useAuthEmulator = import.meta.env.VITE_USE_AUTH_EMULATOR === 'true';
+const useFunctionsEmulator = import.meta.env.VITE_USE_FUNCTIONS_EMULATOR === 'true';
 
 if (useEmulators) {
-  console.log('🔧 Using Firebase Emulators');
-  
+  console.log('🔧 Using Firebase Emulators (Firestore, RTDB, Storage)');
+
   try {
-    // Use localhost (not 127.0.0.1) to avoid subtle CORS/origin mismatches in browsers.
-    connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
     connectFirestoreEmulator(firestore, 'localhost', 8081);
     connectDatabaseEmulator(rtdb, 'localhost', 9000);
-    connectFunctionsEmulator(functions, 'localhost', 5001);
     connectStorageEmulator(storage, 'localhost', 9199);
-    console.log('✅ Connected to Firebase Emulators');
+    console.log('✅ Connected to Firestore, RTDB, Storage Emulators');
   } catch (error) {
     console.warn('⚠️ Emulator connection may already be initialized:', error);
+  }
+}
+
+// Auth emulator controlled separately (use real auth when testing deployed functions)
+if (useAuthEmulator) {
+  try {
+    connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+    console.log('✅ Connected to Auth Emulator');
+  } catch (error) {
+    console.warn('⚠️ Auth emulator connection may already be initialized:', error);
+  }
+}
+
+// Functions emulator controlled separately (deployed functions have AWS secrets)
+if (useFunctionsEmulator) {
+  try {
+    connectFunctionsEmulator(functions, 'localhost', 5001);
+    console.log('✅ Connected to Functions Emulator');
+  } catch (error) {
+    console.warn('⚠️ Functions emulator connection may already be initialized:', error);
   }
 }
 
