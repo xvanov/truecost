@@ -1,57 +1,18 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { OpenAI } from 'openai';
 import { z } from 'zod';
-import * as dotenv from 'dotenv';
-import * as path from 'path';
 
 // Lazy initialization to avoid timeout during module load
 let _openai: OpenAI | null = null;
-let _apiKey: string | null = null;
-let _initialized = false;
-
-function initializeEnv(): string {
-  if (_apiKey !== null) {
-    return _apiKey;
-  }
-
-  // Load environment variables from .env file in functions directory
-  const envPath = path.resolve(process.cwd(), '.env');
-  const envResult = dotenv.config({ path: envPath, override: true });
-
-  const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-  const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
-  const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-  _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-
-  // Log what we loaded (only once, in development/emulator)
-  if (isEmulator && !_initialized) {
-    _initialized = true;
-    console.log('[AI_COMMAND] Environment loading:');
-    console.log('[AI_COMMAND] - Running in emulator:', isEmulator);
-    console.log('[AI_COMMAND] - .env file path:', envPath);
-    console.log('[AI_COMMAND] - .env loaded:', envResult.parsed ? 'YES' : 'NO');
-    if (envResult.error) {
-      console.warn('[AI_COMMAND] - .env error:', envResult.error.message);
-    }
-    console.log('[AI_COMMAND] - OPENAI_API_KEY from .env file:', apiKeyFromEnv ? `SET (${apiKeyFromEnv.substring(0, 15)}...${apiKeyFromEnv.substring(apiKeyFromEnv.length - 4)})` : 'NOT SET');
-    console.log('[AI_COMMAND] - OPENAI_API_KEY from process.env (Firebase Secrets):', apiKeyFromProcess ? `SET (${apiKeyFromProcess.substring(0, 15)}...${apiKeyFromProcess.substring(apiKeyFromProcess.length - 4)})` : 'NOT SET');
-    console.log('[AI_COMMAND] - OPENAI_API_KEY FINAL (being used):', _apiKey ? `SET (${_apiKey.substring(0, 15)}...${_apiKey.substring(_apiKey.length - 4)})` : 'NOT SET');
-    console.log('[AI_COMMAND] - NODE_ENV:', process.env.NODE_ENV);
-    console.log('[AI_COMMAND] - FUNCTIONS_EMULATOR:', process.env.FUNCTIONS_EMULATOR);
-    console.log('[AI_COMMAND] - CWD:', process.cwd());
-  }
-
-  if (!_apiKey) {
-    console.warn('⚠️ OPENAI_API_KEY not found. AI assistant will not work.');
-    console.warn('⚠️ Please set OPENAI_API_KEY in functions/.env file (for local) or Firebase Secrets (for production)');
-  }
-
-  return _apiKey;
-}
 
 function getOpenAI(): OpenAI {
   if (!_openai) {
-    _openai = new OpenAI({ apiKey: initializeEnv() });
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error('[AI_COMMAND] OPENAI_API_KEY not configured');
+      throw new Error('OPENAI_API_KEY not configured');
+    }
+    _openai = new OpenAI({ apiKey });
   }
   return _openai;
 }

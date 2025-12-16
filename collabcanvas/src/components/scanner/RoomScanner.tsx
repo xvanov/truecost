@@ -93,7 +93,7 @@ export function RoomScanner({ onRoomsScanned, onScopeGenerated }: RoomScannerPro
             area: result.dimensions.area,
             volume: result.dimensions.volume,
           },
-          features: result.features?.map((f) => ({
+          features: result.features?.map((f: { type: 'window' | 'door'; count: number }) => ({
             type: f.type,
             count: f.count,
           })) || [],

@@ -114,6 +114,17 @@ public class BackgroundRenderer {
         GLES20.glAttachShader(quadProgram, vertexShader);
         GLES20.glAttachShader(quadProgram, fragmentShader);
         GLES20.glLinkProgram(quadProgram);
+
+        // Check program link status
+        int[] linkStatus = new int[1];
+        GLES20.glGetProgramiv(quadProgram, GLES20.GL_LINK_STATUS, linkStatus, 0);
+        if (linkStatus[0] == 0) {
+            String infoLog = GLES20.glGetProgramInfoLog(quadProgram);
+            GLES20.glDeleteProgram(quadProgram);
+            quadProgram = 0;
+            throw new RuntimeException("Program linking failed: " + infoLog);
+        }
+
         GLES20.glUseProgram(quadProgram);
 
         quadPositionParam = GLES20.glGetAttribLocation(quadProgram, "a_Position");

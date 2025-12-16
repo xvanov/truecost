@@ -96,11 +96,11 @@ export function ScopePage() {
     setArCoreChecking(true);
 
     ARCoreRoomScanner.checkAvailability()
-      .then((result) => {
+      .then((result: { isSupported: boolean }) => {
         console.log('✅ ARCore availability result:', result);
         setArCoreAvailable(result.isSupported);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         console.error('❌ ARCore availability check failed:', error);
         setArCoreAvailable(false);
       })
@@ -300,7 +300,7 @@ export function ScopePage() {
         const scanDescription = `Room scanned with ARCore:\n- Dimensions: ${dims.length.toFixed(1)}ft x ${dims.width.toFixed(1)}ft x ${dims.height.toFixed(1)}ft\n- Floor Area: ${dims.area.toFixed(1)} sq ft\n- Volume: ${dims.volume.toFixed(1)} cu ft`;
 
         if (result.features && result.features.length > 0) {
-          const features = result.features.map(f => `${f.count} ${f.type}(s)`).join(', ');
+          const features = result.features.map((f: { type: string; count: number }) => `${f.count} ${f.type}(s)`).join(', ');
           setFormData(prev => ({
             ...prev,
             scopeDefinition: prev.scopeDefinition

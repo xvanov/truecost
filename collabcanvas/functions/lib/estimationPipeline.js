@@ -16,8 +16,6 @@ const https_1 = require("firebase-functions/v2/https");
 const openai_1 = require("openai");
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
-const dotenv = require("dotenv");
-const path = require("path");
 const annotationQuantifier_1 = require("./annotationQuantifier");
 const enhancedCsiMapper_1 = require("./enhancedCsiMapper");
 const projectSpecificExtractor_1 = require("./projectSpecificExtractor");
@@ -25,26 +23,14 @@ const schemaValidator_1 = require("./schemaValidator");
 const enhancedInference_1 = require("./enhancedInference");
 // Lazy initialization to avoid timeout during module load
 let _openai = null;
-let _apiKey = null;
-function getApiKey() {
-    var _a;
-    if (_apiKey === null) {
-        // Load environment variables
-        const envPath = path.resolve(process.cwd(), '.env');
-        const envResult = dotenv.config({ path: envPath, override: true });
-        const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-        const apiKeyFromEnv = (_a = envResult.parsed) === null || _a === void 0 ? void 0 : _a.OPENAI_API_KEY;
-        const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-        _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-        if (!_apiKey) {
-            console.warn('⚠️ OPENAI_API_KEY not found. LLM inference will not work.');
-        }
-    }
-    return _apiKey;
-}
 function getOpenAI() {
     if (!_openai) {
-        _openai = new openai_1.OpenAI({ apiKey: getApiKey() });
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) {
+            console.error('[ESTIMATION_PIPELINE] OPENAI_API_KEY not configured');
+            throw new Error('OPENAI_API_KEY not configured');
+        }
+        _openai = new openai_1.OpenAI({ apiKey });
     }
     return _openai;
 }
@@ -405,8 +391,7 @@ exports.estimationPipeline = (0, https_1.onCall)({
         let spatialNarrative = '';
         // Only use LLM if we have annotations but need inference for non-measured items
         if (quantities.hasScale && (quantities.totalWallLength > 0 || quantities.totalFloorArea > 0)) {
-            const apiKey = getApiKey();
-            if (apiKey) {
+            if (process.env.OPENAI_API_KEY) {
                 console.log('[ESTIMATION] Running enhanced LLM inference for gap-filling...');
                 const openai = getOpenAI();
                 // Prepare image URL if available (handles local URL conversion and SSRF protection)

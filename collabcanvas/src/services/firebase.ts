@@ -22,18 +22,29 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Debug: Log the config to see what's being loaded (only in development)
-if (import.meta.env.DEV) {
-  console.log('Firebase Config:', firebaseConfig);
-  console.log('Environment Variables:', {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
-    useEmulators: import.meta.env.VITE_USE_FIREBASE_EMULATORS
+// Emulator configuration - VITE_USE_FIREBASE_EMULATORS enables ALL emulators
+// Individual flags can override to disable specific emulators
+const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
+const useAuthEmulator = import.meta.env.VITE_USE_AUTH_EMULATOR !== 'false' && useEmulators;
+const useFunctionsEmulator = import.meta.env.VITE_USE_FUNCTIONS_EMULATOR !== 'false' && useEmulators;
+const useFirestoreEmulator = import.meta.env.VITE_USE_FIRESTORE_EMULATOR !== 'false' && useEmulators;
+
+// Guard against multiple emulator connections (HMR can cause this)
+declare global {
+  interface Window {
+    __FIREBASE_EMULATORS_CONNECTED__?: boolean;
+  }
+}
+const emulatorsAlreadyConnected = typeof window !== 'undefined' && window.__FIREBASE_EMULATORS_CONNECTED__;
+
+// Debug: Log the config (only in development, once)
+if (import.meta.env.DEV && !emulatorsAlreadyConnected) {
+  console.log('🔥 Firebase Config:', {
+    projectId: firebaseConfig.projectId,
+    useEmulators,
+    useAuthEmulator,
+    useFunctionsEmulator,
+    useFirestoreEmulator,
   });
 }
 
@@ -53,44 +64,45 @@ export const disableFirestoreNetwork = () => disableNetwork(firestore);
 export const enableRTDBNetwork = () => goOnline(rtdb);
 export const disableRTDBNetwork = () => goOffline(rtdb);
 
-// Connect to emulators if in development mode
-// VITE_USE_FIREBASE_EMULATORS controls Firestore, RTDB, Storage
-// VITE_USE_AUTH_EMULATOR controls Auth separately (for testing with deployed functions)
-// VITE_USE_FUNCTIONS_EMULATOR controls Functions separately (deployed functions have AWS secrets)
-const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
-const useAuthEmulator = import.meta.env.VITE_USE_AUTH_EMULATOR === 'true';
-const useFunctionsEmulator = import.meta.env.VITE_USE_FUNCTIONS_EMULATOR === 'true';
-
-if (useEmulators) {
-  console.log('🔧 Using Firebase Emulators (Firestore, RTDB, Storage)');
+// Connect to emulators (only once, guarded for HMR)
+if (useEmulators && !emulatorsAlreadyConnected) {
+  console.log('🔧 Connecting to Firebase Emulators...');
 
   try {
-    connectFirestoreEmulator(firestore, 'localhost', 8081);
+    // Firestore emulator (port 8081)
+    if (useFirestoreEmulator) {
+      connectFirestoreEmulator(firestore, 'localhost', 8081);
+      console.log('  ✅ Firestore emulator (localhost:8081)');
+    }
+
+    // RTDB emulator (port 9000)
     connectDatabaseEmulator(rtdb, 'localhost', 9000);
+    console.log('  ✅ RTDB emulator (localhost:9000)');
+
+    // Storage emulator (port 9199)
     connectStorageEmulator(storage, 'localhost', 9199);
-    console.log('✅ Connected to Firestore, RTDB, Storage Emulators');
-  } catch (error) {
-    console.warn('⚠️ Emulator connection may already be initialized:', error);
-  }
-}
+    console.log('  ✅ Storage emulator (localhost:9199)');
 
-// Auth emulator controlled separately (use real auth when testing deployed functions)
-if (useAuthEmulator) {
-  try {
-    connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
-    console.log('✅ Connected to Auth Emulator');
-  } catch (error) {
-    console.warn('⚠️ Auth emulator connection may already be initialized:', error);
-  }
-}
+    // Auth emulator (port 9099)
+    if (useAuthEmulator) {
+      connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+      console.log('  ✅ Auth emulator (localhost:9099)');
+    }
 
-// Functions emulator controlled separately (deployed functions have AWS secrets)
-if (useFunctionsEmulator) {
-  try {
-    connectFunctionsEmulator(functions, 'localhost', 5001);
-    console.log('✅ Connected to Functions Emulator');
+    // Functions emulator (port 5001)
+    if (useFunctionsEmulator) {
+      connectFunctionsEmulator(functions, 'localhost', 5001);
+      console.log('  ✅ Functions emulator (localhost:5001)');
+    }
+
+    // Mark as connected to prevent re-connection on HMR
+    if (typeof window !== 'undefined') {
+      window.__FIREBASE_EMULATORS_CONNECTED__ = true;
+    }
+
+    console.log('🔧 Firebase Emulators connected successfully!');
   } catch (error) {
-    console.warn('⚠️ Functions emulator connection may already be initialized:', error);
+    console.error('❌ Failed to connect to Firebase Emulators:', error);
   }
 }
 

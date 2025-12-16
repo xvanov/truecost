@@ -101,6 +101,22 @@ public class ARRoomScanActivity extends AppCompatActivity implements GLSurfaceVi
         View uiOverlay = findViewById(R.id.ui_overlay);
         LinearLayout buttonContainer = findViewById(R.id.button_container);
 
+        // Convert dp to pixels for base padding values
+        float density = getResources().getDisplayMetrics().density;
+        int basePadding16px = Math.round(16 * density);
+        int basePadding32px = Math.round(32 * density);
+
+        // Store original padding values before setting the listener to prevent accumulation
+        final int statusOriginalLeft = statusText.getPaddingLeft();
+        final int statusOriginalTop = statusText.getPaddingTop();
+        final int statusOriginalRight = statusText.getPaddingRight();
+        final int statusOriginalBottom = statusText.getPaddingBottom();
+
+        final int buttonOriginalLeft = buttonContainer.getPaddingLeft();
+        final int buttonOriginalTop = buttonContainer.getPaddingTop();
+        final int buttonOriginalRight = buttonContainer.getPaddingRight();
+        final int buttonOriginalBottom = buttonContainer.getPaddingBottom();
+
         // Apply window insets to handle safe areas (notch, navigation bar, etc.)
         ViewCompat.setOnApplyWindowInsetsListener(uiOverlay, (view, windowInsets) -> {
             Insets systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -112,20 +128,20 @@ public class ARRoomScanActivity extends AppCompatActivity implements GLSurfaceVi
             int leftInset = Math.max(systemBars.left, displayCutout.left);
             int rightInset = Math.max(systemBars.right, displayCutout.right);
 
-            // Apply top padding to status text
+            // Apply top padding to status text using original padding + inset + base dp
             statusText.setPadding(
-                statusText.getPaddingLeft() + leftInset,
-                16 + topInset, // 16dp base padding + inset
-                statusText.getPaddingRight() + rightInset,
-                statusText.getPaddingBottom()
+                statusOriginalLeft + leftInset,
+                statusOriginalTop + basePadding16px + topInset,
+                statusOriginalRight + rightInset,
+                statusOriginalBottom
             );
 
-            // Apply bottom padding to button container
+            // Apply bottom padding to button container using original padding + inset + base dp
             buttonContainer.setPadding(
-                16 + leftInset, // 16dp base padding + inset
-                buttonContainer.getPaddingTop(),
-                16 + rightInset, // 16dp base padding + inset
-                32 + bottomInset // 32dp base padding + navigation bar inset
+                buttonOriginalLeft + basePadding16px + leftInset,
+                buttonOriginalTop,
+                buttonOriginalRight + basePadding16px + rightInset,
+                buttonOriginalBottom + basePadding32px + bottomInset
             );
 
             Log.d(TAG, "Applied window insets - top: " + topInset + ", bottom: " + bottomInset +
