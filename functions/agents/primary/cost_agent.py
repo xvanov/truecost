@@ -1336,6 +1336,48 @@ Please analyze this estimate and provide insights in the required JSON format.""
         searchable_name = item.get("searchableName")
         unit = item.get("unit", "EA")
 
+        # Extract labor hours from scope output - use scope's calculated value if available
+        # The scope agent outputs laborHoursPerUnit directly on each line item (camelCase)
+        scope_labor_hours = None
+
+        # Try direct field first (scope agent output format)
+        scope_labor_hours = item.get("laborHoursPerUnit")
+
+        # Fallback: try nested unitCostReference (internal model format)
+        if scope_labor_hours is None:
+            unit_cost_ref = item.get("unitCostReference", {})
+            if unit_cost_ref:
+                scope_labor_hours = unit_cost_ref.get("laborHoursPerUnit") or unit_cost_ref.get("labor_hours_per_unit")
+
+        # Fallback: calculate from estimatedLaborHours / quantity
+        if scope_labor_hours is None:
+            estimated_labor = item.get("estimatedLaborHours", 0)
+            quantity = item.get("quantity", 1)
+            if estimated_labor > 0 and quantity > 0:
+                scope_labor_hours = estimated_labor / quantity
+
+        # Default labor hours based on unit type (more realistic than flat 0.5)
+        if scope_labor_hours is None:
+            unit_upper = unit.upper()
+            if unit_upper in ("SF", "SQFT", "SQ FT"):
+                scope_labor_hours = 0.03  # ~33 SF per hour (painting, flooring)
+            elif unit_upper in ("LF", "LINEAR FT"):
+                scope_labor_hours = 0.15  # ~7 LF per hour (trim, molding)
+            elif unit_upper == "EA":
+                scope_labor_hours = 1.0  # 1 hour per item (fixtures, appliances)
+            elif unit_upper in ("DAY", "HR"):
+                scope_labor_hours = 8.0 if unit_upper == "DAY" else 1.0
+            else:
+                scope_labor_hours = 0.5  # Generic fallback
+
+        # Log what we're using for debugging
+        logger.debug(
+            "labor_hours_source",
+            item=description[:30] if description else "unknown",
+            labor_hours_per_unit=scope_labor_hours,
+            unit=unit
+        )
+
         # Step 1: Try Google Shopping FIRST if we have a searchable name
         # This prioritizes real-time market prices over hardcoded mock data
         shopping_result = None
@@ -1359,13 +1401,14 @@ Please analyze this estimate and provide insights in the required JSON format.""
                     "using_google_shopping_price",
                     product=searchable_name[:50],
                     price=best_price,
-                    retailer=shopping_result.get("best_retailer")
+                    retailer=shopping_result.get("best_retailer"),
+                    labor_hours=scope_labor_hours
                 )
 
                 return {
                     "cost_code": cost_code or "SHOP-001",
                     "unit_cost": unit_cost,
-                    "labor_hours_per_unit": None,  # Let caller use labor productivity service
+                    "labor_hours_per_unit": scope_labor_hours,  # Use LLM-generated hours from scope if available
                     "equipment_cost": CostRange.zero(),
                     "confidence": CostConfidenceLevel.HIGH,
                     "confidence_score": 0.90,
@@ -1384,12 +1427,23 @@ Please analyze this estimate and provide insights in the required JSON format.""
             zip_code=zip_code
         )
 
-        logger.debug(
-            "using_database_price",
-            description=description[:50] if description else None,
-            cost_code=cost_code,
-            source="database"
-        )
+        # IMPORTANT: If we have scope-provided labor hours (from LLM), use those
+        # instead of the mock data values. This ensures LLM estimates take precedence.
+        if scope_labor_hours is not None and scope_labor_hours > 0:
+            db_result["labor_hours_per_unit"] = scope_labor_hours
+            logger.debug(
+                "using_scope_labor_hours",
+                description=description[:50] if description else None,
+                scope_hours=scope_labor_hours,
+                mock_hours=db_result.get("labor_hours_per_unit", "N/A")
+            )
+        else:
+            logger.debug(
+                "using_database_price",
+                description=description[:50] if description else None,
+                cost_code=cost_code,
+                source="database"
+            )
 
         return db_result
 

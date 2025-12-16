@@ -227,12 +227,15 @@ class PipelineOrchestrator:
                 # Success - add to context and continue
                 accumulated_context[f"{agent_name}_output"] = output
                 completed_agents.append(agent_name)
-                
+
                 pipeline_status.completed_agents = completed_agents
                 pipeline_status.agent_statuses[agent_name] = AgentStatus.COMPLETED.value
                 pipeline_status.progress = pipeline_status.get_progress_percentage(len(AGENT_SEQUENCE))
                 await self._update_pipeline_status(estimate_id, pipeline_status)
-                
+
+                # Log detailed agent output summary for debugging
+                self._log_agent_output_summary(agent_name, output)
+
                 logger.info(
                     "agent_completed",
                     estimate_id=estimate_id,
@@ -701,23 +704,114 @@ class PipelineOrchestrator:
     
     async def get_pipeline_status(self, estimate_id: str) -> Optional[PipelineStatus]:
         """Get current pipeline status.
-        
+
         Args:
             estimate_id: The estimate document ID.
-            
+
         Returns:
             PipelineStatus or None if not found.
         """
         estimate = await self.firestore.get_estimate(estimate_id)
-        
+
         if not estimate:
             return None
-        
+
         status_data = estimate.get("pipelineStatus")
         if not status_data:
             return None
-        
+
         return PipelineStatus(**status_data)
+
+    def _log_agent_output_summary(self, agent_name: str, output: Dict[str, Any]) -> None:
+        """Log detailed summary of agent output for debugging.
+
+        Args:
+            agent_name: Name of the agent that completed.
+            output: Agent output data.
+        """
+        print(f"\n{'='*60}")
+        print(f"[AGENT OUTPUT] {agent_name.upper()} AGENT COMPLETED")
+        print(f"{'='*60}")
+
+        if agent_name == "location":
+            print(f"  ZIP Code: {output.get('zipCode', 'N/A')}")
+            print(f"  City/State: {output.get('city', 'N/A')}, {output.get('state', 'N/A')}")
+            print(f"  Location Factor: {output.get('locationFactor', 'N/A')}")
+            labor_rates = output.get('laborRates', {})
+            print(f"  Labor Rates:")
+            print(f"    - Electrician: ${labor_rates.get('electrician', 'N/A')}/hr")
+            print(f"    - Plumber: ${labor_rates.get('plumber', 'N/A')}/hr")
+            print(f"    - Carpenter: ${labor_rates.get('carpenter', 'N/A')}/hr")
+            print(f"    - General Labor: ${labor_rates.get('generalLabor', 'N/A')}/hr")
+            print(f"  Confidence: {output.get('confidence', 'N/A')}")
+
+        elif agent_name == "scope":
+            divisions = output.get('divisions', [])
+            print(f"  Total Divisions: {len(divisions)}")
+            total_items = sum(len(d.get('lineItems', [])) for d in divisions)
+            print(f"  Total Line Items: {total_items}")
+            for div in divisions[:5]:  # Show first 5 divisions
+                print(f"    - {div.get('divisionCode', '??')}: {div.get('divisionName', 'Unknown')} ({len(div.get('lineItems', []))} items)")
+            print(f"  Confidence: {output.get('confidence', 'N/A')}")
+
+        elif agent_name == "cost":
+            subtotals = output.get('subtotals', {})
+            total = output.get('total', {})
+            print(f"  COST BREAKDOWN:")
+            materials = subtotals.get('materials', {})
+            labor = subtotals.get('labor', {})
+            print(f"    - Materials: ${materials.get('low', 0):,.2f} - ${materials.get('high', 0):,.2f}")
+            print(f"    - Labor: ${labor.get('low', 0):,.2f} - ${labor.get('high', 0):,.2f}")
+            print(f"    - Total Labor Hours: {subtotals.get('totalLaborHours', 'N/A')}")
+            print(f"  GRAND TOTAL: ${total.get('low', 0):,.2f} - ${total.get('high', 0):,.2f}")
+            print(f"  Items with exact costs: {output.get('itemsWithExactCosts', 'N/A')}")
+            print(f"  Items with estimated costs: {output.get('itemsWithEstimatedCosts', 'N/A')}")
+            print(f"  Confidence: {output.get('confidence', 'N/A')}")
+
+            # Check for mock data indicators
+            divisions = output.get('divisions', [])
+            total_items = sum(len(d.get('lineItems', [])) for d in divisions)
+            exact = output.get('itemsWithExactCosts', 0)
+            estimated = output.get('itemsWithEstimatedCosts', total_items)
+            if total_items > 0:
+                pct_estimated = (estimated / total_items) * 100
+                if pct_estimated > 50:
+                    print(f"  ⚠️  WARNING: {pct_estimated:.0f}% of items using ESTIMATED (mock) costs!")
+
+        elif agent_name == "timeline":
+            tasks = output.get('tasks', [])
+            print(f"  Total Tasks: {len(tasks)}")
+            print(f"  Total Duration: {output.get('totalDuration', 'N/A')} working days")
+            print(f"  Calendar Days: {output.get('totalCalendarDays', 'N/A')}")
+            duration_range = output.get('durationRange', {})
+            print(f"  Duration Range: {duration_range.get('optimistic', 'N/A')} - {duration_range.get('pessimistic', 'N/A')} days")
+            print(f"  Schedule Confidence: {output.get('scheduleConfidence', 'N/A')}")
+            # Show first few tasks
+            for task in tasks[:5]:
+                print(f"    - {task.get('name', 'Unknown')}: {task.get('durationDays', '?')} days ({task.get('primaryTrade', 'N/A')})")
+
+        elif agent_name == "risk":
+            print(f"  Risk Score: {output.get('riskScore', 'N/A')}/100")
+            print(f"  Risk Level: {output.get('riskLevel', 'N/A')}")
+            risks = output.get('risks', [])
+            print(f"  Total Risks Identified: {len(risks)}")
+            for risk in risks[:3]:
+                print(f"    - {risk.get('name', 'Unknown')}: {risk.get('severity', 'N/A')} severity")
+
+        elif agent_name == "final":
+            print(f"  P50 Total: ${output.get('p50', 0):,.2f}")
+            print(f"  P80 Total: ${output.get('p80', 0):,.2f}")
+            print(f"  P90 Total: ${output.get('p90', 0):,.2f}")
+            print(f"  Timeline Weeks: {output.get('timelineWeeks', 'N/A')}")
+            print(f"  Monte Carlo Iterations: {output.get('monteCarloIterations', 'N/A')}")
+
+        else:
+            # Generic logging for other agents
+            print(f"  Output keys: {list(output.keys())}")
+            if 'confidence' in output:
+                print(f"  Confidence: {output.get('confidence')}")
+
+        print(f"{'='*60}\n")
 
 
 # Convenience function for Cloud Function entry point

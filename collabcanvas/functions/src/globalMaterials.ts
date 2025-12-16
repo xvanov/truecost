@@ -336,11 +336,24 @@ export async function saveToGlobalMaterials(
         searchQuery.toLowerCase().trim()
       ]));
 
-      // Merge retailer data
-      const mergedRetailers = {
-        ...existing.retailers,
-        ...material.retailers,
-      };
+      // Merge retailer data - filter out undefined values to avoid Firestore errors
+      const mergedRetailers: Record<string, RetailerInfo> = {};
+
+      // Copy existing retailers if defined
+      if (existing.retailers?.lowes) {
+        mergedRetailers.lowes = existing.retailers.lowes;
+      }
+      if (existing.retailers?.homeDepot) {
+        mergedRetailers.homeDepot = existing.retailers.homeDepot;
+      }
+
+      // Override with new retailers if defined
+      if (material.retailers?.lowes) {
+        mergedRetailers.lowes = material.retailers.lowes;
+      }
+      if (material.retailers?.homeDepot) {
+        mergedRetailers.homeDepot = material.retailers.homeDepot;
+      }
 
       await docRef.update({
         aliases: updatedAliases,
@@ -351,7 +364,15 @@ export async function saveToGlobalMaterials(
 
       console.log(`[GLOBAL_MATERIALS] Updated existing material: ${id} (matchCount: ${(existing.matchCount || 0) + 1})`);
     } else {
-      // Create new document
+      // Create new document - filter out undefined retailer values
+      const cleanRetailers: Record<string, RetailerInfo> = {};
+      if (material.retailers?.lowes) {
+        cleanRetailers.lowes = material.retailers.lowes;
+      }
+      if (material.retailers?.homeDepot) {
+        cleanRetailers.homeDepot = material.retailers.homeDepot;
+      }
+
       const newMaterial: GlobalMaterial = {
         id,
         name: material.name,
@@ -359,7 +380,7 @@ export async function saveToGlobalMaterials(
         description: material.description,
         aliases: [...new Set([...material.aliases, searchQuery.toLowerCase().trim()])],
         zipCode: material.zipCode,
-        retailers: material.retailers,
+        retailers: cleanRetailers,
         createdAt: now,
         updatedAt: now,
         matchCount: 1,

@@ -7,6 +7,20 @@ Provides HTTP endpoints for:
 - A2A endpoints for all 19 agents
 """
 
+# macOS fork safety fix - must be at the very top before other imports
+import os
+import sys
+
+# Disable macOS fork safety check that causes crashes with multiprocessing
+if sys.platform == 'darwin':
+    os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
+    # Also set multiprocessing start method to 'spawn' instead of 'fork'
+    import multiprocessing
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass  # Already set
+
 import asyncio
 import json
 from typing import Dict, Any
@@ -23,7 +37,6 @@ from services.firestore_service import FirestoreService
 from validators.clarification_validator import validate_clarification_output
 
 # Initialize Firebase Admin SDK
-import os
 from firebase_admin import credentials as fb_credentials
 
 class _EmulatorCredential(fb_credentials.Base):
