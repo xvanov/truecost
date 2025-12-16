@@ -7,29 +7,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.clarificationAgent = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const openai_1 = require("openai");
-const dotenv = require("dotenv");
-const path = require("path");
 // Lazy initialization to avoid timeout during module load
 let _openai = null;
-let _apiKey = null;
-function getApiKey() {
-    var _a;
-    if (_apiKey === null) {
-        const envPath = path.resolve(process.cwd(), '.env');
-        const envResult = dotenv.config({ path: envPath, override: true });
-        const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-        const apiKeyFromEnv = (_a = envResult.parsed) === null || _a === void 0 ? void 0 : _a.OPENAI_API_KEY;
-        const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-        _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-        if (!_apiKey) {
-            console.warn('⚠️ OPENAI_API_KEY not found. Clarification agent will not work.');
-        }
-    }
-    return _apiKey;
-}
 function getOpenAI() {
     if (!_openai) {
-        _openai = new openai_1.OpenAI({ apiKey: getApiKey() });
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) {
+            console.error('[CLARIFICATION_AGENT] OPENAI_API_KEY not configured');
+            throw new Error('OPENAI_API_KEY not configured');
+        }
+        _openai = new openai_1.OpenAI({ apiKey });
     }
     return _openai;
 }
@@ -145,8 +132,8 @@ Format your response as JSON:
 }`;
 exports.clarificationAgent = (0, https_1.onCall)({
     cors: true,
-    // Note: secrets only used in production - emulator uses .env
-    secrets: process.env.FUNCTIONS_EMULATOR === 'true' ? [] : ['OPENAI_API_KEY'],
+    // Secrets for production; emulator uses .env.local
+    secrets: ['OPENAI_API_KEY'],
     timeoutSeconds: 60,
 }, async (request) => {
     var _a, _b;

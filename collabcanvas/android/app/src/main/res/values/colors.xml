@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- TrueCost app colors matching the web theme -->
+    <color name="colorPrimary">#0d0d1a</color>
+    <color name="colorPrimaryDark">#050A14</color>
+    <color name="colorAccent">#3BE3F5</color>
+</resources>

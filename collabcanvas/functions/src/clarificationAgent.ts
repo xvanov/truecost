@@ -5,33 +5,18 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { OpenAI } from 'openai';
-import * as dotenv from 'dotenv';
-import * as path from 'path';
 
 // Lazy initialization to avoid timeout during module load
 let _openai: OpenAI | null = null;
-let _apiKey: string | null = null;
-
-function getApiKey(): string {
-  if (_apiKey === null) {
-    const envPath = path.resolve(process.cwd(), '.env');
-    const envResult = dotenv.config({ path: envPath, override: true });
-
-    const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.NODE_ENV !== 'production';
-    const apiKeyFromEnv = envResult.parsed?.OPENAI_API_KEY;
-    const apiKeyFromProcess = process.env.OPENAI_API_KEY;
-    _apiKey = (isEmulator && apiKeyFromEnv) ? apiKeyFromEnv : (apiKeyFromProcess || apiKeyFromEnv || '');
-
-    if (!_apiKey) {
-      console.warn('⚠️ OPENAI_API_KEY not found. Clarification agent will not work.');
-    }
-  }
-  return _apiKey;
-}
 
 function getOpenAI(): OpenAI {
   if (!_openai) {
-    _openai = new OpenAI({ apiKey: getApiKey() });
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error('[CLARIFICATION_AGENT] OPENAI_API_KEY not configured');
+      throw new Error('OPENAI_API_KEY not configured');
+    }
+    _openai = new OpenAI({ apiKey });
   }
   return _openai;
 }
@@ -186,8 +171,8 @@ interface ClarificationResponse {
 
 export const clarificationAgent = onCall({
   cors: true,
-  // Note: secrets only used in production - emulator uses .env
-  secrets: process.env.FUNCTIONS_EMULATOR === 'true' ? [] : ['OPENAI_API_KEY'],
+  // Secrets for production; emulator uses .env.local
+  secrets: ['OPENAI_API_KEY'],
   timeoutSeconds: 60,
 }, async (request) => {
   try {

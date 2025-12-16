@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { AuthenticatedLayout } from '../../components/layouts/AuthenticatedLayout';
 import { Button, GlassPanel, Input, Select, Textarea, AddressAutocomplete } from '../../components/ui';
 import type { ParsedAddress } from '../../components/ui';
@@ -11,6 +12,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { useStepCompletion } from '../../hooks/useStepCompletion';
 import { saveScopeConfig, loadScopeConfig } from '../../services/scopeConfigService';
 import { uploadPlanImage } from '../../services/estimationService';
+import ARCoreRoomScanner, { type ScanResult } from '../../plugins/ARCoreRoomScanner';
+import { generateFloorPlanFromScan } from '../../services/floorPlanGenerator';
 import type { BackgroundImage } from '../../types';
 import type { EstimateConfig } from '../../types/project';
 
@@ -59,6 +62,52 @@ export function ScopePage() {
   const [existingPlanFileName, setExistingPlanFileName] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Room Scanner state
+  const [planInputMode, setPlanInputMode] = useState<'upload' | 'scan'>('upload');
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [arCoreAvailable, setArCoreAvailable] = useState<boolean | null>(null);
+  const [_arCoreChecking, setArCoreChecking] = useState(false);
+  const isNativePlatform = Capacitor.isNativePlatform();
+  // Note: _arCoreChecking can be used for loading states in the UI if needed
+
+  // AR Room Scan feature is enabled on native platforms (Android)
+  // The plugin now uses lazy initialization to avoid crashes on app startup
+  const isARFeatureEnabled = true;
+
+  // Debug: Log platform detection
+  useEffect(() => {
+    console.log('📱 Platform detection:', {
+      isNativePlatform,
+      platform: Capacitor.getPlatform(),
+      isNative: Capacitor.isNativePlatform(),
+    });
+  }, [isNativePlatform]);
+
+  // Check ARCore availability on mount (only on native platforms)
+  useEffect(() => {
+    if (!isNativePlatform) {
+      console.log('🔍 Not native platform, skipping ARCore check');
+      return;
+    }
+
+    console.log('🔍 Checking ARCore availability...');
+    setArCoreChecking(true);
+
+    ARCoreRoomScanner.checkAvailability()
+      .then((result: { isSupported: boolean }) => {
+        console.log('✅ ARCore availability result:', result);
+        setArCoreAvailable(result.isSupported);
+      })
+      .catch((error: unknown) => {
+        console.error('❌ ARCore availability check failed:', error);
+        setArCoreAvailable(false);
+      })
+      .finally(() => {
+        setArCoreChecking(false);
+      });
+  }, [isNativePlatform]);
 
   // Estimate configuration state
   const defaultStartDate = useMemo(() => {
@@ -216,6 +265,71 @@ export function ScopePage() {
     setExistingPlanFileName(null);
   };
 
+  // ARCore Room Scanner handler
+  const handleStartScan = async () => {
+    setIsScanning(true);
+    setError(null);
+
+    try {
+      // Request camera permission first
+      const permission = await ARCoreRoomScanner.requestPermission();
+      if (!permission.granted) {
+        setError('Camera permission is required for room scanning');
+        setIsScanning(false);
+        return;
+      }
+
+      // Check if ARCore needs to be installed
+      const installStatus = await ARCoreRoomScanner.installARCore();
+      if (!installStatus.installed && installStatus.status === 'INSTALL_REQUESTED') {
+        setError('Please install ARCore from the Play Store and try again');
+        setIsScanning(false);
+        return;
+      }
+
+      // Start the scan
+      const result = await ARCoreRoomScanner.startScan();
+
+      console.log('📱 AR Scan result received:', JSON.stringify(result));
+
+      if (result.success && result.dimensions) {
+        console.log('✅ Scan successful! Dimensions:', result.dimensions);
+        setScanResult(result);
+        // Auto-populate scope definition with scan results
+        const dims = result.dimensions;
+        const scanDescription = `Room scanned with ARCore:\n- Dimensions: ${dims.length.toFixed(1)}ft x ${dims.width.toFixed(1)}ft x ${dims.height.toFixed(1)}ft\n- Floor Area: ${dims.area.toFixed(1)} sq ft\n- Volume: ${dims.volume.toFixed(1)} cu ft`;
+
+        if (result.features && result.features.length > 0) {
+          const features = result.features.map((f: { type: string; count: number }) => `${f.count} ${f.type}(s)`).join(', ');
+          setFormData(prev => ({
+            ...prev,
+            scopeDefinition: prev.scopeDefinition
+              ? `${prev.scopeDefinition}\n\n${scanDescription}\n- Detected: ${features}`
+              : `${scanDescription}\n- Detected: ${features}`
+          }));
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            scopeDefinition: prev.scopeDefinition
+              ? `${prev.scopeDefinition}\n\n${scanDescription}`
+              : scanDescription
+          }));
+        }
+      } else {
+        setError(result.reason || 'Scan failed. Please try again.');
+      }
+    } catch (err) {
+      console.error('Room scan error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to scan room');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleClearScan = () => {
+    setScanResult(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -224,10 +338,10 @@ export function ScopePage() {
       return;
     }
 
-    // In edit mode, allow submission if we have an existing plan or new upload
-    const hasPlan = uploadedFile || existingPlanUrl;
-    if (!hasPlan) {
-      setError('Please upload a plan file');
+    // Allow submission if we have an existing plan, new upload, or successful scan
+    const hasPlanOrScanData = uploadedFile || existingPlanUrl || scanResult?.success;
+    if (!hasPlanOrScanData) {
+      setError('Please upload a plan file or scan a room');
       return;
     }
 
@@ -327,10 +441,56 @@ export function ScopePage() {
         await saveScopeConfig(finalProjectId, user.uid, estimateConfig);
       }
 
+      // Generate floor plan from scan result if available
+      let backgroundForAnnotate = preparedBackground;
+
+      console.log('🏠 Generating floor plan check:', {
+        hasPreparedBackground: !!preparedBackground,
+        hasScanResult: !!scanResult,
+        scanSuccess: scanResult?.success,
+        scanDimensions: scanResult?.dimensions,
+      });
+
+      if (!backgroundForAnnotate && scanResult?.success && scanResult.dimensions) {
+        console.log('🎨 Generating floor plan from scan...', scanResult.dimensions);
+
+        // Generate a floor plan image from the scan results
+        const floorPlan = generateFloorPlanFromScan({
+          dimensions: scanResult.dimensions,
+          features: scanResult.features || [],
+        });
+
+        console.log('✅ Floor plan generated:', {
+          width: floorPlan.width,
+          height: floorPlan.height,
+          dataUrlLength: floorPlan.dataUrl?.length,
+          dataUrlPreview: floorPlan.dataUrl?.substring(0, 50),
+        });
+
+        const now = Date.now();
+        backgroundForAnnotate = {
+          id: `scan-${now}`,
+          url: floorPlan.dataUrl,
+          fileName: `room-scan-${now}.png`,
+          fileSize: floorPlan.dataUrl.length, // Approximate size
+          width: floorPlan.width,
+          height: floorPlan.height,
+          aspectRatio: floorPlan.width / floorPlan.height,
+          uploadedAt: now,
+          uploadedBy: user.uid,
+        };
+
+        console.log('📦 Background for annotate created:', {
+          id: backgroundForAnnotate.id,
+          width: backgroundForAnnotate.width,
+          height: backgroundForAnnotate.height,
+        });
+      }
+
       // Navigate to Annotate page with the background image and estimate config
       navigate(`/project/${finalProjectId}/annotate`, {
         state: {
-          backgroundImage: preparedBackground,
+          backgroundImage: backgroundForAnnotate,
           estimateConfig,
         }
       });
@@ -342,19 +502,20 @@ export function ScopePage() {
     }
   };
 
-  // Form is valid if we have a name, a valid parsed address with ZIP code, scope definition, and a plan file
+  // Form is valid if we have a name, a valid parsed address with ZIP code, scope definition, and either a plan file OR a scan result
+  const hasPlanOrScan = uploadedFile || existingPlanUrl || scanResult?.success;
   const isFormValid = formData.name.trim() &&
     parsedAddress &&
     parsedAddress.zipCode.trim().length >= 5 &&
     formData.scopeDefinition.trim() &&
-    (uploadedFile || existingPlanUrl);
+    hasPlanOrScan;
 
   // Get actual completion state from hook
   const { completedSteps } = useStepCompletion(projectId);
 
   return (
     <AuthenticatedLayout>
-      <div className="container-spacious max-w-full pt-20 pb-14 md:pt-24">
+      <div className="container-spacious max-w-full px-3 md:px-6 pt-16 pb-14 md:pt-24">
         {/* Stepper */}
         {isEditMode && projectId && (
           <EstimateStepper
@@ -364,15 +525,15 @@ export function ScopePage() {
           />
         )}
 
-        {/* Header */}
-        <div className="mb-6 space-y-2">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-body-meta font-medium text-white border border-truecost-glass-border">
+        {/* Header - Smaller on mobile */}
+        <div className="mb-4 md:mb-6 space-y-1 md:space-y-2">
+          <span className="inline-flex items-center px-2 md:px-3 py-0.5 md:py-1 rounded-full text-xs md:text-body-meta font-medium text-white border border-truecost-glass-border">
             {isEditMode ? 'Edit Project' : 'New Project'}
           </span>
-          <h1 className="font-heading text-h1 text-truecost-text-primary">
+          <h1 className="font-heading text-xl md:text-h1 text-truecost-text-primary">
             {isEditMode ? 'Update Project Scope' : 'Define Your Project Scope'}
           </h1>
-          <p className="font-body text-body text-truecost-text-secondary/90">
+          <p className="font-body text-sm md:text-body text-truecost-text-secondary/90">
             Provide project details and upload your plans to get started.
           </p>
         </div>
@@ -384,10 +545,10 @@ export function ScopePage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4 md:gap-6">
           {/* Left: Form */}
-          <div className="space-y-6">
-            <GlassPanel className="p-8">
+          <div className="space-y-4 md:space-y-6">
+            <GlassPanel className="p-4 md:p-8">
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Project Name */}
                 <Input
@@ -432,20 +593,210 @@ export function ScopePage() {
                   <option value="other">Other</option>
                 </Select>
 
-                {/* File Upload */}
-                <div className="space-y-2">
+                {/* Plan Input - Upload OR Scan */}
+                <div className="space-y-3">
                   <label className="block font-body text-body font-medium text-truecost-text-primary">
-                    Upload Plans *
+                    Construction Plan *
                   </label>
-                  {!uploadedFile && !existingPlanUrl ? (
-                    <FileUploadZone onFileSelect={handleFileSelect} />
-                  ) : (
-                    <FilePreview
-                      file={uploadedFile}
-                      existingUrl={existingPlanUrl}
-                      existingFileName={existingPlanFileName}
-                      onRemove={handleRemoveFile}
-                    />
+
+                  {/* Mode Toggle - Show on native platform when AR feature is enabled */}
+                  {isNativePlatform && isARFeatureEnabled && (
+                    <div className="flex rounded-lg overflow-hidden border border-truecost-glass-border">
+                      <button
+                        type="button"
+                        onClick={() => setPlanInputMode('upload')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                          planInputMode === 'upload'
+                            ? 'bg-truecost-cyan/20 text-truecost-cyan border-r border-truecost-glass-border'
+                            : 'bg-truecost-glass-bg/30 text-truecost-text-secondary hover:bg-truecost-glass-bg/50 border-r border-truecost-glass-border'
+                        }`}
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Upload Plan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPlanInputMode('scan')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                          planInputMode === 'scan'
+                            ? 'bg-truecost-cyan/20 text-truecost-cyan'
+                            : 'bg-truecost-glass-bg/30 text-truecost-text-secondary hover:bg-truecost-glass-bg/50'
+                        }`}
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        AR Room Scan
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Upload Mode */}
+                  {planInputMode === 'upload' && (
+                    <>
+                      {!uploadedFile && !existingPlanUrl ? (
+                        <FileUploadZone onFileSelect={handleFileSelect} />
+                      ) : (
+                        <FilePreview
+                          file={uploadedFile}
+                          existingUrl={existingPlanUrl}
+                          existingFileName={existingPlanFileName}
+                          onRemove={handleRemoveFile}
+                        />
+                      )}
+                    </>
+                  )}
+
+                  {/* Scan Mode */}
+                  {planInputMode === 'scan' && (
+                    <div className="space-y-3">
+                      {/* ARCore not available message */}
+                      {arCoreAvailable === false && (
+                        <div className="glass-panel p-6 text-center bg-truecost-warning/5 border-truecost-warning/30">
+                          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-truecost-warning/10 flex items-center justify-center">
+                            <svg className="w-8 h-8 text-truecost-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                          </div>
+                          <h4 className="font-heading text-lg text-truecost-text-primary mb-2">
+                            ARCore Not Available
+                          </h4>
+                          <p className="text-sm text-truecost-text-secondary mb-4">
+                            AR Room Scanning requires ARCore. Please install ARCore from the Play Store or use the Upload Plan option instead.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => setPlanInputMode('upload')}
+                          >
+                            Switch to Upload Plan
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* ARCore checking */}
+                      {arCoreAvailable === null && (
+                        <div className="glass-panel p-6 text-center">
+                          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-truecost-cyan/10 flex items-center justify-center">
+                            <svg className="animate-spin w-8 h-8 text-truecost-cyan" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                          </div>
+                          <h4 className="font-heading text-lg text-truecost-text-primary mb-2">
+                            Checking AR Support...
+                          </h4>
+                          <p className="text-sm text-truecost-text-secondary">
+                            Please wait while we check if your device supports AR room scanning.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* ARCore available - show scan UI */}
+                      {arCoreAvailable === true && !scanResult?.success && (
+                        <div className="glass-panel p-6 text-center">
+                          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-truecost-cyan/10 flex items-center justify-center">
+                            <svg className="w-8 h-8 text-truecost-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                          </div>
+                          <h4 className="font-heading text-lg text-truecost-text-primary mb-2">
+                            Scan Room with AR
+                          </h4>
+                          <p className="text-sm text-truecost-text-secondary mb-4">
+                            Use your phone's camera to scan the room and automatically capture dimensions.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="primary"
+                            onClick={handleStartScan}
+                            disabled={isScanning}
+                          >
+                            {isScanning ? (
+                              <>
+                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                Scanning...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                Start AR Scan
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Scan result success */}
+                      {scanResult?.success && (
+                        <div className="glass-panel p-4 bg-truecost-success/5 border-truecost-success/30">
+                          <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-full bg-truecost-success/20 flex items-center justify-center flex-shrink-0">
+                              <svg className="w-5 h-5 text-truecost-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-heading text-base text-truecost-text-primary mb-1">
+                                Room Scanned Successfully
+                              </h4>
+                              {scanResult.dimensions && (
+                                <div className="grid grid-cols-2 gap-2 text-sm text-truecost-text-secondary">
+                                  <div>
+                                    <span className="text-truecost-text-muted">Dimensions:</span>{' '}
+                                    {scanResult.dimensions.length.toFixed(1)}' x {scanResult.dimensions.width.toFixed(1)}' x {scanResult.dimensions.height.toFixed(1)}'
+                                  </div>
+                                  <div>
+                                    <span className="text-truecost-text-muted">Area:</span>{' '}
+                                    {scanResult.dimensions.area.toFixed(1)} sq ft
+                                  </div>
+                                </div>
+                              )}
+                              {scanResult.features && scanResult.features.length > 0 && (
+                                <div className="text-sm text-truecost-text-secondary mt-1">
+                                  <span className="text-truecost-text-muted">Detected:</span>{' '}
+                                  {scanResult.features.map(f => `${f.count} ${f.type}(s)`).join(', ')}
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleClearScan}
+                              className="p-1 rounded hover:bg-truecost-glass-bg text-truecost-text-muted hover:text-truecost-text-secondary"
+                            >
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleStartScan}
+                            disabled={isScanning}
+                            className="mt-3 text-sm text-truecost-cyan hover:underline"
+                          >
+                            Scan another room
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Hint for web users */}
+                  {!isNativePlatform && (
+                    <p className="text-xs text-truecost-text-muted">
+                      AR Room Scanning is available in the mobile app. Upload your construction plans to continue.
+                    </p>
                   )}
                 </div>
 
@@ -483,11 +834,11 @@ export function ScopePage() {
 
                 {/* Estimate Configuration */}
                 <div className="pt-4 border-t border-truecost-glass-border">
-                  <h3 className="font-heading text-lg text-truecost-text-primary mb-4">
+                  <h3 className="font-heading text-base md:text-lg text-truecost-text-primary mb-3 md:mb-4">
                     Estimate Configuration
                   </h3>
-                  
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4">
                     <div className="space-y-2">
                       <label className="flex items-center gap-1 font-body text-body-meta font-medium text-truecost-text-secondary">
                         Overhead %
@@ -605,8 +956,8 @@ export function ScopePage() {
             </GlassPanel>
           </div>
 
-          {/* Right: Tips */}
-          <GlassPanel className="p-6 h-fit">
+          {/* Right: Tips - Hidden on mobile */}
+          <GlassPanel className="hidden lg:block p-6 h-fit">
             <div className="space-y-6">
               <div>
                 <h3 className="font-heading text-h3 text-truecost-cyan mb-3">Quick Tips</h3>

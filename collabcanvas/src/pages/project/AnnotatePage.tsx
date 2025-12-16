@@ -370,8 +370,17 @@ export function AnnotatePage() {
     }
   };
 
+  // Mobile chat panel state
+  const [showMobileChat, setShowMobileChat] = useState(false);
+
   return (
-    <div className="h-screen bg-truecost-bg-primary flex flex-col overflow-hidden">
+    <div
+      className="h-screen bg-truecost-bg-primary flex flex-col overflow-hidden"
+      style={{
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
       {/* Integrated navbar with toolbar */}
       <CanvasNavbar
         projectId={projectId}
@@ -390,7 +399,7 @@ export function AnnotatePage() {
       />
 
       {/* Main content - full height below navbar */}
-      <div className="flex-1 pt-12 flex overflow-hidden">
+      <div className="flex-1 pt-14 md:pt-12 flex overflow-hidden">
         {/* Canvas area - takes most of the space */}
         <div className="flex-1 flex flex-col min-w-0 p-2">
           <div className="flex-1 rounded-lg border border-truecost-glass-border/50 bg-truecost-glass-bg/20 overflow-hidden">
@@ -406,20 +415,56 @@ export function AnnotatePage() {
             />
           </div>
           {/* Properties panel - collapsible at bottom */}
-          <div className="mt-2">
+          <div className="mt-2 hidden md:block">
             <ShapePropertiesPanel className="w-full" projectId={projectId} />
           </div>
         </div>
 
-        {/* AI Chat sidebar - fixed width */}
-        <div className="w-80 lg:w-96 flex flex-col border-l border-truecost-glass-border bg-truecost-bg-secondary/50">
-          <ChatPanel 
-            projectId={projectId || ''} 
+        {/* AI Chat sidebar - hidden on mobile, shown on larger screens */}
+        <div className="hidden md:flex w-80 lg:w-96 flex-col border-l border-truecost-glass-border bg-truecost-bg-secondary/50">
+          <ChatPanel
+            projectId={projectId || ''}
             estimateConfig={estimateConfig}
             navigateToEstimate={`/project/${projectId}/estimate`}
           />
         </div>
       </div>
+
+      {/* Mobile Chat Toggle Button */}
+      <button
+        onClick={() => setShowMobileChat(true)}
+        className="md:hidden fixed bottom-4 right-4 z-40 w-14 h-14 rounded-full bg-gradient-to-r from-truecost-cyan to-truecost-teal shadow-lg flex items-center justify-center"
+      >
+        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      </button>
+
+      {/* Mobile Chat Panel - Full screen overlay */}
+      {showMobileChat && (
+        <div className="md:hidden fixed inset-0 z-50 bg-truecost-bg-primary flex flex-col">
+          {/* Mobile Chat Header */}
+          <div className="flex items-center justify-between p-4 border-b border-truecost-glass-border bg-truecost-bg-secondary">
+            <h2 className="text-lg font-semibold text-truecost-text-primary">Project Assistant</h2>
+            <button
+              onClick={() => setShowMobileChat(false)}
+              className="p-2 rounded-lg hover:bg-truecost-glass-bg text-truecost-text-secondary"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {/* Chat Panel Content */}
+          <div className="flex-1 overflow-hidden">
+            <ChatPanel
+              projectId={projectId || ''}
+              estimateConfig={estimateConfig}
+              navigateToEstimate={`/project/${projectId}/estimate`}
+            />
+          </div>
+        </div>
+      )}
 
       <DiagnosticsHud fps={fps} visible={showDiagnostics} />
     </div>
