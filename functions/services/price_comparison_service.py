@@ -283,12 +283,15 @@ async def get_material_prices(
     
     try:
         # 1. Call Cloud Function to trigger price comparison
+        # Firebase onCall functions expect data wrapped in "data" property
         function_data = {
-            "request": {
-                "projectId": project_id,
-                "productNames": product_names,
-                "forceRefresh": force_refresh,
-                "zipCode": zip_code,
+            "data": {
+                "request": {
+                    "projectId": project_id,
+                    "productNames": product_names,
+                    "forceRefresh": force_refresh,
+                    "zipCode": zip_code,
+                }
             }
         }
         

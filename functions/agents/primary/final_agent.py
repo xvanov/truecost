@@ -618,8 +618,8 @@ class FinalAgent(BaseA2AAgent):
             )
             
             response = await self.llm.generate_json(
-                prompt=prompt,
-                system_prompt=FINAL_AGENT_SYSTEM_PROMPT
+                system_prompt=FINAL_AGENT_SYSTEM_PROMPT,
+                user_message=prompt
             )
             
             self._tokens_used += response.get("tokens_used", 0)

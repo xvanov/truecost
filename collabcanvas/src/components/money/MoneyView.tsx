@@ -150,10 +150,10 @@ export function MoneyView({ mode = 'full' }: MoneyViewProps) {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center bg-gray-50">
+      <div className="flex h-full items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading BOM...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-truecost-cyan mx-auto mb-4"></div>
+          <p className="text-truecost-text-secondary">Loading BOM...</p>
         </div>
       </div>
     );
@@ -161,12 +161,12 @@ export function MoneyView({ mode = 'full' }: MoneyViewProps) {
 
   if (error && !billOfMaterials) {
   return (
-    <div className="flex h-full items-center justify-center bg-gray-50">
+    <div className="flex h-full items-center justify-center">
       <div className="text-center">
-          <p className="text-red-600 mb-4">Error: {error}</p>
+          <p className="text-truecost-danger mb-4">Error: {error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-4 py-2 bg-truecost-cyan text-truecost-bg-primary rounded hover:bg-truecost-teal"
           >
             Retry
           </button>
@@ -178,15 +178,15 @@ export function MoneyView({ mode = 'full' }: MoneyViewProps) {
   // Render labor-only view for mode="labor"
   if (mode === 'labor') {
     return (
-      <div className="flex h-full bg-gray-50" data-testid="money-view-labor">
+      <div className="flex h-full" data-testid="money-view-labor">
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="border-b border-truecost-glass-border px-6 py-4">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Labor Analysis</h1>
+                <h1 className="text-2xl font-bold text-truecost-text-primary">Labor Analysis</h1>
                 {billOfMaterials?.projectName && (
-                  <p className="text-sm text-gray-600 mt-1">{billOfMaterials.projectName}</p>
+                  <p className="text-sm text-truecost-text-secondary mt-1">{billOfMaterials.projectName}</p>
                 )}
               </div>
             </div>
@@ -197,11 +197,11 @@ export function MoneyView({ mode = 'full' }: MoneyViewProps) {
             {!billOfMaterials ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
-                  <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="mx-auto h-16 w-16 text-truecost-text-muted mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                   </svg>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Labor Data</h3>
-                  <p className="text-gray-600 mb-4">Generate an estimate to see labor analysis</p>
+                  <h3 className="text-lg font-semibold text-truecost-text-primary mb-2">No Labor Data</h3>
+                  <p className="text-truecost-text-secondary mb-4">Generate an estimate to see labor analysis</p>
                 </div>
               </div>
             ) : billOfMaterials.margin ? (
@@ -209,7 +209,7 @@ export function MoneyView({ mode = 'full' }: MoneyViewProps) {
             ) : (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
-                  <p className="text-gray-600">Labor calculation not available. Please generate BOM with prices first.</p>
+                  <p className="text-truecost-text-secondary">Labor calculation not available. Please generate BOM with prices first.</p>
                 </div>
               </div>
             )}
@@ -222,46 +222,46 @@ export function MoneyView({ mode = 'full' }: MoneyViewProps) {
   // Render materials-focused view for mode="materials"
   if (mode === 'materials') {
     return (
-      <div className="flex h-full bg-gray-50" data-testid="money-view-materials">
+      <div className="flex h-full" data-testid="money-view-materials">
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header with View Toggle */}
-          <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="border-b border-truecost-glass-border px-6 py-4">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Materials</h1>
+                <h1 className="text-2xl font-bold text-truecost-text-primary">Materials</h1>
                 {billOfMaterials?.projectName && (
-                  <p className="text-sm text-gray-600 mt-1">{billOfMaterials.projectName}</p>
+                  <p className="text-sm text-truecost-text-secondary mt-1">{billOfMaterials.projectName}</p>
                 )}
               </div>
               <div className="flex items-center gap-4">
                 {/* View Toggle */}
-                <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                <div className="flex items-center gap-1 rounded-lg border border-truecost-glass-border bg-truecost-glass-bg p-1">
                   <button
                     onClick={() => handleViewChange('bom')}
-                    className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                       currentView === 'bom'
-                        ? 'bg-white text-blue-600 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
+                        ? 'bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan'
+                        : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent'
                     }`}
                   >
                     BOM Table
                   </button>
                   <button
                     onClick={() => handleViewChange('customer')}
-                    className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                       currentView === 'customer'
-                        ? 'bg-white text-blue-600 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
+                        ? 'bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan'
+                        : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent'
                     }`}
                   >
                     Customer View
                   </button>
                   <button
                     onClick={() => handleViewChange('contractor')}
-                    className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                       currentView === 'contractor'
-                        ? 'bg-white text-blue-600 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
+                        ? 'bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan'
+                        : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent'
                     }`}
                   >
                     Contractor View
@@ -336,57 +336,57 @@ export function MoneyView({ mode = 'full' }: MoneyViewProps) {
 
   // Default: Full view (mode='full' or undefined)
   return (
-    <div className="flex h-full bg-gray-50">
+    <div className="flex h-full">
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header with View Toggle */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="border-b border-truecost-glass-border px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Money View</h1>
+              <h1 className="text-2xl font-bold text-truecost-text-primary">Money View</h1>
               {billOfMaterials?.projectName && (
-                <p className="text-sm text-gray-600 mt-1">{billOfMaterials.projectName}</p>
+                <p className="text-sm text-truecost-text-secondary mt-1">{billOfMaterials.projectName}</p>
               )}
             </div>
             <div className="flex items-center gap-4">
               {/* View Toggle */}
-              <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+              <div className="flex items-center gap-1 rounded-lg border border-truecost-glass-border bg-truecost-glass-bg p-1">
                 <button
                   onClick={() => handleViewChange('bom')}
-                  className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                     currentView === 'bom'
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan'
+                      : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent'
                   }`}
                 >
                   BOM Table
                 </button>
                 <button
                   onClick={() => handleViewChange('customer')}
-                  className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                     currentView === 'customer'
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan'
+                      : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent'
                   }`}
                 >
                   Customer View
                 </button>
                 <button
                   onClick={() => handleViewChange('contractor')}
-                  className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                     currentView === 'contractor'
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan'
+                      : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent'
                   }`}
                 >
                   Contractor View
                 </button>
                 <button
                   onClick={() => handleViewChange('comparison')}
-                  className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                     currentView === 'comparison'
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan'
+                      : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent'
                   }`}
                 >
                   Comparison

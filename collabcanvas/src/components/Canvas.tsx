@@ -30,6 +30,7 @@ import type { SelectionBox as SelectionBoxType, UnitType, Shape, Layer as LayerT
 const BackgroundImageComponent = ({ backgroundImage }: { backgroundImage: BackgroundImage }) => {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [loadedDimensions, setLoadedDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [loadingState, setLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
 
   useEffect(() => {
     let isMounted = true;
@@ -37,22 +38,37 @@ const BackgroundImageComponent = ({ backgroundImage }: { backgroundImage: Backgr
     // Reset image state when backgroundImage changes
     setImage(null);
     setLoadedDimensions(null);
+    setLoadingState('loading');
+
+    console.log('🖼️ Loading background image:', backgroundImage.url?.substring(0, 100) + '...');
 
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       if (isMounted) {
-        console.log('✅ Background image loaded:', { url: backgroundImage.url, width: img.width, height: img.height });
+        console.log('✅ Background image loaded successfully:', {
+          url: backgroundImage.url?.substring(0, 50) + '...',
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
+          storedWidth: backgroundImage.width,
+          storedHeight: backgroundImage.height,
+        });
         setImage(img);
         // Store the actual loaded dimensions to use as fallback
-        setLoadedDimensions({ width: img.width, height: img.height });
+        setLoadedDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+        setLoadingState('loaded');
       }
     };
     img.onerror = (error) => {
       if (isMounted) {
-        console.error('❌ Failed to load background image:', error, backgroundImage.url);
+        console.error('❌ Failed to load background image:', {
+          error,
+          url: backgroundImage.url,
+          urlLength: backgroundImage.url?.length,
+        });
         setImage(null);
         setLoadedDimensions(null);
+        setLoadingState('error');
       }
     };
     img.src = backgroundImage.url;
@@ -63,13 +79,21 @@ const BackgroundImageComponent = ({ backgroundImage }: { backgroundImage: Backgr
   }, [backgroundImage.url, backgroundImage.id]); // Include id to detect when the entire object changes
 
   if (!image) {
+    // Log loading state for debugging
+    if (loadingState === 'loading') {
+      console.log('⏳ Background image still loading...');
+    } else if (loadingState === 'error') {
+      console.log('❌ Background image failed to load, cannot render');
+    }
     return null;
   }
 
   // Use stored dimensions if valid, otherwise fall back to actual loaded image dimensions
   // This fixes the bug where images with 0x0 stored dimensions become invisible
-  const displayWidth = backgroundImage.width > 0 ? backgroundImage.width : (loadedDimensions?.width || image.width);
-  const displayHeight = backgroundImage.height > 0 ? backgroundImage.height : (loadedDimensions?.height || image.height);
+  const displayWidth = backgroundImage.width > 0 ? backgroundImage.width : (loadedDimensions?.width || image.naturalWidth);
+  const displayHeight = backgroundImage.height > 0 ? backgroundImage.height : (loadedDimensions?.height || image.naturalHeight);
+
+  console.log('🎨 Rendering background image at:', { x: 0, y: 0, displayWidth, displayHeight });
 
   return (
     <Image
@@ -232,13 +256,78 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ projectId, onFpsUpdate, 
   
   // Debug: Track canvasScale changes to see if store updates are triggering re-renders
   useEffect(() => {
-    console.log('🔄 canvasScale changed:', { 
-      hasBackgroundImage: !!canvasScale.backgroundImage, 
+    console.log('🔄 canvasScale changed:', {
+      hasBackgroundImage: !!canvasScale.backgroundImage,
       backgroundImageUrl: canvasScale.backgroundImage?.url,
       hasScaleLine: !!canvasScale.scaleLine,
       scaleLineId: canvasScale.scaleLine?.id
     });
   }, [canvasScale]);
+
+  // Track if we've already auto-fitted the view for this background image
+  const hasFittedForImageRef = useRef<string | null>(null);
+
+  // Auto-fit the view to show the background image when it first loads (only on first load)
+  useEffect(() => {
+    const bgImage = canvasScale.backgroundImage;
+    if (!bgImage || !bgImage.url || dimensions.width === 0 || dimensions.height === 0) return;
+
+    // Skip if we already fitted for this image
+    if (hasFittedForImageRef.current === bgImage.url) return;
+
+    // Check if there's a stored viewport position - if so, respect it
+    const savedState = loadViewportFromStorage();
+    if (savedState && (savedState.x !== 0 || savedState.y !== 0 || savedState.scale !== 1)) {
+      // User has a saved viewport state, don't auto-fit
+      hasFittedForImageRef.current = bgImage.url;
+      return;
+    }
+
+    // Calculate the scale needed to fit the image in the viewport (with some padding)
+    const padding = 40; // pixels of padding around the image
+    const availableWidth = dimensions.width - padding * 2;
+    const availableHeight = dimensions.height - padding * 2;
+
+    // Get image dimensions (fallback to reasonable defaults if 0)
+    const imgWidth = bgImage.width > 0 ? bgImage.width : 1000;
+    const imgHeight = bgImage.height > 0 ? bgImage.height : 800;
+
+    const scaleX = availableWidth / imgWidth;
+    const scaleY = availableHeight / imgHeight;
+    const fitScale = Math.min(scaleX, scaleY, 1); // Don't zoom in, only zoom out if needed
+
+    // Calculate position to center the image
+    const centeredX = (dimensions.width - imgWidth * fitScale) / 2;
+    const centeredY = (dimensions.height - imgHeight * fitScale) / 2;
+
+    console.log('📐 Auto-fitting canvas to background image:', {
+      imgWidth,
+      imgHeight,
+      viewportWidth: dimensions.width,
+      viewportHeight: dimensions.height,
+      fitScale,
+      centeredX,
+      centeredY,
+    });
+
+    // Update refs and stage
+    stagePosRef.current = { x: centeredX, y: centeredY };
+    stageScaleRef.current = fitScale;
+
+    const stage = stageRef.current;
+    if (stage) {
+      stage.position({ x: centeredX, y: centeredY });
+      stage.scale({ x: fitScale, y: fitScale });
+    }
+
+    // Save to localStorage and notify parent
+    saveViewportToStorage({ x: centeredX, y: centeredY, scale: fitScale });
+    if (onZoomChange) {
+      onZoomChange(fitScale);
+    }
+
+    hasFittedForImageRef.current = bgImage.url;
+  }, [canvasScale.backgroundImage, dimensions.width, dimensions.height, loadViewportFromStorage, saveViewportToStorage, onZoomChange]);
   
   // Presence state
   const { users: otherUsers, updateCursorPosition } = usePresence();
@@ -1078,11 +1167,21 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ projectId, onFpsUpdate, 
   return (
     <div
       ref={containerRef}
-      className="w-full h-full overflow-hidden"
-      style={{ backgroundColor: '#F5F5F5' }}
+      className="w-full h-full overflow-hidden relative"
+      style={{ backgroundColor: '#1a1a2e' }}
       tabIndex={0}
       onFocus={() => console.log('Canvas focused')}
     >
+      {/* Empty state when no background image - pointer-events-none to not block canvas interaction */}
+      {!canvasScale.backgroundImage && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 pointer-events-none">
+          <div className="text-4xl mb-4">📋</div>
+          <h3 className="text-lg font-semibold text-truecost-text-primary mb-2">No Plan Loaded</h3>
+          <p className="text-sm text-truecost-text-secondary max-w-xs">
+            Go back to Scope to upload a construction plan, or use the chat assistant to get started.
+          </p>
+        </div>
+      )}
       {dimensions.width > 0 && dimensions.height > 0 && (
         <Stage
           ref={stageRef}

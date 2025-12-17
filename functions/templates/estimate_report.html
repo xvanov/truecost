@@ -11,36 +11,57 @@
 <body>
     {# Cover Page #}
     <div class="cover-page">
-        <div class="logo">TrueCost</div>
+        <div class="cover-header">
+            <div class="logo-container">
+                {% if logo_base64 %}
+                <img class="logo-img" src="data:image/png;base64,{{ logo_base64 }}" alt="TrueCost">
+                {% endif %}
+                <div class="logo-text">TrueCost</div>
+            </div>
         {% if client_ready %}
         <div class="subtitle">Construction Cost Estimate</div>
         {% else %}
         <div class="subtitle">Professional Construction Estimation</div>
         {% endif %}
+        </div>
 
+        <div class="cover-divider"></div>
+
+        <div class="project-info">
         <div class="project-title">{{ project.name }}</div>
         <div class="project-address">{{ project.address }}</div>
+            {% if project.type %}
+            <div class="project-type">{{ project.type }} Project</div>
+            {% endif %}
+        </div>
 
         <div class="estimate-summary">
             {% if client_ready %}
             {# Client-ready: Show single authoritative total (P80 as recommended budget) #}
+            <div class="summary-label">Total Project Estimate</div>
             <div class="total-cost">${{ "{:,.0f}".format(estimate.p80) }}</div>
-            <div class="confidence-range">Total Project Estimate</div>
             {% else %}
             {# Contractor view: Show P50/P80/P90 breakdown #}
+            <div class="summary-label">Estimated Project Cost</div>
             <div class="total-cost">${{ "{:,.0f}".format(estimate.total_cost) }}</div>
             <div class="confidence-range">
-                P50: ${{ "{:,.0f}".format(estimate.p50) }} |
-                P80: ${{ "{:,.0f}".format(estimate.p80) }} |
-                P90: ${{ "{:,.0f}".format(estimate.p90) }}
+                <span class="confidence-item"><strong>P50:</strong> ${{ "{:,.0f}".format(estimate.p50) }}</span>
+                <span class="confidence-divider">|</span>
+                <span class="confidence-item"><strong>P80:</strong> ${{ "{:,.0f}".format(estimate.p80) }}</span>
+                <span class="confidence-divider">|</span>
+                <span class="confidence-item"><strong>P90:</strong> ${{ "{:,.0f}".format(estimate.p90) }}</span>
             </div>
             {% endif %}
         </div>
 
-        <div class="date">
-            Prepared: {{ report_date }}<br>
+        <div class="cover-footer">
+            <div class="date-info">
+                <span class="date-label">Prepared:</span> {{ report_date }}
+            </div>
             {% if not client_ready %}
-            Estimate ID: {{ estimate_id }}
+            <div class="estimate-id">
+                <span class="date-label">Estimate ID:</span> {{ estimate_id }}
+            </div>
             {% endif %}
         </div>
     </div>

@@ -1,59 +1,43 @@
 # TrueCost Deep Agent Pipeline - Python Dependencies
 
 # Firebase
-firebase-admin>=6.0.0
-firebase-functions>=0.4.0
+firebase-admin>=6.0.0,<7.0.0
+firebase-functions>=0.4.0,<1.0.0
+
+# Secret Management (Firebase Secrets Manager via Google Cloud)
+google-cloud-secret-manager>=2.16.0,<3.0.0
 
 # LangChain & LLM
 openai>=1.0.0
 langchain>=0.1.0
 langchain-openai>=0.1.0
 langgraph>=0.2.0
+langchain-core>=0.3.0
 
 # A2A Protocol - HTTP Client
-httpx>=0.25.0
+httpx>=0.25.0,<0.28.0
 
 # Data Validation
-pydantic>=2.0.0
-
-# Logging
-structlog>=23.0.0
-
-# Math/Statistics (for Monte Carlo)
-numpy>=1.24.0
-
-# Environment Variables
-python-dotenv>=1.0.0
-
-# Testing
-pytest>=7.0.0
-pytest-asyncio>=0.21.0
-pytest-cov>=4.0.0
-
-
-
-# TrueCost Python Cloud Functions Dependencies
-# Epic 4: Data Services & PDF Output
-
-# Firebase SDK
-firebase-admin>=6.0.0,<7.0.0
-firebase-functions>=0.4.0,<1.0.0
+pydantic>=2.4.0,<3.0.0
 
 # Logging
 structlog>=23.0.0,<25.0.0
 
+# Math/Statistics (for Monte Carlo)
+numpy>=1.26.0,<2.0.0
+
+# PDF Generation
+weasyprint>=61.2,<62.0
+jinja2>=3.1.0,<4.0.0
+
+# Retry Logic
+tenacity>=8.0.0,<9.0.0
+
+# Local Development
+flask-cors>=4.0.0
+python-dotenv>=1.0.0
+
 # Testing
 pytest>=7.0.0,<10.0.0
 pytest-asyncio>=0.21.0,<2.0.0
-
-# Epic 4 dependencies:
-numpy>=1.26.0,<2.0.0  # Monte Carlo simulation (Story 4.2)
-weasyprint>=61.2,<62.0  # PDF generation (Story 4.3, >=61.2 for CVE fix)
-jinja2>=3.1.0,<4.0.0  # PDF templates (Story 4.3)
-
-# Story 4.5: Real Data Integration
-httpx>=0.25.0,<0.28.0  # Async HTTP client for BLS/Weather API calls
-tenacity>=8.0.0,<9.0.0  # Retry logic with exponential backoff
-pydantic>=2.4.0,<3.0.0  # Input schema definitions for agent tools (>=2.4.0 excludes CVE-2024-3772)
-langchain-core>=0.3.0  # Tool decorator and schemas for agent tools
-flask-cors>=4.0.0
+pytest-cov>=4.0.0

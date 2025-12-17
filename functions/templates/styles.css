@@ -8,27 +8,52 @@
     size: letter;
     margin: 0.75in 0.75in 1in 0.75in;
 
-    @top-center {
-        content: "TrueCost Construction Estimate";
+    @top-left {
+        content: "TrueCost";
+        font-size: 10pt;
+        font-weight: 700;
+        color: #1e3a5f;
+    }
+
+    @top-right {
+        content: "Construction Estimate";
         font-size: 9pt;
-        color: #6b7280;
+        color: #64748b;
     }
 
     @bottom-left {
-        content: "Confidential - Prepared for Client";
+        content: "Confidential";
         font-size: 8pt;
-        color: #9ca3af;
+        color: #94a3b8;
+    }
+
+    @bottom-center {
+        content: "© TrueCost Professional Estimation";
+        font-size: 8pt;
+        color: #cbd5e1;
     }
 
     @bottom-right {
         content: "Page " counter(page) " of " counter(pages);
         font-size: 8pt;
-        color: #9ca3af;
+        color: #94a3b8;
     }
 }
 
 @page :first {
-    @top-center {
+    @top-left {
+        content: none;
+    }
+    @top-right {
+        content: none;
+    }
+    @bottom-left {
+        content: none;
+    }
+    @bottom-center {
+        content: none;
+    }
+    @bottom-right {
         content: none;
     }
 }
@@ -51,95 +76,187 @@ body {
 h1 {
     font-size: 24pt;
     font-weight: 700;
-    color: #111827;
+    color: #0f172a;
     margin: 0 0 0.5em 0;
 }
 
 h2 {
     font-size: 16pt;
-    font-weight: 600;
-    color: #1f2937;
+    font-weight: 700;
+    color: #1e3a5f;
     margin: 1.5em 0 0.75em 0;
-    padding-bottom: 0.25em;
-    border-bottom: 2px solid #2563eb;
+    padding-bottom: 0.5em;
+    border-bottom: 2px solid #0ea5e9;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+h2::before {
+    content: "";
+    display: inline-block;
+    width: 4px;
+    height: 1em;
+    background: linear-gradient(180deg, #0ea5e9, #059669);
+    border-radius: 2px;
 }
 
 h3 {
     font-size: 12pt;
     font-weight: 600;
-    color: #374151;
+    color: #334155;
     margin: 1em 0 0.5em 0;
 }
 
 h4 {
     font-size: 10pt;
     font-weight: 600;
-    color: #4b5563;
+    color: #475569;
     margin: 0.75em 0 0.25em 0;
 }
 
 p {
     margin: 0 0 0.75em 0;
+    color: #334155;
 }
 
 /* Cover Page */
 .cover-page {
     text-align: center;
-    padding-top: 2in;
+    padding-top: 1.5in;
     page-break-after: always;
+    display: flex;
+    flex-direction: column;
+    min-height: 8in;
 }
 
-.cover-page .logo {
-    font-size: 36pt;
+.cover-header {
+    margin-bottom: 1.5em;
+}
+
+.logo-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5em;
+    margin-bottom: 0.5em;
+}
+
+.logo-img {
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
+}
+
+.logo-text {
+    font-size: 42pt;
     font-weight: 800;
-    color: #2563eb;
+    color: #1e3a5f;
     letter-spacing: -1px;
-    margin-bottom: 0.25em;
 }
 
 .cover-page .subtitle {
-    font-size: 14pt;
-    color: #6b7280;
-    margin-bottom: 2em;
+    font-size: 13pt;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 500;
+}
+
+.cover-divider {
+    width: 80px;
+    height: 3px;
+    background: linear-gradient(90deg, #0ea5e9, #059669);
+    margin: 1.5em auto;
+    border-radius: 2px;
+}
+
+.project-info {
+    margin: 1.5em 0;
 }
 
 .cover-page .project-title {
-    font-size: 28pt;
+    font-size: 32pt;
     font-weight: 700;
-    color: #111827;
-    margin: 1em 0 0.25em 0;
+    color: #0f172a;
+    margin: 0 0 0.25em 0;
+    line-height: 1.2;
 }
 
 .cover-page .project-address {
     font-size: 14pt;
-    color: #4b5563;
-    margin-bottom: 2em;
+    color: #475569;
+    margin-bottom: 0.5em;
+}
+
+.cover-page .project-type {
+    font-size: 11pt;
+    color: #64748b;
+    font-style: italic;
 }
 
 .cover-page .estimate-summary {
-    background: #f3f4f6;
-    padding: 1.5em;
-    border-radius: 8px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    padding: 2em 3em;
+    border-radius: 12px;
     display: inline-block;
-    margin: 1em auto;
+    margin: 1.5em auto;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.summary-label {
+    font-size: 10pt;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 0.5em;
+    font-weight: 600;
 }
 
 .cover-page .total-cost {
-    font-size: 36pt;
-    font-weight: 700;
+    font-size: 44pt;
+    font-weight: 800;
     color: #059669;
+    line-height: 1;
 }
 
 .cover-page .confidence-range {
-    font-size: 12pt;
-    color: #6b7280;
-    margin-top: 0.5em;
+    font-size: 11pt;
+    color: #64748b;
+    margin-top: 1em;
+    padding-top: 1em;
+    border-top: 1px solid #e2e8f0;
 }
 
-.cover-page .date {
+.confidence-item {
+    display: inline-block;
+}
+
+.confidence-item strong {
+    color: #475569;
+}
+
+.confidence-divider {
+    color: #cbd5e1;
+    margin: 0 0.75em;
+}
+
+.cover-footer {
+    margin-top: auto;
+    padding-top: 2em;
+}
+
+.date-info,
+.estimate-id {
     font-size: 10pt;
-    color: #9ca3af;
-    margin-top: 3em;
+    color: #94a3b8;
+    margin: 0.25em 0;
+}
+
+.date-label {
+    color: #64748b;
+    font-weight: 500;
 }
 
 /* Section Styles */

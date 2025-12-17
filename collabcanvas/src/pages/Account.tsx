@@ -46,20 +46,20 @@ export function Account() {
 
   return (
     <AuthenticatedLayout>
-      <div className="container-spacious py-section max-w-3xl pt-14">
+      <div className="container-spacious py-section max-w-3xl px-4 md:px-6 pt-16 md:pt-20">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="font-heading text-h1 text-truecost-text-primary mb-2">Account Settings</h1>
-          <p className="font-body text-body text-truecost-text-secondary">
+        <div className="mb-6 md:mb-8">
+          <h1 className="font-heading text-xl md:text-h1 text-truecost-text-primary mb-1 md:mb-2">Account Settings</h1>
+          <p className="font-body text-sm md:text-body text-truecost-text-secondary">
             Manage your personal information and preferences
           </p>
         </div>
 
         <form onSubmit={handleSave}>
-          <GlassPanel className="p-8 space-y-8">
+          <GlassPanel className="p-4 md:p-8 space-y-6 md:space-y-8">
             {/* Personal Information */}
-            <div className="space-y-6">
-              <h2 className="font-heading text-h3 text-truecost-text-primary pb-3 border-b border-truecost-glass-border">
+            <div className="space-y-4 md:space-y-6">
+              <h2 className="font-heading text-lg md:text-h3 text-truecost-text-primary pb-2 md:pb-3 border-b border-truecost-glass-border">
                 Personal Information
               </h2>
 
@@ -101,8 +101,8 @@ export function Account() {
             </div>
 
             {/* Regional Preferences */}
-            <div className="space-y-6">
-              <h2 className="font-heading text-h3 text-truecost-text-primary pb-3 border-b border-truecost-glass-border">
+            <div className="space-y-4 md:space-y-6">
+              <h2 className="font-heading text-lg md:text-h3 text-truecost-text-primary pb-2 md:pb-3 border-b border-truecost-glass-border">
                 Regional Preferences
               </h2>
 

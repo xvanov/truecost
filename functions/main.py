@@ -7,6 +7,20 @@ Provides HTTP endpoints for:
 - A2A endpoints for all 19 agents
 """
 
+# macOS fork safety fix - must be at the very top before other imports
+import os
+import sys
+
+# Disable macOS fork safety check that causes crashes with multiprocessing
+if sys.platform == 'darwin':
+    os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
+    # Also set multiprocessing start method to 'spawn' instead of 'fork'
+    import multiprocessing
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass  # Already set
+
 import asyncio
 import json
 from typing import Dict, Any
@@ -23,7 +37,6 @@ from services.firestore_service import FirestoreService
 from validators.clarification_validator import validate_clarification_output
 
 # Initialize Firebase Admin SDK
-import os
 from firebase_admin import credentials as fb_credentials
 
 class _EmulatorCredential(fb_credentials.Base):
@@ -73,19 +86,33 @@ def error_response(code: str, message: str, details: Dict[str, Any] = None) -> D
 
 def get_request_json(req: https_fn.Request) -> Dict[str, Any]:
     """Extract JSON from request body.
-    
+
     Args:
         req: HTTP request object.
-        
+
     Returns:
-        Parsed JSON data.
-        
+        Parsed JSON data, or empty dict if body is empty/invalid.
+
     Raises:
-        ValidationError: If JSON is invalid.
+        ValidationError: If JSON is invalid (unless body is empty).
     """
     try:
-        return req.get_json(force=True) or {}
+        # Check if request has any body content
+        content_length = req.content_length or 0
+        if content_length == 0:
+            logger.warning("empty_request_body", method=req.method, path=req.path)
+            return {}
+
+        result = req.get_json(force=True)
+        return result if result else {}
     except Exception as e:
+        # Log the error but return empty dict for resilience
+        logger.warning(
+            "json_parse_error",
+            error=str(e),
+            method=req.method,
+            path=req.path
+        )
         raise ValidationError(
             message=f"Invalid JSON in request body: {str(e)}"
         )
@@ -181,9 +208,14 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
                 status=400
             )
         
-        # Validate ClarificationOutput schema
+        # Validate ClarificationOutput schema (lenient mode by default)
         validation_result = validate_clarification_output(clarification_output)
         if not validation_result.is_valid:
+            logger.warning(
+                "clarification_output_validation_failed",
+                errors=validation_result.errors,
+                keys_received=list(clarification_output.keys()) if isinstance(clarification_output, dict) else "not_a_dict"
+            )
             return _json_response(
                 error_response(
                     ErrorCode.VALIDATION_ERROR,
@@ -192,9 +224,12 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
                 ),
                 status=400
             )
-        
+
+        # Use raw_data if parsed model is not available (lenient mode)
+        effective_clarification = validation_result.raw_data or clarification_output
+
         # Generate estimate ID or use provided one
-        estimate_id = clarification_output.get("estimateId") or f"est-{uuid4().hex[:12]}"
+        estimate_id = effective_clarification.get("estimateId") or f"est-{uuid4().hex[:12]}"
         
         logger.info(
             "pipeline_request_received",
@@ -208,7 +243,7 @@ def start_deep_pipeline(req: https_fn.Request) -> https_fn.Response:
             estimate_id=estimate_id,
             user_id=user_id,
             project_id=project_id,
-            clarification_output=clarification_output
+            clarification_output=effective_clarification
         ))
         
         return _json_response(success_response(result))

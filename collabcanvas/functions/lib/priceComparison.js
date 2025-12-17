@@ -4,26 +4,9 @@ exports.comparePrices = exports.comparePricesConfig = exports.parseMatchResult =
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
-const dotenv = require("dotenv");
-const path = require("path");
 const openai_1 = require("openai");
 // Global Materials Database imports
 const globalMaterials_1 = require("./globalMaterials");
-// Using cors: true to match other functions (aiCommand, materialEstimateCommand, sagemakerInvoke)
-// This supports Firebase preview channel URLs which have dynamic hostnames
-// Load environment variables - try multiple locations
-// Load .env.local first (higher priority), then .env as fallback
-dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
-dotenv.config();
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-// Log environment variable loading status
-if (process.env.NODE_ENV !== 'production') {
-    console.log('[PRICE_COMPARISON] Environment check:');
-    console.log('[PRICE_COMPARISON] - SERP_API_KEY:', process.env.SERP_API_KEY ? 'SET' : 'NOT SET');
-    console.log('[PRICE_COMPARISON] - OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET');
-}
 // Lazy-initialized Firestore instance
 let _db = null;
 function initFirebaseAdmin() {
@@ -49,12 +32,39 @@ const SERPAPI_MERCHANTS = {
 };
 const RETAILERS = ['homeDepot', 'lowes'];
 const SERPAPI_TIMEOUT_MS = 30000;
+// ============ SERPAPI CIRCUIT BREAKER ============
+// Track if SerpAPI quota is exhausted to avoid redundant calls
+let serpApiQuotaExhausted = false;
+let serpApiQuotaExhaustedAt = null;
+const SERPAPI_QUOTA_RESET_MS = 60 * 60 * 1000; // Reset after 1 hour
+function isSerpApiAvailable() {
+    if (!serpApiQuotaExhausted)
+        return true;
+    // Reset circuit breaker after timeout
+    if (serpApiQuotaExhaustedAt && Date.now() - serpApiQuotaExhaustedAt > SERPAPI_QUOTA_RESET_MS) {
+        console.log('[PRICE_COMPARISON] SerpApi circuit breaker reset');
+        serpApiQuotaExhausted = false;
+        serpApiQuotaExhaustedAt = null;
+        return true;
+    }
+    return false;
+}
+function markSerpApiQuotaExhausted() {
+    serpApiQuotaExhausted = true;
+    serpApiQuotaExhaustedAt = Date.now();
+    console.log('[PRICE_COMPARISON] SerpApi circuit breaker TRIPPED - quota exhausted');
+}
 // ============ SERPAPI GOOGLE SHOPPING ============
 /**
  * Fetch products from SerpApi Google Shopping for a specific retailer
  * Filters results by merchant name pattern
  */
 async function fetchFromSerpApi(productName, retailer) {
+    // Check circuit breaker first
+    if (!isSerpApiAvailable()) {
+        console.log(`[PRICE_COMPARISON] SerpApi circuit breaker OPEN - skipping API call for "${productName}"`);
+        return [];
+    }
     const apiKey = process.env.SERP_API_KEY;
     if (!apiKey) {
         console.error('[PRICE_COMPARISON] SERP_API_KEY not configured');
@@ -78,6 +88,10 @@ async function fetchFromSerpApi(productName, retailer) {
         if (!res.ok) {
             const errorText = await res.text();
             console.error(`[PRICE_COMPARISON] SerpApi error: ${res.status} - ${errorText}`);
+            // Check for quota exhaustion (429) and trip circuit breaker
+            if (res.status === 429 || errorText.includes('run out of searches')) {
+                markSerpApiQuotaExhausted();
+            }
             return [];
         }
         const data = await res.json();

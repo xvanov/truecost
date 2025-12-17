@@ -32,6 +32,18 @@ from models.agent_output import (
     AgentScoreResult,
     CriticFeedback
 )
+from utils.agent_logger import (
+    log_pipeline_start,
+    log_pipeline_complete,
+    log_pipeline_failed,
+    log_agent_start,
+    log_agent_output,
+    log_scorer_result,
+    log_critic_feedback,
+    log_agent_error,
+    log_agent_retry,
+    log_input_context,
+)
 
 logger = structlog.get_logger()
 
@@ -103,6 +115,9 @@ class PipelineOrchestrator:
         self._user_id = user_id
         self._started_at = int(self._start_time * 1000)
 
+        # Log pipeline start with visual banner
+        log_pipeline_start(estimate_id, len(AGENT_SEQUENCE))
+
         logger.info(
             "pipeline_started",
             estimate_id=estimate_id,
@@ -145,6 +160,12 @@ class PipelineOrchestrator:
         
         try:
             for agent_name in AGENT_SEQUENCE:
+                # Log agent start with visual banner
+                log_agent_start(agent_name, estimate_id)
+                
+                # Log input context summary
+                log_input_context(agent_name, estimate_id, accumulated_context)
+
                 logger.info(
                     "agent_starting",
                     estimate_id=estimate_id,
@@ -170,6 +191,14 @@ class PipelineOrchestrator:
                     pipeline_status.agent_statuses[agent_name] = AgentStatus.FAILED.value
                     pipeline_status.error = f"Agent {agent_name} failed after {MAX_RETRIES} retries"
                     await self._update_pipeline_status(estimate_id, pipeline_status)
+
+                    # Log pipeline failure with visual banner
+                    log_pipeline_failed(
+                        estimate_id=estimate_id,
+                        failed_agent=agent_name,
+                        error=f"Failed after {MAX_RETRIES} retries",
+                        completed_agents=completed_agents
+                    )
                     
                     logger.error(
                         "pipeline_agent_failed",
@@ -198,12 +227,15 @@ class PipelineOrchestrator:
                 # Success - add to context and continue
                 accumulated_context[f"{agent_name}_output"] = output
                 completed_agents.append(agent_name)
-                
+
                 pipeline_status.completed_agents = completed_agents
                 pipeline_status.agent_statuses[agent_name] = AgentStatus.COMPLETED.value
                 pipeline_status.progress = pipeline_status.get_progress_percentage(len(AGENT_SEQUENCE))
                 await self._update_pipeline_status(estimate_id, pipeline_status)
-                
+
+                # Log detailed agent output summary for debugging
+                self._log_agent_output_summary(agent_name, output)
+
                 logger.info(
                     "agent_completed",
                     estimate_id=estimate_id,
@@ -234,6 +266,14 @@ class PipelineOrchestrator:
             await self.firestore.update_estimate(
                 estimate_id,
                 {"status": "final"}
+            )
+
+            # Log pipeline completion with visual banner
+            log_pipeline_complete(
+                estimate_id=estimate_id,
+                completed_agents=completed_agents,
+                duration_ms=self.elapsed_ms,
+                total_tokens=self._total_tokens
             )
             
             logger.info(
@@ -266,6 +306,14 @@ class PipelineOrchestrator:
             )
             
         except Exception as e:
+            # Log pipeline failure with visual banner
+            log_pipeline_failed(
+                estimate_id=estimate_id,
+                failed_agent=pipeline_status.current_agent or "unknown",
+                error=str(e),
+                completed_agents=completed_agents
+            )
+
             logger.exception(
                 "pipeline_exception",
                 estimate_id=estimate_id,
@@ -332,7 +380,26 @@ class PipelineOrchestrator:
                     critic_feedback=critic_feedback,
                     retry_attempt=retry_count
                 )
+                
+                # Log agent output with visual banner
+                metadata = getattr(self, '_last_agent_metadata', {})
+                log_agent_output(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    output=output,
+                    duration_ms=metadata.get('duration_ms', 0),
+                    tokens_used=metadata.get('tokens_used', 0)
+                )
+
             except (A2AError, TrueCostError) as e:
+                # Log agent error with visual banner
+                log_agent_error(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    error=str(e),
+                    retry_attempt=retry_count
+                )
+
                 logger.error(
                     "primary_agent_error",
                     estimate_id=estimate_id,
@@ -351,6 +418,17 @@ class PipelineOrchestrator:
                     output=output,
                     input_data=input_data
                 )
+                
+                # Log scorer result with visual banner
+                log_scorer_result(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    score=score_result.score,
+                    passed=score_result.passed,
+                    breakdown=score_result.breakdown,
+                    feedback=score_result.feedback
+                )
+
             except (A2AError, TrueCostError) as e:
                 logger.error(
                     "scorer_agent_error",
@@ -364,6 +442,16 @@ class PipelineOrchestrator:
                     passed=True,
                     breakdown=[],
                     feedback="Scorer unavailable, defaulting to pass"
+                )
+                
+                # Log scorer result (default pass)
+                log_scorer_result(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    score=score_result.score,
+                    passed=score_result.passed,
+                    breakdown=score_result.breakdown,
+                    feedback=score_result.feedback
                 )
             
             # Update score in pipeline status
@@ -402,6 +490,14 @@ class PipelineOrchestrator:
                     score=score_result.score,
                     scorer_feedback=score_result.feedback
                 )
+                
+                # Log critic feedback with visual banner
+                log_critic_feedback(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    feedback=critic_feedback
+                )
+
             except (A2AError, TrueCostError) as e:
                 logger.error(
                     "critic_agent_error",
@@ -416,6 +512,21 @@ class PipelineOrchestrator:
                     "how_to_fix": ["Review and improve the output quality"],
                     "score": score_result.score
                 }
+                
+                # Log critic feedback (fallback)
+                log_critic_feedback(
+                    agent_name=agent_name,
+                    estimate_id=estimate_id,
+                    feedback=critic_feedback
+                )
+
+            # Log retry with visual banner
+            log_agent_retry(
+                agent_name=agent_name,
+                estimate_id=estimate_id,
+                retry_number=retry_count + 1,
+                previous_score=score_result.score
+            )
             
             logger.info(
                 "agent_retry_with_feedback",
@@ -472,10 +583,16 @@ class PipelineOrchestrator:
         # Extract result data
         result = self.a2a.extract_result_data(response)
         
-        # Track tokens
+        # Track tokens and store metadata for logging
         metadata = response.get("result", {}).get("metadata", {})
         if tokens := metadata.get("tokens_used"):
             self._total_tokens += tokens
+        
+        # Store metadata for logging in _run_agent_with_validation
+        self._last_agent_metadata = {
+            'duration_ms': metadata.get('duration_ms', 0),
+            'tokens_used': metadata.get('tokens_used', 0)
+        }
         
         return result
     
@@ -587,23 +704,114 @@ class PipelineOrchestrator:
     
     async def get_pipeline_status(self, estimate_id: str) -> Optional[PipelineStatus]:
         """Get current pipeline status.
-        
+
         Args:
             estimate_id: The estimate document ID.
-            
+
         Returns:
             PipelineStatus or None if not found.
         """
         estimate = await self.firestore.get_estimate(estimate_id)
-        
+
         if not estimate:
             return None
-        
+
         status_data = estimate.get("pipelineStatus")
         if not status_data:
             return None
-        
+
         return PipelineStatus(**status_data)
+
+    def _log_agent_output_summary(self, agent_name: str, output: Dict[str, Any]) -> None:
+        """Log detailed summary of agent output for debugging.
+
+        Args:
+            agent_name: Name of the agent that completed.
+            output: Agent output data.
+        """
+        print(f"\n{'='*60}")
+        print(f"[AGENT OUTPUT] {agent_name.upper()} AGENT COMPLETED")
+        print(f"{'='*60}")
+
+        if agent_name == "location":
+            print(f"  ZIP Code: {output.get('zipCode', 'N/A')}")
+            print(f"  City/State: {output.get('city', 'N/A')}, {output.get('state', 'N/A')}")
+            print(f"  Location Factor: {output.get('locationFactor', 'N/A')}")
+            labor_rates = output.get('laborRates', {})
+            print(f"  Labor Rates:")
+            print(f"    - Electrician: ${labor_rates.get('electrician', 'N/A')}/hr")
+            print(f"    - Plumber: ${labor_rates.get('plumber', 'N/A')}/hr")
+            print(f"    - Carpenter: ${labor_rates.get('carpenter', 'N/A')}/hr")
+            print(f"    - General Labor: ${labor_rates.get('generalLabor', 'N/A')}/hr")
+            print(f"  Confidence: {output.get('confidence', 'N/A')}")
+
+        elif agent_name == "scope":
+            divisions = output.get('divisions', [])
+            print(f"  Total Divisions: {len(divisions)}")
+            total_items = sum(len(d.get('lineItems', [])) for d in divisions)
+            print(f"  Total Line Items: {total_items}")
+            for div in divisions[:5]:  # Show first 5 divisions
+                print(f"    - {div.get('divisionCode', '??')}: {div.get('divisionName', 'Unknown')} ({len(div.get('lineItems', []))} items)")
+            print(f"  Confidence: {output.get('confidence', 'N/A')}")
+
+        elif agent_name == "cost":
+            subtotals = output.get('subtotals', {})
+            total = output.get('total', {})
+            print(f"  COST BREAKDOWN:")
+            materials = subtotals.get('materials', {})
+            labor = subtotals.get('labor', {})
+            print(f"    - Materials: ${materials.get('low', 0):,.2f} - ${materials.get('high', 0):,.2f}")
+            print(f"    - Labor: ${labor.get('low', 0):,.2f} - ${labor.get('high', 0):,.2f}")
+            print(f"    - Total Labor Hours: {subtotals.get('totalLaborHours', 'N/A')}")
+            print(f"  GRAND TOTAL: ${total.get('low', 0):,.2f} - ${total.get('high', 0):,.2f}")
+            print(f"  Items with exact costs: {output.get('itemsWithExactCosts', 'N/A')}")
+            print(f"  Items with estimated costs: {output.get('itemsWithEstimatedCosts', 'N/A')}")
+            print(f"  Confidence: {output.get('confidence', 'N/A')}")
+
+            # Check for mock data indicators
+            divisions = output.get('divisions', [])
+            total_items = sum(len(d.get('lineItems', [])) for d in divisions)
+            exact = output.get('itemsWithExactCosts', 0)
+            estimated = output.get('itemsWithEstimatedCosts', total_items)
+            if total_items > 0:
+                pct_estimated = (estimated / total_items) * 100
+                if pct_estimated > 50:
+                    print(f"  ⚠️  WARNING: {pct_estimated:.0f}% of items using ESTIMATED (mock) costs!")
+
+        elif agent_name == "timeline":
+            tasks = output.get('tasks', [])
+            print(f"  Total Tasks: {len(tasks)}")
+            print(f"  Total Duration: {output.get('totalDuration', 'N/A')} working days")
+            print(f"  Calendar Days: {output.get('totalCalendarDays', 'N/A')}")
+            duration_range = output.get('durationRange', {})
+            print(f"  Duration Range: {duration_range.get('optimistic', 'N/A')} - {duration_range.get('pessimistic', 'N/A')} days")
+            print(f"  Schedule Confidence: {output.get('scheduleConfidence', 'N/A')}")
+            # Show first few tasks
+            for task in tasks[:5]:
+                print(f"    - {task.get('name', 'Unknown')}: {task.get('durationDays', '?')} days ({task.get('primaryTrade', 'N/A')})")
+
+        elif agent_name == "risk":
+            print(f"  Risk Score: {output.get('riskScore', 'N/A')}/100")
+            print(f"  Risk Level: {output.get('riskLevel', 'N/A')}")
+            risks = output.get('risks', [])
+            print(f"  Total Risks Identified: {len(risks)}")
+            for risk in risks[:3]:
+                print(f"    - {risk.get('name', 'Unknown')}: {risk.get('severity', 'N/A')} severity")
+
+        elif agent_name == "final":
+            print(f"  P50 Total: ${output.get('p50', 0):,.2f}")
+            print(f"  P80 Total: ${output.get('p80', 0):,.2f}")
+            print(f"  P90 Total: ${output.get('p90', 0):,.2f}")
+            print(f"  Timeline Weeks: {output.get('timelineWeeks', 'N/A')}")
+            print(f"  Monte Carlo Iterations: {output.get('monteCarloIterations', 'N/A')}")
+
+        else:
+            # Generic logging for other agents
+            print(f"  Output keys: {list(output.keys())}")
+            if 'confidence' in output:
+                print(f"  Confidence: {output.get('confidence')}")
+
+        print(f"{'='*60}\n")
 
 
 # Convenience function for Cloud Function entry point

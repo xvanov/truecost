@@ -31,6 +31,11 @@ export function UserMenu() {
     navigate('/account');
   };
 
+  const handleContractorSettings = () => {
+    setOpen(false);
+    navigate('/contractor-settings');
+  };
+
   const handleLogout = async () => {
     setOpen(false);
     try {
@@ -75,6 +80,13 @@ export function UserMenu() {
           >
             Account
           </button>
+          <button
+            onClick={handleContractorSettings}
+            className="w-full text-left px-3 py-2 rounded-md font-body text-body-meta text-truecost-text-secondary hover:bg-truecost-glass-bg/80"
+          >
+            Contractor Settings
+          </button>
+          <div className="border-t border-truecost-glass-border my-1" />
           <button
             onClick={handleLogout}
             className="w-full text-left px-3 py-2 rounded-md font-body text-body-meta text-truecost-danger hover:bg-truecost-danger/10"

@@ -51,42 +51,42 @@ export function LaborView({ bom }: LaborViewProps) {
     <div className="space-y-6">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-sm font-medium text-gray-600 mb-2">Total Labor Cost</h3>
-          <p className="text-3xl font-bold text-gray-900">
+        <div className="glass-panel p-6">
+          <h3 className="text-sm font-medium text-truecost-text-secondary mb-2">Total Labor Cost</h3>
+          <p className="text-3xl font-bold text-truecost-cyan">
             {formatted?.laborCost || '$0.00'}
           </p>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-truecost-text-muted mt-1">
             Based on estimated work hours
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-sm font-medium text-gray-600 mb-2">Estimated Hours</h3>
-          <p className="text-3xl font-bold text-gray-900">
+        <div className="glass-panel p-6">
+          <h3 className="text-sm font-medium text-truecost-text-secondary mb-2">Estimated Hours</h3>
+          <p className="text-3xl font-bold text-truecost-text-primary">
             {laborHours.toFixed(0)} hrs
           </p>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-truecost-text-muted mt-1">
             {laborDays.toFixed(1)} work days
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-sm font-medium text-gray-600 mb-2">Avg Hourly Rate</h3>
-          <p className="text-3xl font-bold text-gray-900">
+        <div className="glass-panel p-6">
+          <h3 className="text-sm font-medium text-truecost-text-secondary mb-2">Avg Hourly Rate</h3>
+          <p className="text-3xl font-bold text-truecost-text-primary">
             ${laborHours > 0 ? (totalLaborCost / laborHours).toFixed(2) : '0.00'}
           </p>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-truecost-text-muted mt-1">
             Blended rate across trades
           </p>
         </div>
       </div>
 
       {/* Labor Breakdown Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900">Labor Breakdown by Trade</h2>
-          <p className="text-sm text-gray-600 mt-1">
+      <div className="glass-panel">
+        <div className="p-6 border-b border-truecost-glass-border">
+          <h2 className="text-xl font-bold text-truecost-text-primary">Labor Breakdown by Trade</h2>
+          <p className="text-sm text-truecost-text-secondary mt-1">
             Estimated hours and costs by labor category
           </p>
         </div>
@@ -94,35 +94,35 @@ export function LaborView({ bom }: LaborViewProps) {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left py-3 px-4 font-semibold text-gray-600">Trade</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-600">Description</th>
-                <th className="text-right py-3 px-4 font-semibold text-gray-600">Hourly Rate</th>
-                <th className="text-right py-3 px-4 font-semibold text-gray-600">Est. Hours</th>
-                <th className="text-right py-3 px-4 font-semibold text-gray-600">Cost</th>
+              <tr className="bg-truecost-bg-secondary border-b border-truecost-glass-border">
+                <th className="text-left py-3 px-4 font-semibold text-truecost-text-secondary">Trade</th>
+                <th className="text-left py-3 px-4 font-semibold text-truecost-text-secondary">Description</th>
+                <th className="text-right py-3 px-4 font-semibold text-truecost-text-secondary">Hourly Rate</th>
+                <th className="text-right py-3 px-4 font-semibold text-truecost-text-secondary">Est. Hours</th>
+                <th className="text-right py-3 px-4 font-semibold text-truecost-text-secondary">Cost</th>
               </tr>
             </thead>
             <tbody>
               {categoryAllocations.map((allocation, index) => (
                 <tr
                   key={allocation.id}
-                  className={`border-b border-gray-100 ${
-                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                  className={`border-b border-truecost-glass-border hover:bg-truecost-glass-bg ${
+                    index % 2 === 0 ? 'bg-truecost-bg-primary' : 'bg-truecost-bg-secondary/50'
                   }`}
                 >
-                  <td className="py-3 px-4 font-medium text-gray-900">
+                  <td className="py-3 px-4 font-medium text-truecost-text-primary">
                     {allocation.name}
                   </td>
-                  <td className="py-3 px-4 text-sm text-gray-600">
+                  <td className="py-3 px-4 text-sm text-truecost-text-secondary">
                     {allocation.description}
                   </td>
-                  <td className="py-3 px-4 text-right text-gray-900">
+                  <td className="py-3 px-4 text-right text-truecost-text-primary">
                     ${allocation.rate.toFixed(2)}/hr
                   </td>
-                  <td className="py-3 px-4 text-right text-gray-900">
+                  <td className="py-3 px-4 text-right text-truecost-text-primary">
                     {allocation.hours.toFixed(1)} hrs
                   </td>
-                  <td className="py-3 px-4 text-right font-medium text-gray-900">
+                  <td className="py-3 px-4 text-right font-medium text-truecost-cyan">
                     {new Intl.NumberFormat('en-US', {
                       style: 'currency',
                       currency: 'USD',
@@ -132,14 +132,14 @@ export function LaborView({ bom }: LaborViewProps) {
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-gray-100 border-t-2 border-gray-300">
-                <td colSpan={3} className="py-3 px-4 font-bold text-gray-900">
+              <tr className="bg-truecost-bg-secondary border-t-2 border-truecost-glass-border">
+                <td colSpan={3} className="py-3 px-4 font-bold text-truecost-text-primary">
                   Total
                 </td>
-                <td className="py-3 px-4 text-right font-bold text-gray-900">
+                <td className="py-3 px-4 text-right font-bold text-truecost-text-primary">
                   {laborHours.toFixed(1)} hrs
                 </td>
-                <td className="py-3 px-4 text-right font-bold text-gray-900">
+                <td className="py-3 px-4 text-right font-bold text-truecost-cyan">
                   {formatted?.laborCost || '$0.00'}
                 </td>
               </tr>
@@ -150,10 +150,10 @@ export function LaborView({ bom }: LaborViewProps) {
 
       {/* Buffer Time Card */}
       {bom.margin && bom.margin.marginTimeSlack > 0 && (
-        <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+        <div className="bg-truecost-cyan/10 rounded-lg border border-truecost-cyan/30 p-6">
           <div className="flex items-start gap-4">
             <div className="flex-shrink-0">
-              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-8 h-8 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -163,12 +163,12 @@ export function LaborView({ bom }: LaborViewProps) {
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-blue-900">Buffer Time Included</h3>
-              <p className="text-blue-700 mt-1">
+              <h3 className="text-lg font-semibold text-truecost-cyan">Buffer Time Included</h3>
+              <p className="text-truecost-text-secondary mt-1">
                 {formatted?.marginTimeSlack || '0 days'} of slack time has been added to account for
                 delays, weather, and unexpected issues.
               </p>
-              <p className="text-sm text-blue-600 mt-2">
+              <p className="text-sm text-truecost-text-muted mt-2">
                 This buffer is included in the margin calculation to protect your profit on this
                 project.
               </p>
@@ -178,9 +178,9 @@ export function LaborView({ bom }: LaborViewProps) {
       )}
 
       {/* Notes */}
-      <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Labor Estimation Notes</h3>
-        <ul className="text-sm text-gray-600 space-y-2">
+      <div className="glass-panel p-6">
+        <h3 className="text-sm font-semibold text-truecost-text-primary mb-3">Labor Estimation Notes</h3>
+        <ul className="text-sm text-truecost-text-secondary space-y-2">
           <li>• Labor hours are estimated based on project scope and material quantities</li>
           <li>• Actual hours may vary based on site conditions and crew efficiency</li>
           <li>• Rates are based on regional averages and may need adjustment for your area</li>
