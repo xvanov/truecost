@@ -1,10 +1,10 @@
 /**
  * Cloud Function to send contact form emails
- * Uses Nodemailer with Gmail SMTP
+ * Uses Resend API to send to all team members
  */
 
 import * as functions from 'firebase-functions';
-import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 // CORS configuration
 const corsHeaders = {
@@ -12,6 +12,16 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
+
+// All 6 team member emails
+const TEAM_EMAILS = [
+  'ycorcos26@gmail.com',
+  'ivanovkalin7@gmail.com',
+  'kishorkashid99@gmail.com',
+  'sainatha.yatham@gmail.com',
+  'atharva.sardar02@gmail.com',
+  'ankitrijal2054@gmail.com',
+];
 
 interface ContactFormData {
   email: string;
@@ -23,7 +33,7 @@ interface ContactFormData {
 export const sendContactEmail = functions
   .region('us-central1')
   .runWith({
-    secrets: ['GMAIL_APP_PASSWORD'],
+    secrets: ['RESEND_API_KEY'],
   })
   .https.onRequest(async (req, res) => {
     // Handle CORS preflight
@@ -52,11 +62,11 @@ export const sendContactEmail = functions
         return;
       }
 
-      // Get Gmail credentials from Firebase secrets
-      const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+      // Get Resend API key from Firebase secrets
+      const resendApiKey = process.env.RESEND_API_KEY;
 
-      if (!gmailAppPassword) {
-        console.error('GMAIL_APP_PASSWORD secret not configured');
+      if (!resendApiKey) {
+        console.error('RESEND_API_KEY secret not configured');
         res.status(500).json({
           success: false,
           error: 'Email service not configured'
@@ -64,35 +74,24 @@ export const sendContactEmail = functions
         return;
       }
 
-      // Create transporter with Gmail SMTP
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: 'ivanovkalin7@gmail.com',
-          pass: gmailAppPassword,
-        },
-      });
+      const resend = new Resend(resendApiKey);
 
       // Email content
-      const mailOptions = {
-        from: '"TrueCost Contact Form" <ivanovkalin7@gmail.com>',
-        to: 'ivanovkalin7@gmail.com',
-        replyTo: email,
-        subject: `[TrueCost Contact] ${subject}`,
-        html: `
-          <h2>New Contact Form Submission</h2>
-          <p><strong>From:</strong> ${email}</p>
-          ${phone ? `<p><strong>Phone:</strong> ${phone}</p>` : ''}
-          <p><strong>Subject:</strong> ${subject}</p>
-          <hr />
-          <h3>Message:</h3>
-          <p>${message.replace(/\n/g, '<br>')}</p>
-          <hr />
-          <p style="color: #666; font-size: 12px;">
-            Sent from gettruecost.com contact form
-          </p>
-        `,
-        text: `
+      const htmlContent = `
+        <h2>New Contact Form Submission</h2>
+        <p><strong>From:</strong> ${email}</p>
+        ${phone ? `<p><strong>Phone:</strong> ${phone}</p>` : ''}
+        <p><strong>Subject:</strong> ${subject}</p>
+        <hr />
+        <h3>Message:</h3>
+        <p>${message.replace(/\n/g, '<br>')}</p>
+        <hr />
+        <p style="color: #666; font-size: 12px;">
+          Sent from gettruecost.com contact form
+        </p>
+      `;
+
+      const textContent = `
 New Contact Form Submission
 
 From: ${email}
@@ -104,13 +103,19 @@ ${message}
 
 ---
 Sent from gettruecost.com contact form
-        `,
-      };
+      `.trim();
 
-      // Send email
-      await transporter.sendMail(mailOptions);
+      // Send email to all team members
+      await resend.emails.send({
+        from: 'onboarding@resend.dev', // Use verified domain in production: 'TrueCost <contact@gettruecost.com>'
+        to: TEAM_EMAILS,
+        replyTo: email,
+        subject: `[TrueCost Contact] ${subject}`,
+        html: htmlContent,
+        text: textContent,
+      });
 
-      console.log('Contact email sent successfully', { from: email, subject });
+      console.log('Contact email sent successfully to all team members', { from: email, subject });
 
       res.status(200).json({ success: true, message: 'Email sent successfully' });
     } catch (error) {
