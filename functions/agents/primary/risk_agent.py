@@ -7,18 +7,22 @@ Includes labor cost simulation and schedule simulation.
 
 from typing import Any, Dict, List, Optional
 import time
+import json
 import structlog
 
 from agents.base_agent import BaseA2AAgent
 from services.firestore_service import FirestoreService
 from services.llm_service import LLMService
 from services.monte_carlo_service import MonteCarloService
+from services.serper_service import SerperService, get_serper_service
 from config.settings import settings
 from models.risk_analysis import (
     ConfidenceLevel,
     RiskAnalysis,
     RiskAnalysisSummary,
     RiskFactor,
+    RiskCategory,
+    RiskImpact,
 )
 # Import new Monte Carlo simulation functions for labor and schedule
 from services.monte_carlo import (
@@ -35,6 +39,38 @@ logger = structlog.get_logger()
 # =============================================================================
 # RISK AGENT SYSTEM PROMPT
 # =============================================================================
+
+
+EXTRACT_MARKET_RISKS_PROMPT = """You are a construction market analyst. Given web search results about current construction market conditions, extract relevant risk factors.
+
+Focus on:
+1. Supply chain delays or material shortages
+2. Material price volatility (increases/decreases)
+3. Labor market conditions (shortages, wage pressures)
+4. Economic factors affecting construction
+5. Regulatory changes or code updates
+6. Weather/climate risks for the region
+
+## Output Format (JSON):
+{
+    "marketRisks": [
+        {
+            "category": "supply_chain|material_cost|labor|economic|regulatory|weather|other",
+            "name": "Short name",
+            "description": "Detailed description",
+            "severity": "low|medium|high",
+            "probabilityPercent": <0-100>,
+            "potentialImpactPercent": <estimated cost impact as percent>,
+            "source": "source of information"
+        }
+    ],
+    "marketSentiment": "positive|neutral|negative",
+    "keyTrends": ["trend 1", "trend 2"],
+    "dataFreshness": "current|recent|dated"
+}
+
+Only extract risks that are explicitly mentioned. Use reasonable estimates for probability and impact based on the information found.
+"""
 
 
 RISK_AGENT_SYSTEM_PROMPT = """You are a construction risk analysis expert for TrueCost.
@@ -85,14 +121,16 @@ class RiskAgent(BaseA2AAgent):
         self,
         firestore_service: Optional[FirestoreService] = None,
         llm_service: Optional[LLMService] = None,
-        monte_carlo_service: Optional[MonteCarloService] = None
+        monte_carlo_service: Optional[MonteCarloService] = None,
+        serper_service: Optional[SerperService] = None
     ):
         """Initialize RiskAgent.
-        
+
         Args:
             firestore_service: Firestore service for persistence.
             llm_service: LLM service for analysis.
             monte_carlo_service: Monte Carlo simulation service.
+            serper_service: Serper service for web search.
         """
         super().__init__(
             name="risk",
@@ -100,6 +138,7 @@ class RiskAgent(BaseA2AAgent):
             llm_service=llm_service
         )
         self.monte_carlo = monte_carlo_service or MonteCarloService()
+        self.serper = serper_service or get_serper_service()
     
     async def run(
         self,
@@ -180,17 +219,45 @@ class RiskAgent(BaseA2AAgent):
         
         # Determine location risk level
         location_risk = self._assess_location_risk(location_output)
-        
+
         # Get project type for risk factor adjustment
         project_brief = clarification.get("projectBrief", {})
         project_type = project_brief.get("projectType", "renovation")
-        
+        location = project_brief.get("location", {})
+        city = location.get("city", "")
+        state = location.get("state", "")
+
+        # Search for current market risks (wrapped in try-except for resilience)
+        try:
+            market_risks = await self._search_market_risks(
+                project_type=project_type,
+                city=city,
+                state=state
+            )
+        except Exception as e:
+            logger.warning(
+                "market_risk_search_failed_fallback",
+                estimate_id=estimate_id,
+                error=str(e)
+            )
+            market_risks = self._get_default_market_risks()
+
+        logger.info(
+            "market_risks_searched",
+            estimate_id=estimate_id,
+            market_risks_found=len(market_risks.get("marketRisks", [])),
+            market_sentiment=market_risks.get("marketSentiment")
+        )
+
         # Generate risk factors
         risk_factors = self.monte_carlo.generate_risk_factors(
             base_cost=base_cost,
             project_type=project_type,
             location_risk=location_risk
         )
+
+        # Adjust risk factors based on market search results
+        risk_factors = self._adjust_risks_for_market(risk_factors, market_risks, base_cost)
         
         # Apply feedback adjustments if retry
         if feedback:
@@ -335,6 +402,15 @@ class RiskAgent(BaseA2AAgent):
         
         # Add LLM insights
         output["llmAnalysis"] = llm_analysis
+
+        # Add market risk data from web search
+        output["marketRisks"] = {
+            "risks": market_risks.get("marketRisks", []),
+            "sentiment": market_risks.get("marketSentiment", "neutral"),
+            "keyTrends": market_risks.get("keyTrends", []),
+            "dataFreshness": market_risks.get("dataFreshness", "dated"),
+            "searchPerformed": True
+        }
 
         # Add labor Monte Carlo results if available
         if labor_mc_result:
@@ -549,8 +625,8 @@ class RiskAgent(BaseA2AAgent):
             )
             
             response = await self.llm.generate_json(
-                prompt=user_message,
-                system_prompt=RISK_AGENT_SYSTEM_PROMPT
+                system_prompt=RISK_AGENT_SYSTEM_PROMPT,
+                user_message=user_message
             )
             
             self._tokens_used += response.get("tokens_used", 0)
@@ -676,6 +752,209 @@ Please provide your analysis in the required JSON format."""
             confidence += 0.05
 
         return min(0.95, confidence)
+
+    async def _search_market_risks(
+        self,
+        project_type: str,
+        city: Optional[str] = None,
+        state: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Search for current market risks using web search.
+
+        Args:
+            project_type: Type of construction project.
+            city: Optional city name.
+            state: Optional state abbreviation.
+
+        Returns:
+            Dict with extracted market risk data.
+        """
+        try:
+            # Search for market risks
+            search_results = await self.serper.search_market_risks(
+                project_type=project_type,
+                city=city,
+                state=state
+            )
+
+            if not search_results or not search_results.get("results"):
+                return self._get_default_market_risks()
+
+            # Use LLM to extract risks from search results
+            search_summary = self._build_risk_search_summary(search_results)
+
+            result = await self.llm.generate_json(
+                system_prompt=EXTRACT_MARKET_RISKS_PROMPT,
+                user_message=f"Extract construction market risks from these search results:\n\n{search_summary}"
+            )
+
+            self._tokens_used += result.get("tokens_used", 0)
+            extracted = result.get("content", {})
+
+            # Validate extraction
+            if not extracted.get("marketRisks"):
+                return self._get_default_market_risks()
+
+            return extracted
+
+        except Exception as e:
+            logger.warning(
+                "market_risk_search_error",
+                error=str(e)
+            )
+            return self._get_default_market_risks()
+
+    def _build_risk_search_summary(self, search_results: Dict[str, Any]) -> str:
+        """Build a text summary of risk search results.
+
+        Args:
+            search_results: Raw search results from Serper.
+
+        Returns:
+            Formatted text summary.
+        """
+        results = search_results.get("results", [])
+        if not results:
+            return "No search results found."
+
+        parts = []
+        for r in results[:8]:  # Top 8 results
+            if isinstance(r, dict):
+                title = r.get("title", "")
+                snippet = r.get("snippet", "")
+                query = r.get("query", "")
+                if title or snippet:
+                    parts.append(f"**{title}**")
+                    parts.append(f"Query: {query}")
+                    parts.append(f"Content: {snippet}")
+                    parts.append("")
+
+        return "\n".join(parts)
+
+    def _get_default_market_risks(self) -> Dict[str, Any]:
+        """Get default market risk data when search fails.
+
+        Returns:
+            Default market risk dict.
+        """
+        return {
+            "marketRisks": [
+                {
+                    "category": "material_cost",  # Matches RiskCategory.MATERIAL_COST
+                    "name": "Material Price Volatility",
+                    "description": "Construction material prices can fluctuate based on supply and demand",
+                    "severity": "medium",
+                    "probabilityPercent": 50,
+                    "potentialImpactPercent": 5,
+                },
+                {
+                    "category": "labor_availability",  # Matches RiskCategory.LABOR_AVAILABILITY
+                    "name": "Labor Market Conditions",
+                    "description": "Skilled labor availability may affect costs and timeline",
+                    "severity": "medium",
+                    "probabilityPercent": 40,
+                    "potentialImpactPercent": 8,
+                },
+                {
+                    "category": "supply_chain",  # Matches RiskCategory.SUPPLY_CHAIN
+                    "name": "Supply Chain Delays",
+                    "description": "Lead times for materials may vary",
+                    "severity": "low",
+                    "probabilityPercent": 30,
+                    "potentialImpactPercent": 3,
+                }
+            ],
+            "marketSentiment": "neutral",
+            "keyTrends": ["Market conditions standard for current period"],
+            "dataFreshness": "dated"
+        }
+
+    def _adjust_risks_for_market(
+        self,
+        risk_factors: List[RiskFactor],
+        market_risks: Dict[str, Any],
+        base_cost: float
+    ) -> List[RiskFactor]:
+        """Adjust risk factors based on market search results.
+
+        Args:
+            risk_factors: Base risk factors from Monte Carlo service.
+            market_risks: Extracted market risks from web search.
+            base_cost: Base project cost.
+
+        Returns:
+            Adjusted risk factors.
+        """
+        market_data = market_risks.get("marketRisks", [])
+        sentiment = market_risks.get("marketSentiment", "neutral")
+
+        # Adjust existing risks based on market sentiment
+        sentiment_multiplier = {
+            "positive": 0.85,  # Lower risk
+            "neutral": 1.0,
+            "negative": 1.15  # Higher risk
+        }.get(sentiment, 1.0)
+
+        for rf in risk_factors:
+            rf.probability = min(1.0, rf.probability * sentiment_multiplier)
+
+        # Add new risk factors from market search
+        for mr in market_data:
+            # Check if similar risk already exists
+            category = mr.get("category", "other")
+            name = mr.get("name", "Market Risk")
+            probability = min(mr.get("probabilityPercent", 30) / 100.0, 0.50)  # Cap at 50%
+            # Cap impact at 15% of base cost to prevent unrealistic simulations
+            impact_pct = min(mr.get("potentialImpactPercent", 5) / 100.0, 0.15)
+
+            # Calculate cost impact
+            impact_low = base_cost * impact_pct * 0.5
+            impact_high = base_cost * impact_pct * 1.5
+
+            # Check for duplicates
+            is_duplicate = any(
+                name.lower() in rf.name.lower() or rf.name.lower() in name.lower()
+                for rf in risk_factors
+            )
+
+            if not is_duplicate and probability > 0.1:
+                # Map category string to RiskCategory enum
+                try:
+                    risk_category = RiskCategory(category)
+                except ValueError:
+                    risk_category = RiskCategory.OTHER
+
+                # Determine impact level based on severity
+                severity = mr.get("severity", "medium")
+                if severity == "high":
+                    impact_level = RiskImpact.HIGH
+                elif severity == "low":
+                    impact_level = RiskImpact.LOW
+                else:
+                    impact_level = RiskImpact.MEDIUM
+
+                new_risk = RiskFactor(
+                    id=f"market-{len(risk_factors)}-{category}",
+                    name=name,
+                    category=risk_category,
+                    description=mr.get("description", ""),
+                    impact=impact_level,
+                    probability=probability,
+                    cost_impact_low=impact_low,
+                    cost_impact_high=impact_high,
+                    variance_contribution=0.0,  # Will be recalculated
+                    mitigation=f"Monitor {name.lower()} and adjust budget as needed",
+                )
+                risk_factors.append(new_risk)
+
+        logger.info(
+            "risk_factors_adjusted",
+            original_count=len(risk_factors) - len(market_data),
+            added_from_market=len([m for m in market_data if m.get("probabilityPercent", 0) > 10]),
+            sentiment_multiplier=sentiment_multiplier
+        )
+
+        return risk_factors
 
     def _extract_labor_items(
         self, cost_output: Dict[str, Any], location_output: Dict[str, Any]

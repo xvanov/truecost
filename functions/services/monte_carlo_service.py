@@ -407,10 +407,11 @@ class MonteCarloService:
         p80_contingency = max(0, p80 - base_cost)
         p90_contingency = max(0, p90 - base_cost)
         
-        # Calculate percentages
-        p50_pct = (p50_contingency / base_cost * 100) if base_cost > 0 else 0
-        p80_pct = (p80_contingency / base_cost * 100) if base_cost > 0 else 0
-        p90_pct = (p90_contingency / base_cost * 100) if base_cost > 0 else 0
+        # Calculate percentages (capped at 50% per model constraints)
+        MAX_CONTINGENCY_PCT = 50.0
+        p50_pct = min((p50_contingency / base_cost * 100) if base_cost > 0 else 0, MAX_CONTINGENCY_PCT)
+        p80_pct = min((p80_contingency / base_cost * 100) if base_cost > 0 else 0, MAX_CONTINGENCY_PCT)
+        p90_pct = min((p90_contingency / base_cost * 100) if base_cost > 0 else 0, MAX_CONTINGENCY_PCT)
         
         # Select recommended based on confidence level
         if confidence_level == "P90":

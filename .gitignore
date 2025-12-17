@@ -47,3 +47,7 @@ firebase-*-debug.log*
 .cursor/*
 backend/*
 **/.DS_Store
+
+# Windows reserved names
+nul
+NUL
