@@ -27,15 +27,29 @@ export function ContactUs() {
     setError(null);
 
     try {
-      // TODO: Integrate email API here
-      // For now, simulate a successful submission
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('Form submitted:', formData);
+      // Call the Cloud Function to send email
+      const functionUrl = import.meta.env.PROD
+        ? 'https://us-central1-collabcanvas-dev.cloudfunctions.net/sendContactEmail'
+        : 'http://localhost:5001/collabcanvas-dev/us-central1/sendContactEmail';
+
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to send message');
+      }
+
       setIsSubmitted(true);
       setFormData({ email: '', phone: '', subject: '', message: '' });
     } catch (err) {
-      setError('Failed to send message. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to send message. Please try again.');
       console.error('Form submission error:', err);
     } finally {
       setIsSubmitting(false);

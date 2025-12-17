@@ -11,12 +11,13 @@ import { estimationPipeline } from './estimationPipeline';
 import { comparePrices } from './priceComparison';
 import { annotationCheckAgent } from './annotationCheckAgent';
 import { triggerEstimatePipeline, updatePipelineStage } from './estimatePipelineOrchestrator';
+import { sendContactEmail } from './sendContactEmail';
 // import { onProjectDeleted } from './projectDeletion'; // TODO: Uncomment when ready to deploy
 
-export { 
-  aiCommand, 
-  materialEstimateCommand, 
-  getHomeDepotPrice, 
+export {
+  aiCommand,
+  materialEstimateCommand,
+  getHomeDepotPrice,
   sagemakerInvoke,
   clarificationAgent,
   estimationPipeline,
@@ -24,5 +25,6 @@ export {
   annotationCheckAgent,
   triggerEstimatePipeline,
   updatePipelineStage,
+  sendContactEmail,
 };
 // export { onProjectDeleted }; // TODO: Uncomment when ready to deploy
