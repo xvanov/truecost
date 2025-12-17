@@ -266,7 +266,7 @@ export function parseCanvasMeasurements(measurementText: string): {
 
     // Look for ceiling height
     const heightMatch = line.match(
-      /[Cc]eiling[\s:]+(\d+\.?\d*)\s*[\'ft]?|[Hh]eight[\s:]+(\d+\.?\d*)\s*[\'ft]?/
+      /[Cc]eiling[\s:]+(\d+\.?\d*)\s*['ft]?|[Hh]eight[\s:]+(\d+\.?\d*)\s*['ft]?/
     );
     if (heightMatch && currentRoom?.dimensions) {
       const height = parseFloat(heightMatch[1] || heightMatch[2]);

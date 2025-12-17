@@ -106,11 +106,20 @@ const mapProjectType = (
     );
 
     // Check for specific room/project types in order of specificity
-    if (textLower.includes("bathroom") || textLower.includes("bath ") || textLower.includes("shower") || textLower.includes("toilet")) {
+    if (
+      textLower.includes("bathroom") ||
+      textLower.includes("bath ") ||
+      textLower.includes("shower") ||
+      textLower.includes("toilet")
+    ) {
       console.log("[mapProjectType] Matched bathroom -> bathroom_remodel");
       return "bathroom_remodel";
     }
-    if (textLower.includes("kitchen") || textLower.includes("cabinet") || textLower.includes("countertop")) {
+    if (
+      textLower.includes("kitchen") ||
+      textLower.includes("cabinet") ||
+      textLower.includes("countertop")
+    ) {
       console.log("[mapProjectType] Matched kitchen -> kitchen_remodel");
       return "kitchen_remodel";
     }
@@ -118,7 +127,10 @@ const mapProjectType = (
       console.log("[mapProjectType] Matched bedroom -> bedroom_remodel");
       return "bedroom_remodel";
     }
-    if (textLower.includes("living room") || textLower.includes("family room")) {
+    if (
+      textLower.includes("living room") ||
+      textLower.includes("family room")
+    ) {
       console.log("[mapProjectType] Matched living -> living_room_remodel");
       return "living_room_remodel";
     }
@@ -405,7 +417,9 @@ export function EstimatePage() {
   // JSON generation state (for TS estimation pipeline)
   const [isGeneratingJSON, setIsGeneratingJSON] = useState(false);
   const [showJSONViewer, setShowJSONViewer] = useState(false);
-  const [jsonOutput, setJsonOutput] = useState<Record<string, unknown> | null>(null);
+  const [jsonOutput, setJsonOutput] = useState<Record<string, unknown> | null>(
+    null
+  );
 
   // Clarification JSON payload shared between Generate JSON + pipeline trigger
   const [clarificationPayload, setClarificationPayload] =
@@ -879,7 +893,8 @@ export function EstimatePage() {
           clarificationData: {
             // Pass structured location data from estimateConfig
             location: {
-              fullAddress: estimateConfig.address?.formattedAddress ||
+              fullAddress:
+                estimateConfig.address?.formattedAddress ||
                 (estimateConfig.address
                   ? `${estimateConfig.address.streetAddress}, ${estimateConfig.address.city}, ${estimateConfig.address.state} ${estimateConfig.address.zipCode}`
                   : ""),
@@ -890,7 +905,8 @@ export function EstimatePage() {
             },
             projectType: mapProjectType(
               estimateConfig.projectType,
-              estimateConfig.projectName || useProjectStore.getState().currentProject?.name,
+              estimateConfig.projectName ||
+                useProjectStore.getState().currentProject?.name,
               estimateConfig.scopeText
             ),
             // Pass start date for timeline agent
@@ -1012,7 +1028,7 @@ export function EstimatePage() {
     setIsGeneratingJSON(true);
     // Clear any previous output to ensure fresh calculation
     setJsonOutput(null);
-    
+
     try {
       // Always build fresh - no caching
       const payload = await buildClarificationOutput();
@@ -1046,9 +1062,10 @@ export function EstimatePage() {
 
       try {
         // Call Cloud Function PDF generator
-        const result = type === "contractor"
-          ? await generateContractorPDF(pdfEstimateId)
-          : await generateClientPDF(pdfEstimateId);
+        const result =
+          type === "contractor"
+            ? await generateContractorPDF(pdfEstimateId)
+            : await generateClientPDF(pdfEstimateId);
 
         if (!result.success) {
           throw new Error(result.error || "PDF generation failed");
@@ -1278,10 +1295,10 @@ export function EstimatePage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 rounded-lg text-body font-medium transition-all ${
+              className={`px-4 py-2.5 rounded-lg text-body font-medium transition-all ${
                 activeTab === tab.id
-                  ? "bg-gradient-to-br from-truecost-cyan to-truecost-teal text-truecost-bg-primary"
-                  : "text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg"
+                  ? "bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan"
+                  : "text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent"
               }`}
             >
               {tab.label}
@@ -2010,8 +2027,18 @@ export function EstimatePage() {
               <div className="flex items-center justify-between px-6 py-4 border-b border-truecost-glass-border bg-truecost-bg-primary/50">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-truecost-cyan/20">
-                    <svg className="w-5 h-5 text-truecost-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    <svg
+                      className="w-5 h-5 text-truecost-cyan"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                      />
                     </svg>
                   </div>
                   <div>
@@ -2027,22 +2054,37 @@ export function EstimatePage() {
                   {/* Copy button */}
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(JSON.stringify(jsonOutput, null, 2));
+                      navigator.clipboard.writeText(
+                        JSON.stringify(jsonOutput, null, 2)
+                      );
                       // Could add toast notification here
                     }}
                     className="px-3 py-1.5 text-sm rounded-lg bg-truecost-glass-bg hover:bg-truecost-glass-bg/80 text-truecost-text-secondary hover:text-truecost-text-primary transition-colors flex items-center gap-1.5"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
                     </svg>
                     Copy
                   </button>
                   {/* Download button */}
                   <button
                     onClick={() => {
-                      const blob = new Blob([JSON.stringify(jsonOutput, null, 2)], { type: 'application/json' });
+                      const blob = new Blob(
+                        [JSON.stringify(jsonOutput, null, 2)],
+                        { type: "application/json" }
+                      );
                       const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
+                      const a = document.createElement("a");
                       a.href = url;
                       a.download = `clarification-output-${Date.now()}.json`;
                       a.click();
@@ -2050,8 +2092,18 @@ export function EstimatePage() {
                     }}
                     className="px-3 py-1.5 text-sm rounded-lg bg-truecost-cyan/20 hover:bg-truecost-cyan/30 text-truecost-cyan transition-colors flex items-center gap-1.5"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
                     </svg>
                     Download
                   </button>
@@ -2060,27 +2112,42 @@ export function EstimatePage() {
                     onClick={() => setShowJSONViewer(false)}
                     className="p-2 rounded-lg hover:bg-truecost-glass-bg text-truecost-text-muted hover:text-truecost-text-primary transition-colors"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
                     </svg>
                   </button>
                 </div>
               </div>
-              
+
               {/* JSON Content */}
               <div className="flex-1 overflow-auto p-4 bg-truecost-bg-primary/30">
                 <pre className="text-sm font-mono text-truecost-text-primary/90 whitespace-pre-wrap break-words leading-relaxed">
-                  <code>
-                    {JSON.stringify(jsonOutput, null, 2)}
-                  </code>
+                  <code>{JSON.stringify(jsonOutput, null, 2)}</code>
                 </pre>
               </div>
-              
+
               {/* Modal Footer */}
               <div className="px-6 py-3 border-t border-truecost-glass-border bg-truecost-bg-primary/50 flex justify-between items-center">
                 <p className="text-xs text-truecost-text-muted">
-                  Schema Version: {String((jsonOutput as Record<string, unknown>)?.schemaVersion ?? 'N/A')} •
-                  Estimate ID: {String((jsonOutput as Record<string, unknown>)?.estimateId ?? 'N/A')}
+                  Schema Version:{" "}
+                  {String(
+                    (jsonOutput as Record<string, unknown>)?.schemaVersion ??
+                      "N/A"
+                  )}{" "}
+                  • Estimate ID:{" "}
+                  {String(
+                    (jsonOutput as Record<string, unknown>)?.estimateId ?? "N/A"
+                  )}
                 </p>
                 <button
                   onClick={() => setShowJSONViewer(false)}
