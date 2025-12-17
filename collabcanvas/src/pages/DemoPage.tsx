@@ -34,8 +34,8 @@ const DEMO_STEPS = [
   { id: "result-pdf", label: "PDF Reports", phase: "results" },
   { id: "result-accuracy", label: "Estimate Accuracy", phase: "results" },
   { id: "differentiator", label: "Why TrueCost", phase: "about" },
-  { id: "pricing", label: "Pricing", phase: "about" },
   { id: "mobile-app", label: "Mobile App", phase: "about" },
+  { id: "pricing", label: "Pricing", phase: "about" },
   { id: "about-us", label: "Contact Us", phase: "about" },
 ] as const;
 
@@ -2087,20 +2087,20 @@ export function DemoPage() {
 
   // Contact Us - styled like About Us page
   const renderAboutUsContent = () => (
-    <div className="min-h-screen bg-truecost-bg-primary py-6 px-4">
+    <div className="min-h-screen bg-truecost-bg-primary py-4 px-4">
       {/* Contact Us Header */}
-      <section className="relative pb-4">
+      <section className="relative pb-2">
         <div className="max-w-5xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-heading font-bold text-truecost-text-primary mb-8">
+          <h2 className="text-3xl md:text-4xl font-heading font-bold text-truecost-text-primary mb-4">
             Contact <span className="text-truecost-cyan">us</span>
           </h2>
 
           {/* URL and Large Centered QR Code */}
-          <p className="text-2xl md:text-3xl font-semibold text-truecost-cyan mb-6">
+          <p className="text-2xl md:text-3xl font-semibold text-truecost-cyan mb-3">
             https://www.gettruecost.com/
           </p>
-          <div className="flex justify-center mb-4">
-            <div className="w-72 h-72 md:w-[28rem] md:h-[28rem] lg:w-[34rem] lg:h-[34rem] bg-white rounded-2xl p-6 shadow-xl">
+          <div className="flex justify-center mb-2">
+            <div className="w-70 h-70 md:w-[27rem] md:h-[27rem] lg:w-[33rem] lg:h-[33rem] bg-white rounded-2xl p-4 shadow-xl">
               <img src={qrCodeImage} alt="QR Code" className="w-full h-full object-contain" />
             </div>
           </div>
