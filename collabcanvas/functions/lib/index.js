@@ -3,7 +3,7 @@
  * Firebase Cloud Functions Entry Point
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updatePipelineStage = exports.triggerEstimatePipeline = exports.annotationCheckAgent = exports.comparePrices = exports.estimationPipeline = exports.clarificationAgent = exports.sagemakerInvoke = exports.getHomeDepotPrice = exports.materialEstimateCommand = exports.aiCommand = void 0;
+exports.sendContactEmail = exports.updatePipelineStage = exports.triggerEstimatePipeline = exports.annotationCheckAgent = exports.comparePrices = exports.estimationPipeline = exports.clarificationAgent = exports.sagemakerInvoke = exports.getHomeDepotPrice = exports.materialEstimateCommand = exports.aiCommand = void 0;
 const aiCommand_1 = require("./aiCommand");
 Object.defineProperty(exports, "aiCommand", { enumerable: true, get: function () { return aiCommand_1.aiCommand; } });
 const materialEstimateCommand_1 = require("./materialEstimateCommand");
@@ -23,5 +23,7 @@ Object.defineProperty(exports, "annotationCheckAgent", { enumerable: true, get: 
 const estimatePipelineOrchestrator_1 = require("./estimatePipelineOrchestrator");
 Object.defineProperty(exports, "triggerEstimatePipeline", { enumerable: true, get: function () { return estimatePipelineOrchestrator_1.triggerEstimatePipeline; } });
 Object.defineProperty(exports, "updatePipelineStage", { enumerable: true, get: function () { return estimatePipelineOrchestrator_1.updatePipelineStage; } });
+const sendContactEmail_1 = require("./sendContactEmail");
+Object.defineProperty(exports, "sendContactEmail", { enumerable: true, get: function () { return sendContactEmail_1.sendContactEmail; } });
 // export { onProjectDeleted }; // TODO: Uncomment when ready to deploy
 //# sourceMappingURL=index.js.map

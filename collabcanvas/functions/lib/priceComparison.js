@@ -390,30 +390,22 @@ async function autoPopulateGlobalMaterials(db, productName, zipCode, matches) {
     try {
         // Generate LLM-powered aliases and description for better future matching
         const { aliases, description } = await generateProductMetadata(canonicalName, productName, brand);
+        // Build retailers object, only including retailers with matches
+        // Firestore doesn't accept undefined values
+        const retailers = {};
+        if (hdMatch) {
+            retailers.homeDepot = Object.assign(Object.assign({ productUrl: hdMatch.url, productId: hdMatch.id, price: hdMatch.price, priceUpdatedAt: Date.now() }, (hdMatch.imageUrl && { imageUrl: hdMatch.imageUrl })), (hdMatch.brand && { brand: hdMatch.brand }));
+        }
+        if (lowesMatch) {
+            retailers.lowes = Object.assign(Object.assign({ productUrl: lowesMatch.url, productId: lowesMatch.id, price: lowesMatch.price, priceUpdatedAt: Date.now() }, (lowesMatch.imageUrl && { imageUrl: lowesMatch.imageUrl })), (lowesMatch.brand && { brand: lowesMatch.brand }));
+        }
         await (0, globalMaterials_1.saveToGlobalMaterials)(db, {
             name: canonicalName,
             normalizedName: (0, globalMaterials_1.normalizeProductName)(canonicalName),
             description,
             aliases,
             zipCode,
-            retailers: {
-                homeDepot: hdMatch ? {
-                    productUrl: hdMatch.url,
-                    productId: hdMatch.id,
-                    price: hdMatch.price,
-                    priceUpdatedAt: Date.now(),
-                    imageUrl: hdMatch.imageUrl || undefined,
-                    brand: hdMatch.brand || undefined,
-                } : undefined,
-                lowes: lowesMatch ? {
-                    productUrl: lowesMatch.url,
-                    productId: lowesMatch.id,
-                    price: lowesMatch.price,
-                    priceUpdatedAt: Date.now(),
-                    imageUrl: lowesMatch.imageUrl || undefined,
-                    brand: lowesMatch.brand || undefined,
-                } : undefined,
-            },
+            retailers,
             source: 'scraped',
         }, productName);
         console.log(`[PRICE_COMPARISON] Auto-populated global materials for "${productName}" with ${aliases.length} aliases`);

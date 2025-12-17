@@ -261,6 +261,7 @@ exports.validateGlobalMatch = validateGlobalMatch;
  * FR23-FR26: Auto-population with upsert logic
  */
 async function saveToGlobalMaterials(db, material, searchQuery) {
+    var _a, _b, _c, _d, _e, _f;
     const id = generateMaterialId(material.name, material.zipCode);
     const docRef = db.collection('globalMaterials').doc(id);
     console.log(`[GLOBAL_MATERIALS] Saving material: ${id}`);
@@ -274,8 +275,22 @@ async function saveToGlobalMaterials(db, material, searchQuery) {
                 ...existing.aliases,
                 searchQuery.toLowerCase().trim()
             ]));
-            // Merge retailer data
-            const mergedRetailers = Object.assign(Object.assign({}, existing.retailers), material.retailers);
+            // Merge retailer data - filter out undefined values to avoid Firestore errors
+            const mergedRetailers = {};
+            // Copy existing retailers if defined
+            if ((_a = existing.retailers) === null || _a === void 0 ? void 0 : _a.lowes) {
+                mergedRetailers.lowes = existing.retailers.lowes;
+            }
+            if ((_b = existing.retailers) === null || _b === void 0 ? void 0 : _b.homeDepot) {
+                mergedRetailers.homeDepot = existing.retailers.homeDepot;
+            }
+            // Override with new retailers if defined
+            if ((_c = material.retailers) === null || _c === void 0 ? void 0 : _c.lowes) {
+                mergedRetailers.lowes = material.retailers.lowes;
+            }
+            if ((_d = material.retailers) === null || _d === void 0 ? void 0 : _d.homeDepot) {
+                mergedRetailers.homeDepot = material.retailers.homeDepot;
+            }
             await docRef.update({
                 aliases: updatedAliases,
                 retailers: mergedRetailers,
@@ -285,7 +300,14 @@ async function saveToGlobalMaterials(db, material, searchQuery) {
             console.log(`[GLOBAL_MATERIALS] Updated existing material: ${id} (matchCount: ${(existing.matchCount || 0) + 1})`);
         }
         else {
-            // Create new document
+            // Create new document - filter out undefined retailer values
+            const cleanRetailers = {};
+            if ((_e = material.retailers) === null || _e === void 0 ? void 0 : _e.lowes) {
+                cleanRetailers.lowes = material.retailers.lowes;
+            }
+            if ((_f = material.retailers) === null || _f === void 0 ? void 0 : _f.homeDepot) {
+                cleanRetailers.homeDepot = material.retailers.homeDepot;
+            }
             const newMaterial = {
                 id,
                 name: material.name,
@@ -293,7 +315,7 @@ async function saveToGlobalMaterials(db, material, searchQuery) {
                 description: material.description,
                 aliases: [...new Set([...material.aliases, searchQuery.toLowerCase().trim()])],
                 zipCode: material.zipCode,
-                retailers: material.retailers,
+                retailers: cleanRetailers,
                 createdAt: now,
                 updatedAt: now,
                 matchCount: 1,
