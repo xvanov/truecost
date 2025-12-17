@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "mcp__ide__getDiagnostics",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(firebase functions:secrets:access:*)",
+      "Bash(gh run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }
