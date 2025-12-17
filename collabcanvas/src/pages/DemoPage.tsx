@@ -34,8 +34,8 @@ const DEMO_STEPS = [
   { id: "result-pdf", label: "PDF Reports", phase: "results" },
   { id: "result-accuracy", label: "Estimate Accuracy", phase: "results" },
   { id: "differentiator", label: "Why TrueCost", phase: "about" },
-  { id: "mobile-app", label: "Mobile App", phase: "about" },
   { id: "pricing", label: "Pricing", phase: "about" },
+  { id: "mobile-app", label: "Mobile App", phase: "about" },
   { id: "about-us", label: "Contact Us", phase: "about" },
 ] as const;
 
