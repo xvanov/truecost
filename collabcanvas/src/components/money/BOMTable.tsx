@@ -134,33 +134,33 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
 
   return (
     <div className="w-full overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+      <table className="min-w-full divide-y divide-truecost-glass-border">
+        <thead className="bg-truecost-bg-secondary">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-4 py-3 text-left text-xs font-medium text-truecost-text-secondary uppercase tracking-wider">
               Material
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-4 py-3 text-left text-xs font-medium text-truecost-text-secondary uppercase tracking-wider">
               Category
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-4 py-3 text-right text-xs font-medium text-truecost-text-secondary uppercase tracking-wider">
               Quantity
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-4 py-3 text-right text-xs font-medium text-truecost-text-secondary uppercase tracking-wider">
               Unit Price
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-4 py-3 text-right text-xs font-medium text-truecost-text-secondary uppercase tracking-wider">
               Total
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-4 py-3 text-right text-xs font-medium text-truecost-text-secondary uppercase tracking-wider">
               Actual Cost
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-4 py-3 text-left text-xs font-medium text-truecost-text-secondary uppercase tracking-wider">
               Notes
             </th>
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
+        <tbody className="bg-truecost-bg-primary divide-y divide-truecost-glass-border">
           {bom.totalMaterials.map((material, index) => {
             const materialId = material.id || material.name;
             const isEditing = editingMaterialId === materialId;
@@ -168,12 +168,12 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
             const total = hasPrice && material.priceUSD !== undefined ? material.quantity * material.priceUSD : 0;
 
             return (
-              <tr key={`${materialId}-${index}`} className="hover:bg-gray-50">
+              <tr key={`${materialId}-${index}`} className="hover:bg-truecost-glass-bg">
                 <td className="px-4 py-3 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900">{material.name}</div>
+                  <div className="text-sm font-medium text-truecost-text-primary">{material.name}</div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
-                  <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded capitalize">
+                  <span className="px-2 py-1 text-xs font-medium bg-truecost-cyan/20 text-truecost-cyan rounded capitalize">
                     {material.category}
                   </span>
                 </td>
@@ -185,7 +185,7 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
                       onChange={(e) => setEditValue(e.target.value)}
                       onBlur={handleSaveEdit}
                       onKeyDown={handleKeyDown}
-                      className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                      className="w-20 px-2 py-1 text-sm border border-truecost-glass-border rounded text-right bg-truecost-bg-secondary text-truecost-text-primary"
                       autoFocus
                       disabled={saving}
                       min="0"
@@ -194,23 +194,23 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
                   ) : (
                     <button
                       onClick={() => handleStartEdit(materialId, 'quantity', material.quantity)}
-                      className="text-sm text-gray-900 hover:text-blue-600 hover:underline"
+                      className="text-sm text-truecost-text-primary hover:text-truecost-cyan hover:underline"
                     >
-                      {material.quantity.toFixed(0)} <span className="text-gray-500">{material.unit}</span>
+                      {material.quantity.toFixed(0)} <span className="text-truecost-text-muted">{material.unit}</span>
                     </button>
                   )}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-right">
                   {isEditing && editingField === 'price' ? (
                     <div className="flex items-center gap-2 justify-end">
-                      <span className="text-sm text-gray-500">$</span>
+                      <span className="text-sm text-truecost-text-muted">$</span>
                       <input
                         type="number"
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                         onBlur={handleSaveEdit}
                         onKeyDown={handleKeyDown}
-                        className="w-24 px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                        className="w-24 px-2 py-1 text-sm border border-truecost-glass-border rounded text-right bg-truecost-bg-secondary text-truecost-text-primary"
                         autoFocus
                         disabled={saving}
                         min="0"
@@ -220,7 +220,7 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
                   ) : hasPrice ? (
                     <button
                       onClick={() => handleStartEdit(materialId, 'price', material.priceUSD ?? 0)}
-                      className="text-sm font-semibold text-green-600 hover:text-blue-600 hover:underline"
+                      className="text-sm font-semibold text-truecost-success hover:text-truecost-cyan hover:underline"
                     >
                       {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(material.priceUSD ?? 0)}
                     </button>
@@ -228,23 +228,23 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
                     <div className="flex flex-col items-end">
                       <button
                         onClick={() => handleStartEdit(materialId, 'price', '')}
-                        className="text-xs text-orange-600 hover:text-blue-600 hover:underline"
+                        className="text-xs text-truecost-warning hover:text-truecost-cyan hover:underline"
                       >
                         Enter price
                       </button>
-                      <span className="text-xs text-orange-500 mt-1">{material.priceError}</span>
+                      <span className="text-xs text-truecost-warning mt-1">{material.priceError}</span>
                     </div>
                   ) : (
                     <button
                       onClick={() => handleStartEdit(materialId, 'price', '')}
-                      className="text-sm text-gray-400 hover:text-blue-600 hover:underline"
+                      className="text-sm text-truecost-text-muted hover:text-truecost-cyan hover:underline"
                     >
                       N/A
                     </button>
                   )}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-right">
-                  <span className="text-sm font-semibold text-gray-900">
+                  <span className="text-sm font-semibold text-truecost-cyan">
                     {hasPrice
                       ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(total)
                       : 'N/A'}
@@ -253,14 +253,14 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
                 <td className="px-4 py-3 whitespace-nowrap text-right">
                   {isEditing && editingField === 'actualCost' ? (
                     <div className="flex items-center gap-2 justify-end">
-                      <span className="text-sm text-gray-500">$</span>
+                      <span className="text-sm text-truecost-text-muted">$</span>
                       <input
                         type="number"
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                         onBlur={handleSaveEdit}
                         onKeyDown={handleKeyDown}
-                        className="w-24 px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                        className="w-24 px-2 py-1 text-sm border border-truecost-glass-border rounded text-right bg-truecost-bg-secondary text-truecost-text-primary"
                         autoFocus
                         disabled={saving}
                         min="0"
@@ -272,7 +272,7 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
                   ) : typeof material.actualCostUSD === 'number' ? (
                     <button
                       onClick={() => handleStartEdit(materialId, 'actualCost', material.actualCostUSD)}
-                      className="text-sm font-semibold text-purple-600 hover:text-blue-600 hover:underline"
+                      className="text-sm font-semibold text-truecost-teal hover:text-truecost-cyan hover:underline"
                       title="Total actual cost"
                     >
                       {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(material.actualCostUSD)}
@@ -280,7 +280,7 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
                   ) : (
                     <button
                       onClick={() => handleStartEdit(materialId, 'actualCost', '')}
-                      className="text-sm text-gray-400 hover:text-blue-600 hover:underline"
+                      className="text-sm text-truecost-text-muted hover:text-truecost-cyan hover:underline"
                       title="Enter total actual cost"
                     >
                       Enter
@@ -295,7 +295,7 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
                       onChange={(e) => setEditValue(e.target.value)}
                       onBlur={handleSaveEdit}
                       onKeyDown={handleKeyDown}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      className="w-full px-2 py-1 text-sm border border-truecost-glass-border rounded bg-truecost-bg-secondary text-truecost-text-primary"
                       autoFocus
                       disabled={saving}
                       placeholder="Add notes..."
@@ -303,9 +303,9 @@ export function BOMTable({ bom, onBOMUpdate }: BOMTableProps) {
                   ) : (
                     <button
                       onClick={() => handleStartEdit(materialId, 'notes', material.notes)}
-                      className="text-sm text-gray-600 hover:text-blue-600 hover:underline text-left w-full"
+                      className="text-sm text-truecost-text-secondary hover:text-truecost-cyan hover:underline text-left w-full"
                     >
-                      {material.notes || <span className="text-gray-400 italic">Click to add notes</span>}
+                      {material.notes || <span className="text-truecost-text-muted italic">Click to add notes</span>}
                     </button>
                   )}
                 </td>

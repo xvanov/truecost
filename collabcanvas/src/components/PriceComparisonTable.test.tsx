@@ -72,7 +72,7 @@ describe('PriceComparisonTable', () => {
 
     const bestBadge = screen.getByText('BEST')
     expect(bestBadge).toBeInTheDocument()
-    expect(bestBadge).toHaveClass('bg-green-600')
+    expect(bestBadge).toHaveClass('bg-truecost-success')
   })
 
   it('shows "No match found" for null matches', () => {
@@ -126,16 +126,16 @@ describe('PriceComparisonTable', () => {
     expect(screen.getByText('$9.99')).toBeInTheDocument()
   })
 
-  it('applies bg-green-50 to best price cell', () => {
+  it('applies success background to best price cell', () => {
     const results = [createMockResult()]
     const { container } = render(<PriceComparisonTable results={results} />)
 
-    // Find cells with bg-green-50 class
-    const greenCells = container.querySelectorAll('.bg-green-50')
+    // Find td cells with bg-truecost-success/10 class (Tailwind arbitrary value)
+    const greenCells = container.querySelectorAll('td[class*="bg-truecost-success"]')
     expect(greenCells.length).toBe(1)
   })
 
-  it('applies bg-gray-50 to no-match cells', () => {
+  it('applies muted text styling to no-match cells', () => {
     const result = createMockResult()
     result.matches.lowes = {
       selectedProduct: null,
@@ -146,7 +146,8 @@ describe('PriceComparisonTable', () => {
 
     const { container } = render(<PriceComparisonTable results={[result]} />)
 
-    const grayCells = container.querySelectorAll('.bg-gray-50')
-    expect(grayCells.length).toBeGreaterThan(0)
+    // No-match cells use text-truecost-text-muted class
+    const mutedCells = container.querySelectorAll('[class*="text-truecost-text-muted"]')
+    expect(mutedCells.length).toBeGreaterThan(0)
   })
 })

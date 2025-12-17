@@ -26,19 +26,19 @@ interface NodePosition {
 }
 
 /**
- * Task category color mapping
+ * Task category color mapping (dark theme compatible)
  */
 const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  prep: { bg: 'bg-gray-200', border: 'border-gray-400', text: 'text-gray-800' },
-  demo: { bg: 'bg-red-200', border: 'border-red-400', text: 'text-red-800' },
-  foundation: { bg: 'bg-amber-200', border: 'border-amber-400', text: 'text-amber-800' },
-  framing: { bg: 'bg-yellow-200', border: 'border-yellow-400', text: 'text-yellow-800' },
-  electrical: { bg: 'bg-blue-200', border: 'border-blue-400', text: 'text-blue-800' },
-  plumbing: { bg: 'bg-cyan-200', border: 'border-cyan-400', text: 'text-cyan-800' },
-  hvac: { bg: 'bg-green-200', border: 'border-green-400', text: 'text-green-800' },
-  insulation: { bg: 'bg-purple-200', border: 'border-purple-400', text: 'text-purple-800' },
-  drywall: { bg: 'bg-indigo-200', border: 'border-indigo-400', text: 'text-indigo-800' },
-  finish: { bg: 'bg-pink-200', border: 'border-pink-400', text: 'text-pink-800' },
+  prep: { bg: 'bg-slate-700/50', border: 'border-slate-500', text: 'text-slate-200' },
+  demo: { bg: 'bg-red-900/50', border: 'border-red-600', text: 'text-red-300' },
+  foundation: { bg: 'bg-amber-900/50', border: 'border-amber-600', text: 'text-amber-300' },
+  framing: { bg: 'bg-yellow-900/50', border: 'border-yellow-600', text: 'text-yellow-300' },
+  electrical: { bg: 'bg-blue-900/50', border: 'border-blue-500', text: 'text-blue-300' },
+  plumbing: { bg: 'bg-cyan-900/50', border: 'border-cyan-500', text: 'text-cyan-300' },
+  hvac: { bg: 'bg-green-900/50', border: 'border-green-500', text: 'text-green-300' },
+  insulation: { bg: 'bg-purple-900/50', border: 'border-purple-500', text: 'text-purple-300' },
+  drywall: { bg: 'bg-indigo-900/50', border: 'border-indigo-500', text: 'text-indigo-300' },
+  finish: { bg: 'bg-pink-900/50', border: 'border-pink-500', text: 'text-pink-300' },
 };
 
 export function TimeView({ projectId, userId = 'system' }: TimeViewProps) {
@@ -174,10 +174,10 @@ export function TimeView({ projectId, userId = 'system' }: TimeViewProps) {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center bg-gray-50 p-8">
+      <div className="flex h-full items-center justify-center p-8">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading project schedule...</p>
+          <div className="w-12 h-12 border-4 border-truecost-cyan border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-truecost-text-secondary">Loading project schedule...</p>
         </div>
       </div>
     );
@@ -185,12 +185,12 @@ export function TimeView({ projectId, userId = 'system' }: TimeViewProps) {
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center bg-gray-50 p-8">
+      <div className="flex h-full items-center justify-center p-8">
         <div className="text-center">
-          <p className="text-red-600 mb-4">{error}</p>
+          <p className="text-truecost-danger mb-4">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-4 py-2 bg-truecost-cyan text-truecost-bg-primary rounded hover:bg-truecost-teal"
           >
             Retry
           </button>
@@ -201,11 +201,11 @@ export function TimeView({ projectId, userId = 'system' }: TimeViewProps) {
 
   if (!cpm) {
     return (
-      <div className="flex h-full items-center justify-center bg-gray-50 p-8">
+      <div className="flex h-full items-center justify-center p-8">
         <div className="text-center max-w-md">
           {/* Calendar icon */}
           <svg
-            className="w-16 h-16 mx-auto mb-4 text-gray-400"
+            className="w-16 h-16 mx-auto mb-4 text-truecost-text-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -217,11 +217,11 @@ export function TimeView({ projectId, userId = 'system' }: TimeViewProps) {
               d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
             />
           </svg>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Timeline Data</h3>
-          <p className="text-gray-600 mb-4">
+          <h3 className="text-lg font-semibold text-truecost-text-primary mb-2">No Timeline Data</h3>
+          <p className="text-truecost-text-secondary mb-4">
             Generate an estimate to see the project timeline. The timeline will be automatically created based on your project scope and requirements.
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-truecost-text-muted">
             Go to the Summary tab and click "Generate Estimate" to get started.
           </p>
         </div>
@@ -230,18 +230,18 @@ export function TimeView({ projectId, userId = 'system' }: TimeViewProps) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="border-b border-truecost-glass-border px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Project Timeline</h1>
-            <p className="text-sm text-gray-600 mt-1">
-              Total Duration: <span className="font-semibold">{processedTasks.totalDuration} days</span>
+            <h1 className="text-2xl font-bold text-truecost-text-primary">Project Timeline</h1>
+            <p className="text-sm text-truecost-text-secondary mt-1">
+              Total Duration: <span className="font-semibold text-truecost-cyan">{processedTasks.totalDuration} days</span>
               {processedTasks.criticalPath.length > 0 && (
                 <span className="ml-4">
                   Critical Path:{' '}
-                  <span className="font-semibold text-red-600">
+                  <span className="font-semibold text-truecost-danger">
                     {processedTasks.criticalPath.length} tasks
                   </span>
                 </span>
@@ -264,33 +264,33 @@ export function TimeView({ projectId, userId = 'system' }: TimeViewProps) {
           </div>
 
           {/* View Toggle */}
-          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+          <div className="flex items-center gap-1 rounded-lg border border-truecost-glass-border bg-truecost-glass-bg p-1">
             <button
               onClick={() => setViewMode('gantt')}
-              className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                 viewMode === 'gantt'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan'
+                  : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent'
               }`}
             >
               Gantt Chart
             </button>
             <button
               onClick={() => setViewMode('network')}
-              className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                 viewMode === 'network'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan'
+                  : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent'
               }`}
             >
               CPM Network
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                 viewMode === 'list'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-gradient-to-r from-truecost-cyan/20 to-truecost-teal/20 border border-truecost-cyan/40 text-truecost-cyan'
+                  : 'text-truecost-text-secondary hover:text-truecost-text-primary hover:bg-truecost-glass-bg border border-transparent'
               }`}
             >
               Task List
@@ -344,39 +344,39 @@ function GanttChart({
   const chartWidth = (totalDuration + 1) * dayWidth;
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div className="glass-panel rounded-lg shadow-sm border border-truecost-glass-border overflow-hidden">
       {/* Legend */}
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-4 text-sm">
+      <div className="px-4 py-2 bg-truecost-bg-secondary border-b border-truecost-glass-border flex items-center gap-4 text-sm">
         <span className="font-medium text-gray-700">Legend:</span>
         <div className="flex items-center gap-1">
           <div className="w-4 h-4 bg-red-500 rounded" />
-          <span className="text-gray-600">Critical Path</span>
+          <span className="text-truecost-text-secondary">Critical Path</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded" />
-          <span className="text-gray-600">Standard Task</span>
+          <div className="w-4 h-4 bg-blue-500 rounded" />
+          <span className="text-truecost-text-secondary">Standard Task</span>
         </div>
       </div>
 
       <div className="overflow-x-auto">
         <div style={{ minWidth: chartWidth + 200 }}>
           {/* Header row with "Day" label */}
-          <div className="flex border-b border-gray-200">
-            <div className="w-48 flex-shrink-0 px-4 py-1 bg-gray-100 border-r border-gray-200" />
-            <div className="flex-1 text-center text-xs font-medium text-gray-600 py-1 bg-gray-50">
+          <div className="flex border-b border-truecost-glass-border">
+            <div className="w-48 flex-shrink-0 px-4 py-1 bg-truecost-bg-secondary border-r border-truecost-glass-border" />
+            <div className="flex-1 text-center text-xs font-medium text-truecost-text-secondary py-1 bg-truecost-bg-secondary">
               Day
             </div>
           </div>
           {/* Header row with day numbers */}
-          <div className="flex border-b border-gray-200">
-            <div className="w-48 flex-shrink-0 px-4 py-2 bg-gray-100 font-medium text-gray-700 border-r border-gray-200">
+          <div className="flex border-b border-truecost-glass-border">
+            <div className="w-48 flex-shrink-0 px-4 py-2 bg-truecost-bg-secondary font-medium text-truecost-text-secondary border-r border-truecost-glass-border">
               Task
             </div>
             <div className="flex-1 flex">
               {dayMarkers.map((day) => (
                 <div
                   key={day}
-                  className="text-center text-xs text-gray-500 border-r border-gray-100 py-1"
+                  className="text-center text-xs text-truecost-text-muted border-r border-truecost-glass-border py-1"
                   style={{ width: dayWidth }}
                 >
                   {day + 1}
@@ -390,14 +390,14 @@ function GanttChart({
             return (
               <div
                 key={task.id}
-                className={`flex border-b border-gray-100 ${
-                  index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                className={`flex border-b border-truecost-glass-border ${
+                  index % 2 === 0 ? 'glass-panel' : 'bg-truecost-bg-secondary/50'
                 }`}
               >
                 {/* Task name */}
-                <div className="w-48 flex-shrink-0 px-4 py-3 border-r border-gray-200">
-                  <div className="font-medium text-gray-900 text-sm">{task.name}</div>
-                  <div className="text-xs text-gray-500">
+                <div className="w-48 flex-shrink-0 px-4 py-3 border-r border-truecost-glass-border">
+                  <div className="font-medium text-truecost-text-primary text-sm">{task.name}</div>
+                  <div className="text-xs text-truecost-text-muted">
                     {task.duration} day{task.duration !== 1 ? 's' : ''}
                   </div>
                 </div>
@@ -562,29 +562,29 @@ function TaskListView({
 
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+    <div className="glass-panel rounded-lg shadow-sm border border-truecost-glass-border">
       {/* Edit hint */}
-      <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 text-sm text-blue-700">
+      <div className="px-4 py-2 bg-truecost-cyan/10 border-b border-truecost-glass-border text-sm text-truecost-cyan">
         Click on Duration or Dependencies to edit. Critical path updates automatically via CPM algorithm.
       </div>
       <table className="w-full">
         <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="text-left py-3 px-4 font-semibold text-gray-600">Task</th>
-            <th className="text-left py-3 px-4 font-semibold text-gray-600">Category</th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-600">
+          <tr className="bg-truecost-bg-secondary border-b border-truecost-glass-border">
+            <th className="text-left py-3 px-4 font-semibold text-truecost-text-secondary">Task</th>
+            <th className="text-left py-3 px-4 font-semibold text-truecost-text-secondary">Category</th>
+            <th className="text-right py-3 px-4 font-semibold text-truecost-text-secondary">
               Duration
-              <span className="ml-1 text-xs font-normal text-blue-500">(edit)</span>
+              <span className="ml-1 text-xs font-normal text-truecost-cyan">(edit)</span>
             </th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-600">Start</th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-600">End</th>
-            <th className="text-center py-3 px-4 font-semibold text-gray-600">
+            <th className="text-right py-3 px-4 font-semibold text-truecost-text-secondary">Start</th>
+            <th className="text-right py-3 px-4 font-semibold text-truecost-text-secondary">End</th>
+            <th className="text-center py-3 px-4 font-semibold text-truecost-text-secondary">
               Dependencies
-              <span className="ml-1 text-xs font-normal text-blue-500">(edit)</span>
+              <span className="ml-1 text-xs font-normal text-truecost-cyan">(edit)</span>
             </th>
-            <th className="text-center py-3 px-4 font-semibold text-gray-600">
+            <th className="text-center py-3 px-4 font-semibold text-truecost-text-secondary">
               Critical
-              <span className="ml-1 text-xs font-normal text-gray-400">(auto)</span>
+              <span className="ml-1 text-xs font-normal text-truecost-text-muted">(auto)</span>
             </th>
           </tr>
         </thead>
@@ -592,11 +592,11 @@ function TaskListView({
           {tasks.map((task, index) => (
             <tr
               key={task.id}
-              className={`border-b border-gray-100 ${
-                task.isCritical ? 'bg-red-50' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+              className={`border-b border-truecost-glass-border ${
+                task.isCritical ? 'bg-red-50' : index % 2 === 0 ? 'glass-panel' : 'bg-truecost-bg-secondary/50'
               }`}
             >
-              <td className="py-3 px-4 font-medium text-gray-900">{task.name}</td>
+              <td className="py-3 px-4 font-medium text-truecost-text-primary">{task.name}</td>
               <td className="py-3 px-4">
                 <span
                   className={`px-2 py-1 rounded text-xs font-medium ${
@@ -620,19 +620,19 @@ function TaskListView({
                       onKeyDown={(e) => handleDurationKeyDown(e, task.id)}
                       onBlur={() => handleSaveDuration(task.id)}
                       autoFocus
-                      className="w-16 px-2 py-1 text-right text-gray-900 bg-white border border-blue-400 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      className="w-16 px-2 py-1 text-right text-truecost-text-primary bg-truecost-bg-secondary border border-truecost-cyan rounded focus:ring-2 focus:ring-truecost-cyan focus:outline-none"
                     />
-                    <span className="text-gray-500 text-sm">days</span>
+                    <span className="text-truecost-text-muted text-sm">days</span>
                   </div>
                 ) : (
                   <button
                     onClick={() => handleStartDurationEdit(task)}
-                    className="group px-2 py-1 rounded hover:bg-blue-100 transition-colors cursor-pointer text-gray-900"
+                    className="group px-2 py-1 rounded hover:bg-truecost-cyan/20 transition-colors cursor-pointer text-truecost-text-primary"
                     title="Click to edit duration"
                   >
                     {task.duration} day{task.duration !== 1 ? 's' : ''}
                     <svg
-                      className="inline-block w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 text-blue-500 transition-opacity"
+                      className="inline-block w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 text-truecost-cyan transition-opacity"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -643,18 +643,18 @@ function TaskListView({
                 )}
               </td>
 
-              <td className="py-3 px-4 text-right text-gray-900">Day {task.startDay + 1}</td>
-              <td className="py-3 px-4 text-right text-gray-900">Day {task.startDay + task.duration}</td>
+              <td className="py-3 px-4 text-right text-truecost-text-primary">Day {task.startDay + 1}</td>
+              <td className="py-3 px-4 text-right text-truecost-text-primary">Day {task.startDay + task.duration}</td>
 
               {/* Editable Dependencies Cell */}
               <td className="py-3 px-4 text-center relative">
                 {editingDepsId === task.id ? (
-                  <div className="absolute z-10 right-0 top-full mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-lg p-2">
-                    <div className="flex justify-between items-center mb-2 pb-2 border-b">
-                      <span className="text-sm font-medium text-gray-700">Select Dependencies</span>
+                  <div className="absolute z-10 right-0 top-full mt-1 w-64 bg-truecost-bg-secondary border border-truecost-glass-border rounded-lg shadow-lg p-2">
+                    <div className="flex justify-between items-center mb-2 pb-2 border-b border-truecost-glass-border">
+                      <span className="text-sm font-medium text-truecost-text-primary">Select Dependencies</span>
                       <button
                         onClick={handleCancelDeps}
-                        className="text-gray-400 hover:text-gray-600"
+                        className="text-truecost-text-muted hover:text-truecost-text-secondary"
                         title="Cancel"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -666,29 +666,29 @@ function TaskListView({
                       {tasks.filter(t => t.id !== task.id).map(otherTask => (
                         <label
                           key={otherTask.id}
-                          className="flex items-center gap-2 p-1.5 rounded hover:bg-gray-50 cursor-pointer"
+                          className="flex items-center gap-2 p-1.5 rounded hover:bg-truecost-glass-bg cursor-pointer"
                         >
                           <input
                             type="checkbox"
                             checked={localDeps.includes(otherTask.id)}
                             onChange={() => handleToggleDependency(otherTask.id)}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="rounded border-truecost-glass-border text-truecost-cyan focus:ring-truecost-cyan"
                           />
-                          <span className="text-sm text-gray-700 truncate">{otherTask.name}</span>
+                          <span className="text-sm text-truecost-text-secondary truncate">{otherTask.name}</span>
                         </label>
                       ))}
                     </div>
                     {/* Save/Cancel buttons */}
-                    <div className="flex justify-end gap-2 mt-2 pt-2 border-t">
+                    <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-truecost-glass-border">
                       <button
                         onClick={handleCancelDeps}
-                        className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+                        className="px-2 py-1 text-xs text-truecost-text-secondary hover:bg-truecost-glass-bg rounded"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={handleSaveDeps}
-                        className="px-2 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded"
+                        className="px-2 py-1 text-xs bg-truecost-cyan text-truecost-bg-primary hover:bg-truecost-teal rounded"
                       >
                         Save
                       </button>
@@ -697,7 +697,7 @@ function TaskListView({
                 ) : null}
                 <button
                   onClick={() => handleStartDepsEdit(task)}
-                  className="group px-2 py-1 rounded hover:bg-blue-100 transition-colors cursor-pointer text-gray-600 text-sm"
+                  className="group px-2 py-1 rounded hover:bg-truecost-cyan/20 transition-colors cursor-pointer text-truecost-text-secondary text-sm"
                   title="Click to edit dependencies"
                 >
                   {task.dependencies.length > 0 ? (
@@ -705,13 +705,13 @@ function TaskListView({
                       <span className="max-w-32 truncate">
                         {tasks.filter(t => task.dependencies.includes(t.id)).map(t => t.name).join(', ')}
                       </span>
-                      <span className="text-blue-500 text-xs">({task.dependencies.length})</span>
+                      <span className="text-truecost-cyan text-xs">({task.dependencies.length})</span>
                     </span>
                   ) : (
-                    <span className="text-gray-400">None</span>
+                    <span className="text-truecost-text-muted">None</span>
                   )}
                   <svg
-                    className="inline-block w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 text-blue-500 transition-opacity"
+                    className="inline-block w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 text-truecost-cyan transition-opacity"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -726,8 +726,8 @@ function TaskListView({
                 <span
                   className={`px-3 py-1 rounded-full text-sm font-medium ${
                     task.isCritical
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-gray-100 text-gray-500'
+                      ? 'bg-red-900/50 text-red-300'
+                      : 'bg-truecost-glass-bg text-truecost-text-muted'
                   }`}
                   title="Automatically calculated from duration and dependencies"
                 >
@@ -857,29 +857,29 @@ function CPMNetworkDiagram({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div className="glass-panel rounded-lg shadow-sm border border-truecost-glass-border overflow-hidden">
       {/* Legend */}
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-4 text-sm">
+      <div className="px-4 py-2 bg-truecost-bg-secondary border-b border-truecost-glass-border flex items-center gap-4 text-sm">
         <span className="font-medium text-gray-700">Legend:</span>
         <div className="flex items-center gap-1">
           <div className="w-4 h-4 bg-red-500 rounded border-2 border-red-700" />
-          <span className="text-gray-600">Critical Path</span>
+          <span className="text-truecost-text-secondary">Critical Path</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-4 h-4 bg-blue-100 rounded border-2 border-blue-400" />
-          <span className="text-gray-600">Standard Task</span>
+          <span className="text-truecost-text-secondary">Standard Task</span>
         </div>
         <div className="flex items-center gap-1">
           <svg width="30" height="10">
             <line x1="0" y1="5" x2="30" y2="5" stroke="#ef4444" strokeWidth="3" markerEnd="url(#arrowhead-critical)" />
           </svg>
-          <span className="text-gray-600">Critical Dependency</span>
+          <span className="text-truecost-text-secondary">Critical Dependency</span>
         </div>
         <div className="flex items-center gap-1">
           <svg width="30" height="10">
             <line x1="0" y1="5" x2="30" y2="5" stroke="#9ca3af" strokeWidth="2" />
           </svg>
-          <span className="text-gray-600">Standard Dependency</span>
+          <span className="text-truecost-text-secondary">Standard Dependency</span>
         </div>
       </div>
 
@@ -1032,12 +1032,12 @@ function CPMNetworkDiagram({
       {/* Task Detail Modal */}
       {selectedTask && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setSelectedTask(null)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="glass-panel rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-start mb-4">
-              <h3 className="text-lg font-bold text-gray-900">{selectedTask.name}</h3>
+              <h3 className="text-lg font-bold text-truecost-text-primary">{selectedTask.name}</h3>
               <button
                 onClick={() => setSelectedTask(null)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-truecost-text-muted hover:text-truecost-text-secondary"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1047,34 +1047,34 @@ function CPMNetworkDiagram({
 
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-gray-600">Category:</span>
+                <span className="text-truecost-text-secondary">Category:</span>
                 <span className={`px-2 py-1 rounded text-xs font-medium ${CATEGORY_COLORS[selectedTask.category || 'prep']?.bg || 'bg-gray-200'} ${CATEGORY_COLORS[selectedTask.category || 'prep']?.text || 'text-gray-800'}`}>
                   {selectedTask.category || 'General'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Duration:</span>
+                <span className="text-truecost-text-secondary">Duration:</span>
                 <span className="font-medium">{selectedTask.duration} day{selectedTask.duration !== 1 ? 's' : ''}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Start Day:</span>
+                <span className="text-truecost-text-secondary">Start Day:</span>
                 <span className="font-medium">Day {selectedTask.startDay + 1}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">End Day:</span>
+                <span className="text-truecost-text-secondary">End Day:</span>
                 <span className="font-medium">Day {selectedTask.startDay + selectedTask.duration}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Critical Path:</span>
+                <span className="text-truecost-text-secondary">Critical Path:</span>
                 {selectedTask.isCritical ? (
                   <span className="text-red-600 font-bold">★ Yes</span>
                 ) : (
-                  <span className="text-gray-400">No</span>
+                  <span className="text-truecost-text-muted">No</span>
                 )}
               </div>
               {selectedTask.dependencies.length > 0 && (
                 <div>
-                  <span className="text-gray-600">Dependencies:</span>
+                  <span className="text-truecost-text-secondary">Dependencies:</span>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {selectedTask.dependencies.map((depId) => {
                       const depTask = tasks.find((t) => t.id === depId);
