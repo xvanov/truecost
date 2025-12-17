@@ -982,11 +982,10 @@ function createProjectCanvasStore(projectId: string): StoreApi<CanvasState> {
         set((state: CanvasState) => ({
           canvasScale: { ...state.canvasScale, isImageUploadMode },
         })),
-      initializeBoardStateSubscription: (() => {
+      initializeBoardStateSubscription: () => {
         // Use projectId from closure
         const projectIdParam = projectId;
         console.log('🔧 initializeBoardStateSubscription called for project:', projectIdParam);
-        return () => {
         console.log('🔧 Setting up board state subscription for project:', projectIdParam);
 
         // Track if we've received the first snapshot (which fires immediately)
@@ -1072,7 +1071,7 @@ function createProjectCanvasStore(projectId: string): StoreApi<CanvasState> {
             applyBoardState(boardState, 'Initial snapshot');
             return;
           }
-          
+
           // Handle subsequent updates from Firestore (real-time changes)
           console.log('📥 Subsequent board state update:', {
             projectId: projectIdParam,
@@ -1092,10 +1091,9 @@ function createProjectCanvasStore(projectId: string): StoreApi<CanvasState> {
             applyBoardState(boardState, 'Subscription update');
           }
         });
-        
+
         return unsubscribe;
-        };
-      }) as () => (() => void),
+      },
       
       // Material Estimation State
       materialDialogue: null,
