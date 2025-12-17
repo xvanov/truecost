@@ -1510,6 +1510,17 @@ MOCK_COST_CODES: List[Dict[str, any]] = [
         "unit": "SF"
     },
     {
+        "code": "02-4119-0350",
+        "subdivision": "02 41 19",
+        "division": "02",
+        "description": "Wall finish demolition and removal",
+        "keywords": ["wall", "finish", "demolition", "removal", "drywall demolition", "wall demo"],
+        "material_cost_per_unit": 0.25,
+        "labor_hours_per_unit": 0.04,
+        "primary_trade": "demolition",
+        "unit": "SF"
+    },
+    {
         "code": "02-4119-0400",
         "subdivision": "02 41 19",
         "division": "02",
@@ -1610,7 +1621,53 @@ MOCK_COST_CODES: List[Dict[str, any]] = [
         "primary_trade": "carpenter",
         "unit": "LF"
     },
-    
+
+    # Division 07 - Thermal & Moisture Protection
+    {
+        "code": "07-2100-0100",
+        "subdivision": "07 21 00",
+        "division": "07",
+        "description": "Wall insulation - fiberglass batt",
+        "keywords": ["insulation", "wall insulation", "fiberglass", "batt", "r-13", "r-15", "r-19"],
+        "material_cost_per_unit": 0.75,
+        "labor_hours_per_unit": 0.012,
+        "primary_trade": "carpenter",
+        "unit": "SF"
+    },
+    {
+        "code": "07-2100-0200",
+        "subdivision": "07 21 00",
+        "division": "07",
+        "description": "Ceiling insulation - blown-in",
+        "keywords": ["ceiling insulation", "blown", "attic insulation", "r-30", "r-38"],
+        "material_cost_per_unit": 1.25,
+        "labor_hours_per_unit": 0.008,
+        "primary_trade": "carpenter",
+        "unit": "SF"
+    },
+    {
+        "code": "07-1600-0100",
+        "subdivision": "07 16 00",
+        "division": "07",
+        "description": "Shower waterproofing membrane",
+        "keywords": ["waterproof", "membrane", "shower", "kerdi", "redgard", "bathroom waterproof"],
+        "material_cost_per_unit": 2.50,
+        "labor_hours_per_unit": 0.04,
+        "primary_trade": "tile_setter",
+        "unit": "SF"
+    },
+    {
+        "code": "07-1600-0200",
+        "subdivision": "07 16 00",
+        "division": "07",
+        "description": "Vapor barrier",
+        "keywords": ["vapor barrier", "moisture barrier", "poly", "plastic sheeting"],
+        "material_cost_per_unit": 0.15,
+        "labor_hours_per_unit": 0.005,
+        "primary_trade": "carpenter",
+        "unit": "SF"
+    },
+
     # Division 08 - Openings (Hardware)
     {
         "code": "08-7100-0100",
@@ -1701,6 +1758,28 @@ MOCK_COST_CODES: List[Dict[str, any]] = [
         "labor_hours_per_unit": 4.0,
         "primary_trade": "drywall_installer",
         "unit": "allowance"
+    },
+    {
+        "code": "09-2900-0200",
+        "subdivision": "09 29 00",
+        "division": "09",
+        "description": "Drywall installation - walls",
+        "keywords": ["drywall", "gypsum", "sheetrock", "wall board", "walls"],
+        "material_cost_per_unit": 1.50,
+        "labor_hours_per_unit": 0.035,
+        "primary_trade": "drywall_installer",
+        "unit": "SF"
+    },
+    {
+        "code": "09-2900-0300",
+        "subdivision": "09 29 00",
+        "division": "09",
+        "description": "Drywall installation - ceiling",
+        "keywords": ["drywall", "ceiling", "gypsum", "sheetrock"],
+        "material_cost_per_unit": 1.75,
+        "labor_hours_per_unit": 0.045,
+        "primary_trade": "drywall_installer",
+        "unit": "SF"
     },
     {
         "code": "09-3000-0100",

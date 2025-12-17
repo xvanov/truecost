@@ -32,12 +32,39 @@ const SERPAPI_MERCHANTS = {
 };
 const RETAILERS = ['homeDepot', 'lowes'];
 const SERPAPI_TIMEOUT_MS = 30000;
+// ============ SERPAPI CIRCUIT BREAKER ============
+// Track if SerpAPI quota is exhausted to avoid redundant calls
+let serpApiQuotaExhausted = false;
+let serpApiQuotaExhaustedAt = null;
+const SERPAPI_QUOTA_RESET_MS = 60 * 60 * 1000; // Reset after 1 hour
+function isSerpApiAvailable() {
+    if (!serpApiQuotaExhausted)
+        return true;
+    // Reset circuit breaker after timeout
+    if (serpApiQuotaExhaustedAt && Date.now() - serpApiQuotaExhaustedAt > SERPAPI_QUOTA_RESET_MS) {
+        console.log('[PRICE_COMPARISON] SerpApi circuit breaker reset');
+        serpApiQuotaExhausted = false;
+        serpApiQuotaExhaustedAt = null;
+        return true;
+    }
+    return false;
+}
+function markSerpApiQuotaExhausted() {
+    serpApiQuotaExhausted = true;
+    serpApiQuotaExhaustedAt = Date.now();
+    console.log('[PRICE_COMPARISON] SerpApi circuit breaker TRIPPED - quota exhausted');
+}
 // ============ SERPAPI GOOGLE SHOPPING ============
 /**
  * Fetch products from SerpApi Google Shopping for a specific retailer
  * Filters results by merchant name pattern
  */
 async function fetchFromSerpApi(productName, retailer) {
+    // Check circuit breaker first
+    if (!isSerpApiAvailable()) {
+        console.log(`[PRICE_COMPARISON] SerpApi circuit breaker OPEN - skipping API call for "${productName}"`);
+        return [];
+    }
     const apiKey = process.env.SERP_API_KEY;
     if (!apiKey) {
         console.error('[PRICE_COMPARISON] SERP_API_KEY not configured');
@@ -61,6 +88,10 @@ async function fetchFromSerpApi(productName, retailer) {
         if (!res.ok) {
             const errorText = await res.text();
             console.error(`[PRICE_COMPARISON] SerpApi error: ${res.status} - ${errorText}`);
+            // Check for quota exhaustion (429) and trip circuit breaker
+            if (res.status === 429 || errorText.includes('run out of searches')) {
+                markSerpApiQuotaExhausted();
+            }
             return [];
         }
         const data = await res.json();

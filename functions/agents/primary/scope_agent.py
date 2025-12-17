@@ -85,6 +85,239 @@ You MUST respond with valid JSON only. No markdown, no explanation.
 """
 
 
+GENERATE_MATERIALS_AND_LABOR_PROMPT = """You are an expert construction estimator with 20+ years of experience in residential remodeling.
+
+Your job is to analyze line items from a construction scope and generate:
+1. REALISTIC labor hour estimates
+2. DETAILED material specifications with actual product names and costs
+
+## CRITICAL: Labor Hours Must Be Realistic
+
+Labor hours should reflect ACTUAL installation time by a professional contractor:
+- A single tradesperson can typically:
+  - Install 30-50 SF of drywall per hour
+  - Paint 100-150 SF per hour (walls)
+  - Install 20-30 SF of tile per hour
+  - Install 15-25 LF of trim/molding per hour
+  - Install 1 toilet in 1.5-2 hours
+  - Install 1 faucet in 0.5-1 hour
+  - Install 1 vanity cabinet in 1-2 hours
+
+## CRITICAL: Materials Must Be Detailed and Realistic
+
+For each line item, provide:
+- Specific product description (not generic)
+- Realistic 2024 material costs from Home Depot/Lowe's pricing
+- Break down complex items into component materials when appropriate
+
+### Material Cost Guidelines (2024 prices):
+- Drywall (1/2" 4x8 sheet): $12-15 per sheet (~$0.40/SF installed with mud/tape)
+- Paint (interior, per gallon): $35-50, covers ~350 SF
+- Ceramic tile: $2-8/SF (budget to mid-range)
+- Porcelain tile: $4-12/SF (mid-range to high-end)
+- Vanity cabinet (30-36"): $200-600 (mid-range)
+- Toilet (mid-range): $200-400
+- Bathroom faucet: $80-200
+- Shower valve: $150-300
+- Recessed light: $15-40 each
+- GFCI outlet: $15-25 each
+- Exhaust fan: $80-200
+
+## Input Format:
+{
+    "project_type": "bathroom_remodel",
+    "finish_level": "mid_range",
+    "total_sqft": 75,
+    "items": [
+        {"id": "item-1", "description": "Drywall - Walls", "quantity": 200, "unit": "SF", "division": "09"},
+        ...
+    ]
+}
+
+## Output Format (JSON):
+{
+    "enriched_items": [
+        {
+            "id": "item-1",
+            "description": "Drywall - Walls",
+            "detailed_description": "1/2\" drywall with moisture-resistant greenboard for bathroom walls, including joint compound, tape, and corner bead",
+            "material_cost_per_unit": 0.85,
+            "total_material_cost": 170.00,
+            "labor_hours_per_unit": 0.025,
+            "total_labor_hours": 5.0,
+            "primary_trade": "drywall_installer",
+            "materials_breakdown": [
+                {"name": "1/2\" Moisture-Resistant Drywall", "quantity": 7, "unit": "sheet", "unit_cost": 18.00, "total": 126.00},
+                {"name": "Joint Compound (5 gal)", "quantity": 1, "unit": "bucket", "unit_cost": 18.00, "total": 18.00},
+                {"name": "Drywall Tape", "quantity": 1, "unit": "roll", "unit_cost": 8.00, "total": 8.00},
+                {"name": "Drywall Screws", "quantity": 1, "unit": "box", "unit_cost": 12.00, "total": 12.00}
+            ],
+            "reasoning": "200 SF requires ~7 sheets of 4x8 drywall plus finishing materials"
+        },
+        {
+            "id": "item-2",
+            "description": "Toilet",
+            "detailed_description": "Two-piece elongated toilet, mid-range efficiency model with soft-close seat",
+            "material_cost_per_unit": 280.00,
+            "total_material_cost": 280.00,
+            "labor_hours_per_unit": 1.5,
+            "total_labor_hours": 1.5,
+            "primary_trade": "plumber",
+            "materials_breakdown": [
+                {"name": "American Standard Two-Piece Toilet", "quantity": 1, "unit": "EA", "unit_cost": 250.00, "total": 250.00},
+                {"name": "Wax Ring with Flange", "quantity": 1, "unit": "EA", "unit_cost": 8.00, "total": 8.00},
+                {"name": "Toilet Supply Line", "quantity": 1, "unit": "EA", "unit_cost": 12.00, "total": 12.00},
+                {"name": "Toilet Bolt Set", "quantity": 1, "unit": "EA", "unit_cost": 10.00, "total": 10.00}
+            ],
+            "reasoning": "Standard toilet installation including all connection hardware"
+        }
+    ],
+    "total_project_labor_hours": 85,
+    "total_material_cost": 8500,
+    "labor_summary": {
+        "demolition": 8,
+        "framing": 4,
+        "plumbing": 14,
+        "electrical": 6,
+        "drywall": 8,
+        "tile": 16,
+        "painting": 6,
+        "fixtures": 8,
+        "cleanup": 4
+    },
+    "material_summary": {
+        "fixtures": 1800,
+        "tile_and_flooring": 1200,
+        "drywall_and_paint": 800,
+        "plumbing_materials": 600,
+        "electrical_materials": 300,
+        "cabinets_and_vanity": 1500,
+        "miscellaneous": 300
+    }
+}
+
+## Trade Categories (use exactly these values):
+- general_labor, carpenter, electrician, plumber, hvac, painter, tile_setter, drywall_installer, flooring_installer, cabinet_installer, demolition
+
+## Guidelines:
+1. Labor hours must be REALISTIC - a bathroom remodel typically takes 40-120 labor hours total
+2. Material costs should reflect 2024 Home Depot/Lowe's pricing
+3. Break down complex items (like "Toilet") into component materials
+4. Consider finish level: budget = basic products, mid_range = standard brands, high_end = premium brands, luxury = designer products
+5. Include all necessary installation materials (fasteners, adhesives, connectors)
+
+RESPOND WITH VALID JSON ONLY. No markdown, no explanation outside the JSON."""
+
+
+GENERATE_SEARCHABLE_NAMES_PROMPT = """You are an expert construction estimator who knows EXACTLY what products are sold at Home Depot and Lowe's.
+
+Your job is to convert generic line item descriptions into SPECIFIC, SEARCHABLE product names that will find real products on homedepot.com or lowes.com.
+
+## CRITICAL: Generate Real Product Names
+- Include BRAND NAMES (Moen, Delta, Kohler, LG, Samsung, Whirlpool, etc.)
+- Include MODEL SERIES when you know them (e.g., "Delta Faucet Leland", "Moen Chateau")
+- Include EXACT SPECIFICATIONS (dimensions, colors, materials)
+- The name should return 5-20 real products when searched, NOT generic results
+
+## Brand Recommendations by Finish Level:
+**Budget**:
+- Faucets: Glacier Bay, Peerless
+- Cabinets: Hampton Bay unfinished, In Stock Kitchen
+- Flooring: TrafficMaster, LifeProof basic
+- Appliances: Frigidaire, Amana, Hotpoint
+- Paint: Glidden, BEHR Premium Plus
+
+**Mid-Range**:
+- Faucets: Moen, Delta, Pfister
+- Cabinets: Hampton Bay, KraftMaid basics
+- Flooring: LifeProof, Pergo, Bruce
+- Appliances: GE, LG, Samsung mid-tier
+- Paint: BEHR Ultra, Sherwin-Williams Cashmere
+
+**High-End**:
+- Faucets: Kohler, Delta Touch, Moen MotionSense
+- Cabinets: KraftMaid, Thomasville
+- Flooring: Shaw, Mannington, solid hardwood
+- Appliances: Samsung, LG, GE Profile
+- Paint: Benjamin Moore, Sherwin-Williams Emerald
+
+**Luxury**:
+- Faucets: Kohler Artifacts, Brizo, Grohe
+- Cabinets: Custom, Diamond NOW premium
+- Flooring: Real hardwood, natural stone
+- Appliances: GE Café, Samsung Bespoke, LG Studio
+- Paint: Benjamin Moore Advance, Farrow & Ball
+
+## Examples (BE THIS SPECIFIC):
+
+Input: {"description": "Kitchen faucet", "finish_level": "mid_range"}
+Output: "Moen Georgene Spot Resist Stainless Single-Handle Pull-Down Kitchen Faucet"
+
+Input: {"description": "Bathroom vanity", "finish_level": "budget", "specs": "30 inch"}
+Output: "Glacier Bay Everdean 30 in White Single Sink Bathroom Vanity"
+
+Input: {"description": "Dishwasher", "finish_level": "high_end"}
+Output: "Samsung 24 in Top Control Stainless Steel Dishwasher with StormWash"
+
+Input: {"description": "Interior paint", "finish_level": "mid_range", "specs": "walls"}
+Output: "BEHR Ultra Scuff Defense Interior Eggshell Paint Gallon"
+
+Input: {"description": "Flooring", "finish_level": "mid_range", "specs": "200 SF kitchen"}
+Output: "LifeProof Sterling Oak 8.7 in Waterproof Luxury Vinyl Plank Flooring"
+
+Input: {"description": "Recessed lighting", "finish_level": "high_end"}
+Output: "Halo 6 in LED Recessed Ceiling Light Retrofit Trim"
+
+Input: {"description": "Ceiling fan", "finish_level": "mid_range", "specs": "bedroom"}
+Output: "Hunter Dempsey 52 in Indoor Brushed Nickel Ceiling Fan with Light"
+
+## Input Format:
+{
+    "items": [
+        {"id": "item-1", "description": "...", "specifications": "...", "unit": "..."},
+        ...
+    ],
+    "finish_level": "mid_range",
+    "project_type": "kitchen_remodel"
+}
+
+## Output Format (JSON):
+{
+    "searchable_names": [
+        {
+            "id": "item-1",
+            "searchable_name": "Brand Model Specific Product Name with Color/Size",
+            "search_category": "flooring|cabinets|countertops|fixtures|lighting|paint|hardware|appliances|plumbing|electrical|other",
+            "suggested_brand": "Moen|Delta|etc",
+            "is_labor_only": false
+        },
+        ...
+    ]
+}
+
+## CRITICAL: Skip Labor/Service Items
+Set `searchable_name` to null and `is_labor_only` to true for items that are:
+- Labor/installation only (e.g., "Demolition", "Installation", "Rough-in")
+- Overhead/contingency items (e.g., "Contingency", "General Conditions", "Permits")
+- Services not sold at retail (e.g., "Inspections", "Hauling", "Cleanup")
+- Items with units like "LS" (lump sum), "HR" (hour), "DAY" that are clearly labor
+
+Examples of labor-only items (return null searchable_name):
+- "Wall Finish Demolition" -> null (demolition labor)
+- "Contingency" -> null (overhead)
+- "Plumbing rough-in" -> null (installation labor, not the valve itself)
+- "Drywall Installation" -> null (labor only)
+- "Electrical rough-in" -> null (labor only)
+- "Framing Labor" -> null (labor only)
+
+Examples of MATERIAL items (DO generate searchable_name):
+- "Drywall" -> "USG Sheetrock 1/2 in x 4 ft x 8 ft Drywall Panel" (the actual drywall sheets)
+- "Wall Insulation" -> "Owens Corning R-15 Kraft Faced Fiberglass Insulation Batt 15 in W x 93 in L"
+- "Shower Valve" -> "Delta R10000-UNBX MultiChoice Universal Tub/Shower Rough-In Valve"
+
+IMPORTANT: Every searchable_name MUST be specific enough to find REAL products. Include brand, series, size, and color/finish."""
+
+
 # =============================================================================
 # EXPECTED DIVISIONS BY PROJECT TYPE
 # =============================================================================
@@ -194,7 +427,77 @@ class ScopeAgent(BaseA2AAgent):
             cad_data=cad_data,
             total_sqft=total_sqft
         )
-        
+
+        # Step 3.5: Generate searchable product names for price comparison
+        searchable_names = await self._generate_searchable_names(
+            divisions=enriched_divisions,
+            finish_level=finish_level,
+            project_type=project_type
+        )
+
+        # Attach searchable names to line items
+        for div in enriched_divisions:
+            for item in div.line_items:
+                if item.id in searchable_names:
+                    item.searchable_name = searchable_names[item.id].get("searchable_name", "")
+                    item.search_category = searchable_names[item.id].get("search_category", "other")
+
+        logger.info(
+            "searchable_names_generated",
+            estimate_id=estimate_id,
+            items_with_names=len(searchable_names)
+        )
+
+        # Step 3.6: Generate realistic labor estimates using LLM
+        # This replaces mock data with intelligent estimates based on project context
+        labor_estimates = await self._generate_labor_estimates_with_llm(
+            divisions=enriched_divisions,
+            project_type=project_type,
+            finish_level=finish_level,
+            total_sqft=total_sqft
+        )
+
+        # Apply LLM-generated labor estimates to line items
+        if labor_estimates:
+            for div in enriched_divisions:
+                for item in div.line_items:
+                    if item.id in labor_estimates:
+                        est = labor_estimates[item.id]
+                        # Update labor hours with LLM estimate
+                        item.unit_cost_reference.labor_hours_per_unit = est.get("labor_hours_per_unit", item.unit_cost_reference.labor_hours_per_unit)
+                        item.estimated_labor_hours = est.get("total_labor_hours", item.estimated_labor_hours)
+                        # Update material cost if provided
+                        if est.get("material_cost_per_unit", 0) > 0:
+                            item.unit_cost_reference.material_cost_per_unit = est["material_cost_per_unit"]
+                            item.estimated_material_cost = round(item.quantity * est["material_cost_per_unit"], 2)
+                        # Update trade if provided
+                        trade_str = est.get("primary_trade", "")
+                        if trade_str:
+                            try:
+                                item.unit_cost_reference.primary_trade = TradeCategory(trade_str)
+                            except ValueError:
+                                pass
+                        # Mark as LLM-sourced
+                        item.unit_cost_reference.cost_code_source = "llm_estimate"
+
+                        # Apply detailed material information from LLM
+                        if est.get("detailed_description"):
+                            item.detailed_description = est["detailed_description"]
+                        if est.get("materials_breakdown"):
+                            item.materials_breakdown = est["materials_breakdown"]
+                        if est.get("reasoning"):
+                            item.llm_reasoning = est["reasoning"]
+
+            # Recalculate division subtotals after updating labor hours
+            for div in enriched_divisions:
+                div.calculate_subtotals()
+
+            logger.info(
+                "llm_labor_estimates_applied",
+                estimate_id=estimate_id,
+                items_updated=len(labor_estimates)
+            )
+
         # Step 4: Check completeness
         completeness = self._check_completeness(
             divisions=enriched_divisions,
@@ -335,6 +638,252 @@ class ScopeAgent(BaseA2AAgent):
         
         return enriched_divisions
     
+    async def _generate_searchable_names(
+        self,
+        divisions: List[EnrichedDivision],
+        finish_level: str,
+        project_type: str = "remodel"
+    ) -> Dict[str, Dict[str, str]]:
+        """Generate searchable product names for line items.
+
+        Uses LLM to generate specific, searchable product names that will
+        return accurate results on Home Depot/Lowe's Google Shopping.
+
+        Args:
+            divisions: List of enriched divisions with line items.
+            finish_level: Project finish level (budget, mid_range, high_end, luxury).
+            project_type: Type of project (kitchen_remodel, bathroom_remodel, etc.)
+
+        Returns:
+            Dict mapping item_id to {searchable_name, search_category}.
+        """
+        # Collect material items that need searchable names
+        items_to_process = []
+        for div in divisions:
+            if div.status != "included":
+                continue
+            for item in div.line_items:
+                # Process ALL items, not just ones with material costs
+                # The LLM will help generate appropriate searchable names
+                items_to_process.append({
+                    "id": item.id,
+                    "description": item.item,
+                    "specifications": item.specifications or "",
+                    "unit": item.unit,
+                    "division": div.division_code,
+                    "division_name": div.division_name
+                })
+
+        if not items_to_process:
+            return {}
+
+        # Process in batches of 20 items
+        searchable_names = {}
+        batch_size = 20
+
+        for i in range(0, len(items_to_process), batch_size):
+            batch = items_to_process[i:i + batch_size]
+
+            try:
+                result = await self.llm.generate_json(
+                    system_prompt=GENERATE_SEARCHABLE_NAMES_PROMPT,
+                    user_message=json.dumps({
+                        "items": batch,
+                        "finish_level": finish_level,
+                        "project_type": project_type
+                    }, indent=2)
+                )
+
+                self._tokens_used += result.get("tokens_used", 0)
+                response = result.get("content", {})
+
+                for item_data in response.get("searchable_names", []):
+                    item_id = item_data.get("id")
+                    if item_id:
+                        # Skip labor-only items (no material to search)
+                        is_labor_only = item_data.get("is_labor_only", False)
+                        searchable_name = item_data.get("searchable_name")
+
+                        # Only add if it's a material item with a valid searchable name
+                        if not is_labor_only and searchable_name:
+                            searchable_names[item_id] = {
+                                "searchable_name": searchable_name,
+                                "search_category": item_data.get("search_category", "other"),
+                                "is_labor_only": False
+                            }
+                        else:
+                            # Mark as labor-only so cost_agent knows not to search
+                            searchable_names[item_id] = {
+                                "searchable_name": None,
+                                "search_category": item_data.get("search_category", "labor"),
+                                "is_labor_only": True
+                            }
+
+            except Exception as e:
+                logger.warning(
+                    "searchable_name_generation_failed",
+                    batch_start=i,
+                    batch_size=len(batch),
+                    error=str(e)
+                )
+                # Generate fallback names for this batch
+                for item in batch:
+                    searchable_names[item["id"]] = {
+                        "searchable_name": self._generate_fallback_searchable_name(
+                            item["description"], finish_level
+                        ),
+                        "search_category": "other"
+                    }
+
+        return searchable_names
+
+    def _generate_fallback_searchable_name(
+        self,
+        description: str,
+        finish_level: str
+    ) -> str:
+        """Generate a fallback searchable name without LLM.
+
+        Args:
+            description: Item description.
+            finish_level: Project finish level.
+
+        Returns:
+            Basic searchable name.
+        """
+        # Add finish level qualifier
+        qualifiers = {
+            "budget": "standard",
+            "mid_range": "mid-grade",
+            "high_end": "premium",
+            "luxury": "luxury"
+        }
+        qualifier = qualifiers.get(finish_level, "")
+
+        # Clean up description
+        name = description.lower().strip()
+
+        # Add qualifier if not already present
+        if qualifier and qualifier not in name:
+            return f"{qualifier} {name}"
+        return name
+
+    async def _generate_labor_estimates_with_llm(
+        self,
+        divisions: List[EnrichedDivision],
+        project_type: str,
+        finish_level: str,
+        total_sqft: float
+    ) -> Dict[str, Dict[str, Any]]:
+        """Use LLM to generate realistic labor hour estimates for all line items.
+
+        This replaces the mock data lookup with intelligent LLM-based estimates
+        that consider the actual project context.
+
+        Args:
+            divisions: List of enriched divisions with line items.
+            project_type: Type of project (bathroom_remodel, kitchen_remodel, etc.)
+            finish_level: Finish level (budget, mid_range, high_end, luxury).
+            total_sqft: Total square footage of the project.
+
+        Returns:
+            Dict mapping item_id to labor estimate data.
+        """
+        # Collect all items for LLM processing
+        items_for_llm = []
+        for div in divisions:
+            if div.status != "included":
+                continue
+            for item in div.line_items:
+                items_for_llm.append({
+                    "id": item.id,
+                    "description": item.item,
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "division": div.division_code,
+                    "division_name": div.division_name
+                })
+
+        if not items_for_llm:
+            return {}
+
+        logger.info(
+            "generating_labor_estimates_with_llm",
+            item_count=len(items_for_llm),
+            project_type=project_type,
+            finish_level=finish_level
+        )
+
+        try:
+            result = await self.llm.generate_json(
+                system_prompt=GENERATE_MATERIALS_AND_LABOR_PROMPT,
+                user_message=json.dumps({
+                    "project_type": project_type,
+                    "finish_level": finish_level,
+                    "total_sqft": total_sqft,
+                    "items": items_for_llm
+                }, indent=2)
+            )
+
+            self._tokens_used += result.get("tokens_used", 0)
+            response = result.get("content", {})
+
+            # Build lookup dict from response
+            labor_estimates = {}
+            for item_data in response.get("enriched_items", []):
+                item_id = item_data.get("id")
+                if item_id:
+                    labor_estimates[item_id] = {
+                        "labor_hours_per_unit": item_data.get("labor_hours_per_unit", 0.5),
+                        "total_labor_hours": item_data.get("total_labor_hours", 0),
+                        "material_cost_per_unit": item_data.get("material_cost_per_unit", 0),
+                        "total_material_cost": item_data.get("total_material_cost", 0),
+                        "primary_trade": item_data.get("primary_trade", "general_labor"),
+                        "detailed_description": item_data.get("detailed_description", ""),
+                        "materials_breakdown": item_data.get("materials_breakdown", []),
+                        "reasoning": item_data.get("reasoning", "")
+                    }
+
+            total_hours = response.get("total_project_labor_hours", 0)
+            total_material_cost = response.get("total_material_cost", 0)
+            labor_summary = response.get("labor_summary", {})
+            material_summary = response.get("material_summary", {})
+
+            logger.info(
+                "llm_estimates_generated",
+                items_estimated=len(labor_estimates),
+                total_project_hours=total_hours,
+                total_material_cost=total_material_cost,
+                labor_summary=labor_summary
+            )
+
+            # Log the detailed breakdown for debugging
+            print(f"\n{'='*60}")
+            print(f"[LLM MATERIALS & LABOR] Generated for {len(labor_estimates)} items")
+            print(f"{'='*60}")
+            print(f"  Project Type: {project_type}")
+            print(f"  Finish Level: {finish_level}")
+            print(f"  Total Sqft: {total_sqft}")
+            print(f"  TOTAL PROJECT LABOR HOURS: {total_hours}")
+            print(f"  TOTAL MATERIAL COST: ${total_material_cost:,.2f}")
+            print(f"\n  Labor by Trade:")
+            for trade, hours in labor_summary.items():
+                print(f"    - {trade}: {hours} hours")
+            print(f"\n  Materials by Category:")
+            for category, cost in material_summary.items():
+                print(f"    - {category}: ${cost:,.2f}")
+            print(f"{'='*60}\n")
+
+            return labor_estimates
+
+        except Exception as e:
+            logger.warning(
+                "llm_labor_estimate_failed",
+                error=str(e)
+            )
+            # Return empty dict - will fall back to mock data
+            return {}
+
     async def _enrich_line_item(
         self,
         item: Dict[str, Any],
