@@ -39,9 +39,9 @@ export function HeroSection() {
             <Link to="/signup" className="hero__btn hero__btn--primary">
               Get Started
             </Link>
-            <button className="hero__btn hero__btn--secondary">
+            <Link to="/demo" className="hero__btn hero__btn--secondary">
               <span className="hero__btn-icon">▶</span> Watch Demo
-            </button>
+            </Link>
           </div>
         </div>
       </div>

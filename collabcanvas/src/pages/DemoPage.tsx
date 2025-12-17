@@ -2096,9 +2096,14 @@ export function DemoPage() {
           </h2>
 
           {/* URL and Large Centered QR Code */}
-          <p className="text-2xl md:text-3xl font-semibold text-truecost-cyan mb-3">
+          <a
+            href="https://www.gettruecost.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-2xl md:text-3xl font-semibold text-truecost-cyan mb-3 block hover:underline"
+          >
             https://www.gettruecost.com/
-          </p>
+          </a>
           <div className="flex justify-center mb-2">
             <div className="w-70 h-70 md:w-[27rem] md:h-[27rem] lg:w-[33rem] lg:h-[33rem] bg-white rounded-2xl p-4 shadow-xl">
               <img src={qrCodeImage} alt="QR Code" className="w-full h-full object-contain" />
