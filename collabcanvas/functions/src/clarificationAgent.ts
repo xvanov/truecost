@@ -5,6 +5,9 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { OpenAI } from 'openai';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+import { getCorsOrigins } from './corsConfig';
 
 // Lazy initialization to avoid timeout during module load
 let _openai: OpenAI | null = null;
@@ -170,9 +173,9 @@ interface ClarificationResponse {
 }
 
 export const clarificationAgent = onCall({
-  cors: true,
-  // Secrets for production; emulator uses .env.local
-  secrets: ['OPENAI_API_KEY'],
+  cors: getCorsOrigins(),
+  // Note: secrets only used in production - emulator uses .env
+  secrets: process.env.FUNCTIONS_EMULATOR === 'true' ? [] : ['OPENAI_API_KEY'],
   timeoutSeconds: 60,
 }, async (request) => {
   try {
