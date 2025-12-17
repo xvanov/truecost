@@ -87,12 +87,13 @@ You MUST respond with valid JSON only. No markdown, no explanation.
 
 GENERATE_MATERIALS_AND_LABOR_PROMPT = """You are an expert construction estimator with 20+ years of experience in residential remodeling.
 
-Your job is to analyze line items from a construction scope and generate REALISTIC labor hour estimates and material specifications.
+Your job is to analyze line items from a construction scope and generate:
+1. REALISTIC labor hour estimates
+2. DETAILED material specifications with actual product names and costs
 
 ## CRITICAL: Labor Hours Must Be Realistic
 
 Labor hours should reflect ACTUAL installation time by a professional contractor:
-- Consider the unit of measurement (SF, LF, EA, etc.)
 - A single tradesperson can typically:
   - Install 30-50 SF of drywall per hour
   - Paint 100-150 SF per hour (walls)
@@ -101,6 +102,26 @@ Labor hours should reflect ACTUAL installation time by a professional contractor
   - Install 1 toilet in 1.5-2 hours
   - Install 1 faucet in 0.5-1 hour
   - Install 1 vanity cabinet in 1-2 hours
+
+## CRITICAL: Materials Must Be Detailed and Realistic
+
+For each line item, provide:
+- Specific product description (not generic)
+- Realistic 2024 material costs from Home Depot/Lowe's pricing
+- Break down complex items into component materials when appropriate
+
+### Material Cost Guidelines (2024 prices):
+- Drywall (1/2" 4x8 sheet): $12-15 per sheet (~$0.40/SF installed with mud/tape)
+- Paint (interior, per gallon): $35-50, covers ~350 SF
+- Ceramic tile: $2-8/SF (budget to mid-range)
+- Porcelain tile: $4-12/SF (mid-range to high-end)
+- Vanity cabinet (30-36"): $200-600 (mid-range)
+- Toilet (mid-range): $200-400
+- Bathroom faucet: $80-200
+- Shower valve: $150-300
+- Recessed light: $15-40 each
+- GFCI outlet: $15-25 each
+- Exhaust fan: $80-200
 
 ## Input Format:
 {
@@ -119,47 +140,71 @@ Labor hours should reflect ACTUAL installation time by a professional contractor
         {
             "id": "item-1",
             "description": "Drywall - Walls",
-            "material_cost_per_unit": 1.50,
+            "detailed_description": "1/2\" drywall with moisture-resistant greenboard for bathroom walls, including joint compound, tape, and corner bead",
+            "material_cost_per_unit": 0.85,
+            "total_material_cost": 170.00,
             "labor_hours_per_unit": 0.025,
             "total_labor_hours": 5.0,
             "primary_trade": "drywall_installer",
-            "reasoning": "200 SF at ~40 SF/hour = 5 hours"
+            "materials_breakdown": [
+                {"name": "1/2\" Moisture-Resistant Drywall", "quantity": 7, "unit": "sheet", "unit_cost": 18.00, "total": 126.00},
+                {"name": "Joint Compound (5 gal)", "quantity": 1, "unit": "bucket", "unit_cost": 18.00, "total": 18.00},
+                {"name": "Drywall Tape", "quantity": 1, "unit": "roll", "unit_cost": 8.00, "total": 8.00},
+                {"name": "Drywall Screws", "quantity": 1, "unit": "box", "unit_cost": 12.00, "total": 12.00}
+            ],
+            "reasoning": "200 SF requires ~7 sheets of 4x8 drywall plus finishing materials"
         },
-        ...
+        {
+            "id": "item-2",
+            "description": "Toilet",
+            "detailed_description": "Two-piece elongated toilet, mid-range efficiency model with soft-close seat",
+            "material_cost_per_unit": 280.00,
+            "total_material_cost": 280.00,
+            "labor_hours_per_unit": 1.5,
+            "total_labor_hours": 1.5,
+            "primary_trade": "plumber",
+            "materials_breakdown": [
+                {"name": "American Standard Two-Piece Toilet", "quantity": 1, "unit": "EA", "unit_cost": 250.00, "total": 250.00},
+                {"name": "Wax Ring with Flange", "quantity": 1, "unit": "EA", "unit_cost": 8.00, "total": 8.00},
+                {"name": "Toilet Supply Line", "quantity": 1, "unit": "EA", "unit_cost": 12.00, "total": 12.00},
+                {"name": "Toilet Bolt Set", "quantity": 1, "unit": "EA", "unit_cost": 10.00, "total": 10.00}
+            ],
+            "reasoning": "Standard toilet installation including all connection hardware"
+        }
     ],
     "total_project_labor_hours": 85,
+    "total_material_cost": 8500,
     "labor_summary": {
         "demolition": 8,
         "framing": 4,
-        "plumbing": 12,
+        "plumbing": 14,
         "electrical": 6,
         "drywall": 8,
         "tile": 16,
         "painting": 6,
         "fixtures": 8,
         "cleanup": 4
+    },
+    "material_summary": {
+        "fixtures": 1800,
+        "tile_and_flooring": 1200,
+        "drywall_and_paint": 800,
+        "plumbing_materials": 600,
+        "electrical_materials": 300,
+        "cabinets_and_vanity": 1500,
+        "miscellaneous": 300
     }
 }
 
 ## Trade Categories (use exactly these values):
-- general_labor
-- carpenter
-- electrician
-- plumber
-- hvac
-- painter
-- tile_setter
-- drywall_installer
-- flooring_installer
-- cabinet_installer
-- demolition
+- general_labor, carpenter, electrician, plumber, hvac, painter, tile_setter, drywall_installer, flooring_installer, cabinet_installer, demolition
 
 ## Guidelines:
 1. Labor hours must be REALISTIC - a bathroom remodel typically takes 40-120 labor hours total
-2. Consider economies of scale (larger quantities = slightly more efficient per unit)
-3. Include setup/cleanup time in your estimates
-4. Factor in the finish level (luxury = more detailed work = more time)
-5. Provide brief reasoning for each estimate
+2. Material costs should reflect 2024 Home Depot/Lowe's pricing
+3. Break down complex items (like "Toilet") into component materials
+4. Consider finish level: budget = basic products, mid_range = standard brands, high_end = premium brands, luxury = designer products
+5. Include all necessary installation materials (fasteners, adhesives, connectors)
 
 RESPOND WITH VALID JSON ONLY. No markdown, no explanation outside the JSON."""
 
@@ -434,6 +479,14 @@ class ScopeAgent(BaseA2AAgent):
                                 pass
                         # Mark as LLM-sourced
                         item.unit_cost_reference.cost_code_source = "llm_estimate"
+
+                        # Apply detailed material information from LLM
+                        if est.get("detailed_description"):
+                            item.detailed_description = est["detailed_description"]
+                        if est.get("materials_breakdown"):
+                            item.materials_breakdown = est["materials_breakdown"]
+                        if est.get("reasoning"):
+                            item.llm_reasoning = est["reasoning"]
 
             # Recalculate division subtotals after updating labor hours
             for div in enriched_divisions:
@@ -784,31 +837,41 @@ class ScopeAgent(BaseA2AAgent):
                         "labor_hours_per_unit": item_data.get("labor_hours_per_unit", 0.5),
                         "total_labor_hours": item_data.get("total_labor_hours", 0),
                         "material_cost_per_unit": item_data.get("material_cost_per_unit", 0),
+                        "total_material_cost": item_data.get("total_material_cost", 0),
                         "primary_trade": item_data.get("primary_trade", "general_labor"),
+                        "detailed_description": item_data.get("detailed_description", ""),
+                        "materials_breakdown": item_data.get("materials_breakdown", []),
                         "reasoning": item_data.get("reasoning", "")
                     }
 
             total_hours = response.get("total_project_labor_hours", 0)
+            total_material_cost = response.get("total_material_cost", 0)
             labor_summary = response.get("labor_summary", {})
+            material_summary = response.get("material_summary", {})
 
             logger.info(
-                "llm_labor_estimates_generated",
+                "llm_estimates_generated",
                 items_estimated=len(labor_estimates),
                 total_project_hours=total_hours,
+                total_material_cost=total_material_cost,
                 labor_summary=labor_summary
             )
 
             # Log the detailed breakdown for debugging
             print(f"\n{'='*60}")
-            print(f"[LLM LABOR ESTIMATE] Generated for {len(labor_estimates)} items")
+            print(f"[LLM MATERIALS & LABOR] Generated for {len(labor_estimates)} items")
             print(f"{'='*60}")
             print(f"  Project Type: {project_type}")
             print(f"  Finish Level: {finish_level}")
             print(f"  Total Sqft: {total_sqft}")
             print(f"  TOTAL PROJECT LABOR HOURS: {total_hours}")
+            print(f"  TOTAL MATERIAL COST: ${total_material_cost:,.2f}")
             print(f"\n  Labor by Trade:")
             for trade, hours in labor_summary.items():
                 print(f"    - {trade}: {hours} hours")
+            print(f"\n  Materials by Category:")
+            for category, cost in material_summary.items():
+                print(f"    - {category}: ${cost:,.2f}")
             print(f"{'='*60}\n")
 
             return labor_estimates

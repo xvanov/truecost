@@ -163,7 +163,18 @@ class EnrichedLineItem(BaseModel):
     search_category: Optional[str] = Field(
         None, description="Search category (flooring, cabinets, fixtures, etc.)"
     )
-    
+
+    # LLM-generated detailed material information
+    detailed_description: Optional[str] = Field(
+        None, description="Detailed description of materials from LLM"
+    )
+    materials_breakdown: Optional[List[Dict[str, Any]]] = Field(
+        default=None, description="Breakdown of component materials with costs"
+    )
+    llm_reasoning: Optional[str] = Field(
+        None, description="LLM reasoning for labor/material estimates"
+    )
+
     @field_validator("estimated_material_cost", "estimated_labor_hours", mode="before")
     @classmethod
     def round_estimates(cls, v):
@@ -414,10 +425,15 @@ class BillOfQuantities(BaseModel):
                             "materialCostPerUnit": item.unit_cost_reference.material_cost_per_unit,
                             "laborHoursPerUnit": item.unit_cost_reference.labor_hours_per_unit,
                             "primaryTrade": item.unit_cost_reference.primary_trade.value,
+                            "costCodeSource": item.unit_cost_reference.cost_code_source,
                             "quantityValidation": item.quantity_validation.value,
                             "estimatedMaterialCost": item.estimated_material_cost,
                             "estimatedLaborHours": item.estimated_labor_hours,
                             "estimatedEquipmentCost": item.estimated_equipment_cost,
+                            # LLM-generated material details
+                            "detailedDescription": item.detailed_description,
+                            "materialsBreakdown": item.materials_breakdown,
+                            "llmReasoning": item.llm_reasoning,
                         }
                         for item in div.line_items
                     ],

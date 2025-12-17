@@ -1246,6 +1246,61 @@ Please analyze this estimate and provide insights in the required JSON format.""
             else:
                 scope_labor_hours = 0.5  # Generic fallback
 
+        # =====================================================================
+        # STEP 0: Check if scope agent provided LLM-generated material costs
+        # If so, use them directly instead of looking up from Google Shopping
+        # This ensures LLM-estimated costs take precedence over product lookups
+        # =====================================================================
+        scope_material_cost = None
+
+        # Try direct field first (scope agent output format - camelCase)
+        scope_material_cost = item.get("materialCostPerUnit")
+
+        # Fallback: try nested unitCostReference (internal model format)
+        if scope_material_cost is None:
+            unit_cost_ref = item.get("unitCostReference", {})
+            if unit_cost_ref:
+                scope_material_cost = unit_cost_ref.get("materialCostPerUnit") or unit_cost_ref.get("material_cost_per_unit")
+
+        # Fallback: calculate from estimatedMaterialCost / quantity
+        if scope_material_cost is None:
+            estimated_material = item.get("estimatedMaterialCost", 0)
+            quantity = item.get("quantity", 1)
+            if estimated_material > 0 and quantity > 0:
+                scope_material_cost = estimated_material / quantity
+
+        # Check if scope provided costs with LLM source (indicates LLM-generated cost)
+        cost_code_source = item.get("costCodeSource") or item.get("unitCostReference", {}).get("costCodeSource", "")
+        is_llm_sourced = cost_code_source == "llm_estimate"
+
+        # If we have LLM-generated material costs, use them directly
+        if scope_material_cost is not None and scope_material_cost > 0 and is_llm_sourced:
+            logger.info(
+                "using_llm_material_cost",
+                item=description[:50] if description else "unknown",
+                material_cost_per_unit=scope_material_cost,
+                labor_hours_per_unit=scope_labor_hours,
+                source="llm_estimate"
+            )
+
+            # Convert to CostRange with ±10-15% variance
+            unit_cost = CostRange.from_base_cost(
+                base_cost=scope_material_cost,
+                p80_multiplier=1.10,
+                p90_multiplier=1.15
+            )
+
+            return {
+                "cost_code": cost_code or "LLM-001",
+                "unit_cost": unit_cost,
+                "labor_hours_per_unit": scope_labor_hours,
+                "equipment_cost": CostRange.zero(),
+                "confidence": CostConfidenceLevel.HIGH,
+                "confidence_score": 0.85,
+                "source": "llm_estimate",
+                "notes": "Material cost from LLM estimation based on project context"
+            }
+
         # Log what we're using for debugging
         logger.debug(
             "labor_hours_source",
@@ -1254,8 +1309,7 @@ Please analyze this estimate and provide insights in the required JSON format.""
             unit=unit
         )
 
-        # Step 1: Try Google Shopping FIRST if we have a searchable name
-        # This prioritizes real-time market prices over hardcoded mock data
+        # Step 1: Try Google Shopping if we have a searchable name AND scope didn't provide LLM costs
         shopping_result = None
         if searchable_name:
             shopping_result = await self._search_material_price(
